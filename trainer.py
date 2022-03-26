@@ -25,24 +25,54 @@ from utils import log_this, load_rb, get_config, update_args
 from helpers import get_optimizer, get_scheduler, get_criteria, create_loaders, collater
 
 class Trainer:
+    #trainer object: what is it doing?
+
     def __init__(self, args):
         self.args = args
         self.device = torch.device('cuda' if torch.cuda.is_available() and args.use_cuda else 'cpu')
+        #device we will train on will automatically be cuda (a GPU)if it's available and we specify --use_cuda see run.py arguments under control logging
 
         trains, tests = create_loaders(self.args.dataset, self.args, split_test=True, test_size=50)
+        #take .dataset from self.args
+        #trains contains the training data and the dataloader separately 
+        #read Datasets and Dataloaders in PyTorch Guide!
+        #creates the PyTorch data loaders so that we can iterate over datasets
+        #args.dataset is the dataset at the (see is the path to the dataset we're using see dataset arguments in run.py 
+        #n_trials is often 2000 by default, so we train on 1950 and test on 50
+        #what's args.dataset
+        
+        #create_loaders is from helpers and creates our data loaders [see PyTorch guide ] recall data_loader objects allows us to iterate over minibatches(nonoverlapping subsets of the dataset) easily 
+        #how it actually creates the loaders is NB
+
 
         if self.args.sequential:
-            self.train_set, self.train_loaders = trains
+            #args.sequential is defined in run.py under dataset arguments
+            #if true we do "sequential training
+            #we create some more attributes for the trainer object if 
+            #we're doing sequential training
+            self.train_set, self.train_loaders = trains #trains contaien the whole training data loader: train_loader and the training data train_set
+
             self.test_set, self.test_loaders = tests
             self.train_idx = 0
+            #index of the first task 
+            #when training the multiple (different) tasks we use 
+            #
+            
             self.train_loader = self.train_loaders[self.args.train_order[self.train_idx]]
+            
+             #I'd imagine train loaders is taking in the ordering of the different tasks so that the ith training set and the ith test set are for the same task etc 
+            
             self.test_loader = self.test_loaders[self.args.train_order[self.train_idx]]
-        else:
+        else: #if not doing sequential training
             self.train_set, self.train_loader = trains
             self.test_set, self.test_loader = tests
         logging.info(f'Created data loaders using datasets:')
+        #this is what shows in the terminal when its runs this part of the script! 
         for ds in self.args.dataset:
-            logging.info(f'  {ds}')
+            logging.info(f'  {ds}') #the dataset that come after
+            #the "Created data loaders using datasets" above
+            #shows us the name of each dataset we're training on 
+
 
         if self.args.sequential:
             logging.info(f'Sequential training. Starting with task {self.train_idx}')
@@ -51,8 +81,9 @@ class Trainer:
         self.net = M2Net(self.args)
         # add hopfield net patterns
         if hasattr(self.args, 'fixed_pts') and self.args.fixed_pts > 0:
+            #if the object we input has attribute 'some_attribute' return true
             self.net.reservoir.add_fixed_points(self.args.fixed_pts)
-        self.net.to(self.device)
+        self.net.to(self.device) #?
         
         # print('resetting network')
         # self.net.reset(self.args.res_x_init, device=self.device)
@@ -60,28 +91,64 @@ class Trainer:
         # getting number of elements of every parameter
         self.n_params = {}
         self.train_params = []
+        # train_params is the list of the parameters we're going to train on 
+
         self.not_train_params = []
         logging.info('Training the following parameters:')
         for k,v in self.net.named_parameters():
+            #named_parameters is a built-in pytorch method
+            #returns an iterator over module parameters[an interable storing pairs of the form (parameter_name, parameter)
+            #note we have recurse=True by default [see documentation]
+
             # k is name, v is weight
             found = False
-            # filtering just for the parts that will be trained
+            # filtering just for the parts that will be trained -we specified which parts in parameters.ph
+            #
+            #for each parameter in named_parameters()
+            #check to see if in train_parts or not
             for part in self.args.train_parts:
+                #train_parts is defined in parameters.py
                 if part in k:
                     logging.info(f'  {k}')
                     self.n_params[k] = (v.shape, v.numel())
+                    #tensor.numel returns total number of  elements in input tensor
+                    #recall: n_params is a dictionary, key-value pairs
                     self.train_params.append(v)
                     found = True
+                    #if the train part is in named parameters then add it to train_params
                     break
             if not found:
+                #then this means parameter is not in args.train_parts so we specified not to train it
                 self.not_train_params.append(k)
         logging.info('Not training:')
         for k in self.not_train_params:
             logging.info(f'  {k}')
 
         self.criteria = get_criteria(self.args)
+        #what's in self.criteria --> get_criteria defined in helper.py
+        #see the definition and explanation in helpers.py:
+        #return the list of batch_losses where each batch loss is computed for a particular loss function for this task rsg-100-150
+        #criterion as in loss for a particular loss functions - differnt loss fucntions <--> different criteria
+        #initially returns a list of the batch_loss of a single batch on a particular loss function by appending the mse on this batch to this list 
+        #then if we call it again, on another batch - we can use a different loss function - , it will append the loss on this new batch to the list that has the loss on first batch. So we get a list of losses on different batches.
+        
+
         self.optimizer = get_optimizer(self.args, self.train_params)
+        #choose an optimizer for the training that ensues(see "#training arguments " in run.py)
+        #default is adam, 
+
+        #and initializes an optimizer object with the arguments we specify at run time and 
+        #the training parameters we want to optimize via train_params
+        #we can also choose arguments for the optimizers. All of them have a learning rate 
+
+
+
+
         self.scheduler = get_scheduler(self.args, self.optimizer)
+        #gets a scheduler: what is scheduler?
+        #it's a method to adjust the learning rate based on different aspects of training/validation during training
+        #see helpers.py for more
+
         
         self.log_interval = self.args.log_interval
         if not self.args.no_log:
