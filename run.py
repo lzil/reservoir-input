@@ -11,6 +11,7 @@ import pdb
 import sys
 import pickle
 import logging
+#logging module defines functions and classes which implement a flexible event logging system for applications and libraries
 import random
 import csv
 import math
@@ -61,12 +62,46 @@ def parse_args():
 
     # dataset arguments
     parser.add_argument('-d', '--dataset', type=str, default=['datasets/rsg-100-150.pkl'], nargs='+', help='dataset(s) to use. >1 means different contexts')
+    #ah I think args.datasets actually stores all the datasets that we feed it in a list
+    #yes look the default value is a list with one element!
+    #so we can feed it multiple datasets and it will store them in a list
+    #which is why in "shortcut for training in designated order" we can get
+    #the number of datasets passed in through args.dataset by going len(args.dataset)
+
+
+    #dataset parameter used to find the dataset .pkl file we created using the json file and the tasks.py etc
+    #notice the default dataset is datasets/rsg-100-150.pkl'
+    #input is the path to the dataset
     # parser.add_argument('-a', '--add_tasks', type=str, nargs='+', help='add tasks to previously trained reservoir')
+
+
+    #sequential training
     parser.add_argument('-s', '--sequential', action='store_true', help='sequential training')
+    #whether we're training multiple tasks (sequentially - I think we almost always train multiple tasks sequentially)
+
     parser.add_argument('--owm', action='store_true', help='use orthogonal weight modification')
-    # parser.add_argument('-o', '--train_order', type=int, nargs='+', default=[], help='ids of tasks to train on, in order if sequential flag is enabled. empty for all')
-    # parser.add_argument('--seq_threshold', type=float, default=5, help='threshold for having solved a task before moving on to next one')
+    parser.add_argument('-o', '--train_order', type=int, nargs='+', default=[], help='ids of tasks to train on, in order if sequential flag is enabled. empty for all')
+
+
+    #synaptic stabilization and XdG
+    #plan start with implementing ss and then we'll introduce xdg and combine:
+    parser.add_argument('--ss', action='store_true', help='use synaptic stabilization')
+    parser.add_argument('-ss_type', type=str, default='SI', choices=['SI', 'EWC'], help= 'choices for synaptic stabilization. Default is synaptic intelligence')
+
+    #so we'll include a part of code that starts 'if ss and xdg:' to combine the two approaches
+
+    parser.add_argument('--xdg', action ='store_true', help = 'use context dependent gating')
+    
+    #parser.add_argument('--ss_xdg', action='store_true', help='use synaptic stabilization and context dependent gating(XdG)')
+    
+
+
+
+
+    parser.add_argument('--seq_threshold', type=float, default=5, help='threshold for having solved a task before moving on to next one')
+
     parser.add_argument('--same_test', action='store_true', help='use entire dataset for both training and testing')
+    #when would you ever want to use the entire dataset for both training and testing?
     
     # training arguments
     parser.add_argument('--optimizer', choices=['adam', 'sgd', 'rmsprop', 'lbfgs'], default='adam')
@@ -101,6 +136,8 @@ def parse_args():
     # control logging
     parser.add_argument('--no_log', action='store_true')
     parser.add_argument('--log_interval', type=int, default=50)
+    #log_interval is the length of the logging intervals i.e. after how many (is it batches or training) samples we log 
+    #the log is shown in terminal and we can see the log_interval on LHS
     parser.add_argument('--log_checkpoint_models', action='store_true')
     parser.add_argument('--log_checkpoint_samples', action='store_true')
 
@@ -108,6 +145,10 @@ def parse_args():
     parser.add_argument('--slurm_param_path', type=str, default=None)
     parser.add_argument('--slurm_id', type=int, default=None)
     parser.add_argument('--use_cuda', action='store_true')
+    #we do say use_cuda in command line but we pass an argument in a different way
+    #we specify action "store_true" which store the Boolean True in args.use_cuda
+    #see self.device in Trainer object
+    #(note: you have to go --use_cuda in command line, )
 
     args = parser.parse_args()
     return args
@@ -157,7 +198,15 @@ def adjust_args(args):
 
     # shortcut for training in designated order
     if args.sequential and len(args.train_order) == 0:
+        #train_order default is [], and length of empty list is 0
+        #what is in args.dataset exactly
         args.train_order = list(range(len(args.dataset)))
+        #gives us the indices of the the different task datasets
+        #0 is automatically the first, this allows us to make sure 
+        #the orders line up throughout: see trainer
+        #args.train_order is the order in which we train on tasks
+        #arange gives us integers from 0 to len(args.dataset)-1 inclusive
+        #and then we put these integers in a list [0,..., len(args.dataset)-1]
 
     # TODO
     if 'rsg' in args.dataset[0]:
@@ -166,7 +215,8 @@ def adjust_args(args):
         args.out_act = 'none'
 
     # number of task variables, latent variables, and output variables
-    args.T = len(args.dataset)
+    args.T = len(args.dataset) #i.e. number of different task datasets which is the number of different task variables
+
     L, Z = 0, 0
     for dset in args.dataset:
         config = get_config(dset, ctype='dset', to_bunch=True)
@@ -175,15 +225,23 @@ def adjust_args(args):
     args.L = L
     args.Z = Z
 
-    # initializing logging
+    # initializing logging before we actually train see Trainer(args) below 
+
+    #notice the idea behind this code is that: on our way to training we've been adding all sorts of information to args specifying exactly what we're doing, how to do it etc and 
+    #finally we pass it to Traniner and it does the training and logs the resutls 
+
     # do this last, because we will be logging previous parameters into the config file
     if not args.no_log:
+        #i.e. if we choose to log (default is to log: we have the option to not log by specifying no_log True but by default its False)
         if args.slurm_id is not None:
+            #what is  is slurm id?
             log = log_this(args, 'logs', os.path.join(args.name.split('_')[0], args.name.split('_')[1]), checkpoints=args.log_checkpoint_models)
         else:
             log = log_this(args, 'logs', args.name, checkpoints=args.log_checkpoint_models)
+            
 
         logging.basicConfig(format='%(message)s', filename=log.run_log, level=logging.DEBUG)
+        #this displays the log contents of log.run_log which is log_path in log_this definition in utils.py
         console = logging.StreamHandler()
         console.setLevel(logging.DEBUG)
         logging.getLogger('').addHandler(console)
@@ -204,6 +262,7 @@ def adjust_args(args):
 
 
 if __name__ == '__main__':
+    #see stack exchange "what does if __name__ == 'main__do "
     args = parse_args()
     args = adjust_args(args)
 

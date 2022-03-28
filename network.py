@@ -93,6 +93,7 @@ class M2Net(nn.Module):
         # pass through the forward part
         # o should have shape [batch size, self.args.T + self.args.L]
         if hasattr(self.args, 'net_fb') and self.args.net_fb:
+            #net feedback from output to input
             self.z = self.z.expand(o.shape[0], self.z.shape[1])
             oz = torch.cat((o, self.z), dim=1)
             u = self.m1_act(self.M_u(oz))

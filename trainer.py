@@ -25,20 +25,34 @@ from utils import log_this, load_rb, get_config, update_args
 from helpers import get_optimizer, get_scheduler, get_criteria, create_loaders, collater
 
 class Trainer:
-    #trainer object: what is it doing?
+    #trainer object: trains  model and logs performance
 
     def __init__(self, args):
         self.args = args
         self.device = torch.device('cuda' if torch.cuda.is_available() and args.use_cuda else 'cpu')
-        #device we will train on will automatically be cuda (a GPU)if it's available and we specify --use_cuda see run.py arguments under control logging
+        #device we will train on will automatically be cuda (a GPU) if 1) it's available and we specify --use_cuda see run.py arguments under control logging
 
         trains, tests = create_loaders(self.args.dataset, self.args, split_test=True, test_size=50)
-        #take .dataset from self.args
-        #trains contains the training data and the dataloader separately 
+        #take .dataset from self.args: it's a list containing the datsets we're going to use  and
+
+
+        #trains is actually a tuple:(Dataset objects, DataLoader objects)
+        #NB: for mutiple datasets(say when sequential training multiple tasks): if args.dataset is a list of datasets and create_loaders stores the corresponding list of training Datasets objects in the first tuple of trains [in the same order as their corresponding .pkl datasets in args.dataset] and the corresponding DataLoaders in the second tuple of trains 
+        #similarly for tests
+
+        
+
+
+
+        #trains contains the training data and the dataloader separately
+            #see "trains" in if statement directly below 
+
         #read Datasets and Dataloaders in PyTorch Guide!
         #creates the PyTorch data loaders so that we can iterate over datasets
         #args.dataset is the dataset at the (see is the path to the dataset we're using see dataset arguments in run.py 
         #n_trials is often 2000 by default, so we train on 1950 and test on 50
+        #batch size is defined at run time
+        #we've run it with 5 
         #what's args.dataset
         
         #create_loaders is from helpers and creates our data loaders [see PyTorch guide ] recall data_loader objects allows us to iterate over minibatches(nonoverlapping subsets of the dataset) easily 
@@ -47,22 +61,23 @@ class Trainer:
 
         if self.args.sequential:
             #args.sequential is defined in run.py under dataset arguments
-            #if true we do "sequential training
-            #we create some more attributes for the trainer object if 
-            #we're doing sequential training
-            self.train_set, self.train_loaders = trains #trains contaien the whole training data loader: train_loader and the training data train_set
+            #if true we do "sequential training"
+            
+            self.train_set, self.train_loaders = trains #trains is a tuple, first element of tuple is the whole training data set and the second element is the training loader: train_loader and the training data train_set
 
             self.test_set, self.test_loaders = tests
             self.train_idx = 0
             #index of the first task 
-            #when training the multiple (different) tasks we use 
-            #
+        
+            #and then we set the current train_loader and test loaders to be the ones for the first task(dataset) 
             
-            self.train_loader = self.train_loaders[self.args.train_order[self.train_idx]]
+            self.train_loader = self.train_loaders[self.args.train_order[self.train_idx]] 
             
-             #I'd imagine train loaders is taking in the ordering of the different tasks so that the ith training set and the ith test set are for the same task etc 
+            
+             
             
             self.test_loader = self.test_loaders[self.args.train_order[self.train_idx]]
+
         else: #if not doing sequential training
             self.train_set, self.train_loader = trains
             self.test_set, self.test_loader = tests
@@ -72,6 +87,7 @@ class Trainer:
             logging.info(f'  {ds}') #the dataset that come after
             #the "Created data loaders using datasets" above
             #shows us the name of each dataset we're training on 
+            #we see a list of all the datasets we're training on 
 
 
         if self.args.sequential:
@@ -88,8 +104,9 @@ class Trainer:
         # print('resetting network')
         # self.net.reset(self.args.res_x_init, device=self.device)
 
-        # getting number of elements of every parameter
+        
         self.n_params = {}
+        #dictionary of named parameters
         self.train_params = []
         # train_params is the list of the parameters we're going to train on 
 
@@ -102,12 +119,16 @@ class Trainer:
 
             # k is name, v is weight
             found = False
-            # filtering just for the parts that will be trained -we specified which parts in parameters.ph
+            # filtering just for the parts that will be trained -we specified which parts in parameters.py
             #
             #for each parameter in named_parameters()
             #check to see if in train_parts or not
             for part in self.args.train_parts:
-                #train_parts is defined in parameters.py
+                #(train_parts is defined in parameters.py - but this isn't too NB)
+
+                #takes the parameters in args.train_parts (the parts we say we want to train when we use run.py see run.py) and makes sure that these are in fact what we train on by adding them to self.train_params
+
+                
                 if part in k:
                     logging.info(f'  {k}')
                     self.n_params[k] = (v.shape, v.numel())
@@ -117,12 +138,16 @@ class Trainer:
                     found = True
                     #if the train part is in named parameters then add it to train_params
                     break
+
+
             if not found:
                 #then this means parameter is not in args.train_parts so we specified not to train it
                 self.not_train_params.append(k)
         logging.info('Not training:')
         for k in self.not_train_params:
             logging.info(f'  {k}')
+
+
 
         self.criteria = get_criteria(self.args)
         #what's in self.criteria --> get_criteria defined in helper.py
@@ -147,12 +172,18 @@ class Trainer:
         self.scheduler = get_scheduler(self.args, self.optimizer)
         #gets a scheduler: what is scheduler?
         #it's a method to adjust the learning rate based on different aspects of training/validation during training
+    
         #see helpers.py for more
 
         
         self.log_interval = self.args.log_interval
+        #log_interval is the length of the logging intervals fi.e. after how many training samplse samples we test our model and log its performance. It's 50 by default and this can be seen by the output in terminal. we log every 50 samples and do this until all the samples inthe dataset are trained on (for 1 epoch)
+        
+
         if not self.args.no_log:
+            #if we're logging: this is the code that populates the log during training!
             self.log = self.args.log
+            #log is the log object defined in utils.py with info(stored in attributes) such as run_id, run_dir, the log_path, checkpoint directory
             self.run_id = self.args.log.run_id
             self.vis_samples = []
             self.csv_path = open(os.path.join(self.log.run_dir, f'losses_{self.run_id}.csv'), 'a')
@@ -170,11 +201,14 @@ class Trainer:
             torch.save(self.net.state_dict(), model_path)
             return
         # saving all checkpoints takes too much space so we just save one model at a time, unless we explicitly specify it
+        
+        #yes see: checkpoints explanation in utils.py
         if self.args.log_checkpoint_models:
             self.save_model_path = os.path.join(self.log.checkpoint_dir, f'model_{ix}.pth')
         elif os.path.exists(self.save_model_path):
             os.remove(self.save_model_path)
         torch.save(self.net.state_dict(), self.save_model_path)
+        #this torch.save(neuralnet.state_dict())is what we use to save model's state at different points in traiing!, and we save it to the path self.save_model_path 
 
     def log_checkpoint(self, ix, x, y, z, train_loss, test_loss):
         self.writer.writerow([ix, train_loss, test_loss])
@@ -189,39 +223,114 @@ class Trainer:
                 os.remove(self.plot_checkpoint_path)
             with open(self.plot_checkpoint_path, 'wb') as f:
                 pickle.dump(self.vis_samples, f)
+                #open the file and dump the samples in 
 
     # runs an iteration where we want to match a certain trajectory
     def run_trial(self, x, y, trial, training=True, extras=False):
+        #this is for a single trial(a single task object i.e. a single training case) which we input in line above
         self.net.reset(self.args.res_x_init, device=self.device)
+        #resets the net
         trial_loss = 0.
-        k_loss = 0.
+        #the loss on this single trial
+        #need trial loss bc it's an input output pair is a pair of sequences bc it's time series(so the loss at each time point in the trial )
+        k_loss = 0. #what is k_loss ?
         outs = []
         us = []
         vs = []
         # setting up k for t-BPTT
+        #k defines the truncation window for BPTT so that we only unroll the network from T-k(inclusive) to T
         if training and self.args.k != 0:
+            #by default code uses k = 0 and Liang said atm we don't truncate
+            #so we use the next code in else statement
+
+            #the k we specify for BPTT, if k != 0, then do truncated bptt with k
             k = self.args.k
         else:
-            # k to full n means normal BPTT
-            k = x.shape[2]
+            # we don't truncate atm (26 March 2022): so k is task length
+            # is k =0 we put it k to full n means normal BPTT: in this case truncation window is the task length k is literally the k in the bptt formula in Bengio's On 
+            #yes bc the BPTT update is performed back for n=t_len time steps (so there's no truncation)
+            #if k=0 its default or training is False then use 
+            k = x.shape[2] 
+            print(k)
+            #x.shape[2] is the lenght of the input time-series,it's always t_len and for the RSG it's 600
+
         for j in range(x.shape[2]):
+            #x.shape[2] is T the length of the trial.
+
+            #this looks to be the unrolling to compute the losses at each timestep j of the trial(training case)
+            print(x.shape)
+            #see get_criteria in goodnotes for an explanation of x's shape: in short x[:, ;, j] is the input to the net at timestep j, we do this for each timestep starting with the 1st and ending with the 600th
             net_in = x[:,:,j]
-            net_out, etc = self.net(net_in, extras=True)
-            outs.append(net_out)
-            us.append(etc['u'])
-            vs.append(etc['v'])
+            #the input at time j
+
+            net_out, etc = self.net(net_in, extras=True) #see self.net above, it's the net we're training on 
+            #recall we use nets like functions, we called the net on net in, and specified extras=True - this does a forward pass of our net on the net_in (at time j only, yes I think the idea at play here is that of the unrolling the recurrent net in time so in a single time series trial, we treat each input output pair in the time series as a single trial in a feedforward setting and we unroll the dynamics net in time so we have this unrolled feedforward net) (i.e. in def forward , o = net_in),
+            
+            #see ipad goodnotes get_criteria:
+            #net_out for x[:,;,j] is the z(j), we can think of j as a timestep here, 
+            #etc stores the values of u where u = self.m1_act(self.M_u(o))
+            #and v, etc = self.reservoir(u, extras=True)
+            #etc holds here holds the x-states(the recurrently connected units) after this time step i.e x(j)
+            # I believe this is the unrolling of the network
+            outs.append(net_out) #add th the z(t) at this time step t=j to this list
+            #we want a list of all the z(t)'s during the task for each timestep for backprop
+
+            us.append(etc['u']) #store the u for this time step j in us
+            vs.append(etc['v']) #store v for this time step k in vs
+            #then 
             # t-BPTT with parameter k
-            if (j+1) % k == 0:
+            #t stands for truncated, as in truncated BPTT i.e. do BPTT but using only the last k timesteps/;
+            #see our notes on BPTT, tBPTT, exploding and vanishing gradients
+
+            # so we keep evaluating our network at each "time" index j=0,....,(task_len-1) 
+            #and when we get to the beginning of the truncation window(i.e. when (j+1)%k==0 we start on 
+            #t BPTT
+            # we start BPTT at j+1==k index timestep in task length i.e. when index is k-1 so that the timestep is k which is ofc by def when we want start BPTT if k
+            if (j+1) % k == 0: 
+
                 # the first timestep with which to do BPTT
-                k_outs = torch.stack(outs[-k:], dim=2)
-                k_targets = y[:,:,j+1-k:j+1]
+
+                #i.e. if the remainder is 0 then 
+                #this clause gets triggered so long as j+1 is less than or equal to k
+                    #if k=600, every j in the above "for" loop triggers this clause including the last 1
+
+                    # if k is lt 600 then say it's 50 so we want BPTT on the last 50 timesteps
+                        #when j=0, to j=49 (i.e from j+1=1,..., j+1=50)
+                        #this clause is activated:
+                        #take the last k outputs
+                        #take the first take k_targets=y[:, :,  1-k:1]
+                        #but when j=0 k_targets=y[:, :, -50:1] is actually going to give us an empty tensor
+                        #and in fact it will keep doing this until we get to j=49 at which point we'll get the first targets
+                
+                #i.e. when j == k-1 
+                # the first timestep with which to do BPTT
+                k_outs = torch.stack(outs[-k:], dim=2) #recall tBPTT with k means do BPTT using only the last k timesteps 
+                #we select the last k elements of outs
+                #torch.stack concatenates these tensors along the 3rd dimension (dim=2), just as we did with x.shape[2], this 3rd dimension (with index 2) is the time dimension (see ipad), so we have z(t)'s evolution over time
+                k_targets = y[:,:,j+1-k:j+1] 
+                #recall y stores our targets, again 3rd dimenision is the time dimension and we want the targets from time step indices j+1 -k (inclusive) to j+1 (exclusive) i.e. from 0 to k i.e. from 1st time step to kth timestep exclusive (k-1th timestep inclusive)
+                #but why not just take the last k targets?
+
+                #new hypothesis 13:10, 11 March:
+                #yes we want the last k outputs the outputs in the truncation window but 
+                #in order to calculate the loss at the first time step in the truncation window, we need the error 
                 for c in self.criteria:
                     k_loss += c(k_outs, k_targets, i=trial, t_ix=j+1-k)
+                    #if we specified mse in args.loss at runtime, then c will only take one value and that will be to calculate the mse for this single trial here between k_outs and k_targets
+                    
+                    #this will give us the mse and we want t_ix, the truncate index here to be zero bc we've already truncated and we want the mse between each k_outs, k targets
+
                 trial_loss += k_loss.detach().item()
+                #k_loss.detach() returns a new tensor, detached from the current graph. The result will never require gradients
+                #computation graphs with andrew ng might be important
+                #why do we want this: well there
+                 
                 if training:
-                    k_loss.backward()
-                    # strategies for continual learning that involve modifying gradients
+                    k_loss.backward()  #calculates gradients
+                    
+                    # strategies for continual learning that involve modifying gradients we computed in line above
                     if self.args.sequential and self.train_idx > 0:
+                        #NB: self.train_idx >0 i.e if we're not on training on the first task 
                         if self.args.owm:
                             # orthogonal weight modification
                             self.net.M_u.weight.grad = self.P_u @ self.net.M_u.weight.grad @ self.P_s
@@ -231,6 +340,7 @@ class Trainer:
                                 self.net.M_ro.bias.grad = self.P_z @ self.net.M_ro.bias.grad
                         elif self.args.swt:
                             # keeping sensory and output weights constant after learning first task
+                            #this is important we need this for implementation
                             self.net.M_u.weight.grad[:,:self.args.L] = 0
                             self.net.M_ro.weight.grad[:] = 0
                             if self.args.ff_bias:
@@ -238,7 +348,7 @@ class Trainer:
                                 self.net.M_ro.bias.grad[:] = 0
                             
                 k_loss = 0.
-                self.net.reservoir.x = self.net.reservoir.x.detach()
+                self.net.reservoir.x = self.net.reservoir.x.detach() #why do we do detach this
 
         trial_loss /= x.shape[0]
 
@@ -255,12 +365,16 @@ class Trainer:
         return trial_loss
 
     def train_iteration(self, x, y, trial, ix_callback=None):
-        self.optimizer.zero_grad()
+        self.optimizer.zero_grad()#put back to zero the gradients bc we want to use the new ones for the trial
+       
+        #run trial computes trial loss and the gradients for a single trial 
         trial_loss, etc = self.run_trial(x, y, trial, extras=True)
+        #computes trial loss and teh gra
+
 
         if ix_callback is not None:
             ix_callback(trial_loss, etc)
-        self.optimizer.step()
+        self.optimizer.step() #updates the parameters using the gradients that we computed using self.run_trial directly above
 
         etc = {
             'ins': x,
@@ -274,6 +388,7 @@ class Trainer:
     def test(self):
         with torch.no_grad():
             x, y, trials = next(iter(self.test_loader))
+
             x, y = x.to(self.device), y.to(self.device)
             loss, etc = self.run_trial(x, y, trials, training=False, extras=True)
 
@@ -305,6 +420,7 @@ class Trainer:
         return P, S_avg
 
     def train(self, ix_callback=None):
+        #this is where we train using everythin above
         ix = 0
         # for convergence testing
         running_min_error = float('inf')
@@ -321,11 +437,17 @@ class Trainer:
             S_z = 0
 
         for e in range(self.args.n_epochs):
+            #
+            #
             for epoch_idx, (x, y, info) in enumerate(self.train_loader):
+                #bc batch_size is 1: 
+                #train_loader is (0)
+                
                 ix += 1
 
                 x, y = x.to(self.device), y.to(self.device)
                 iter_loss, etc = self.train_iteration(x, y, info, ix_callback=ix_callback)
+
 
                 if iter_loss == -1:
                     logging.info(f'iteration {ix}: is nan. ending')
@@ -334,7 +456,7 @@ class Trainer:
 
                 running_loss += iter_loss
 
-                if ix % self.log_interval == 0:
+                if ix % self.log_interval == 0: #if ix the index of the training iteration we're on  is a multiple of 
                     z = etc['outs'].cpu().numpy().squeeze()
                     train_loss = running_loss / self.log_interval
                     test_loss, test_etc = self.test()
@@ -357,6 +479,8 @@ class Trainer:
                     # if training sequentially, move on to the next task
                     # if doing OWM-like updates, do them here
                     if self.args.sequential and test_loss < self.args.seq_threshold:
+                        #args.seq_threshold 
+                        #when training sequentially we move onto next tasks as soon as test_loss is less than args.seq_threshold which has default value 5   
                         logging.info(f'Successfully trained task {self.train_idx}...')
                         
                         losses = self.test_tasks(ids=range(self.train_idx + 1))
@@ -373,18 +497,34 @@ class Trainer:
                             self.P_z, S_z = self.update_P(S_z, test_etc['outs'])
                             logging.info(f'...updated projection matrices for OWM')
 
+                        #synaptic stabilization:
+                        
+
+                        
+
+
                         # done processing prior task, move on to the next one or quit
-                        self.train_idx += 1
+                        self.train_idx += 1 #this is us moving onto the next task
+
+
                         if self.train_idx == len(self.args.train_order):
+                            #i.e. if we've done the last task then we'll jump out of the for loop by breaking so we don't do the things below in the for statement (as to avoid unecessary computations)
                             ending = True
                             logging.info(f'...done training all tasks! ending')
                             break
+                            #break terminates the current loop and resumes executiona at the next statement after the current loop. So this will bust us out of "for epoch_idx, (x, y, info) in enumerate(self.train_loader):" , but we'll still be in "for e in range(self.args.n_epochs):"
+
+                        
                         logging.info(f'...moving on to task {self.train_idx}.')
                         self.train_loader = self.train_loaders[self.args.train_order[self.train_idx]]
-                        self.test_loader = self.test_loaders[self.args.train_order[self.train_idx]]
+                        #new train loader for new task 
+                        self.test_loader = self.test_loaders
+                        [self.args.train_order[self.train_idx]]
+                        #test loader for new task
                         running_min_error = float('inf')
                         running_no_min = 0
                         break
+                        #is break going to take us to the 
 
                     # convergence based on no avg loss decrease after patience samples
                     if test_loss < running_min_error:
@@ -399,7 +539,7 @@ class Trainer:
                         ending = True
                 if ending:
                     break
-            logging.info(f'Finished dataset epoch {e+1}')
+            logging.info(f'Finished dataset epoch {e+1}') #e+1 bc zero-indexing in python and we want to print the epoch 1 not epoch 0 !
             if self.scheduler is not None:
                 self.scheduler.step()
             if ending:
