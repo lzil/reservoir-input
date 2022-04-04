@@ -49,9 +49,24 @@ class TrialDataset(Dataset):
         self.data = []      # dsets themselves
         self.t_types = []   # task type
         self.lzs = []       # Ls and Zs for task trials
-        self.x_ctxs = []    # precomputed context inputs
+        self.x_ctxs = []    # precomputed context inputs (i.e. context input matrix for each task)
+        self.x_pads = []    # zero rows so that inputs have same number of rows across tasks when sequential learning 
         self.max_idxs = np.zeros(len(datasets), dtype=int)
         self.t_lens = []    #the t_lens for the datasets
+
+        #code for x_pads: need to know max(L) before the 2nd loop after this line of code
+        max_L=0
+        for i, (dname, ds) in enumerate(datasets):
+            
+            print(f'ds[0].L for task {i} is {ds[0].L}')
+            if ds[0].L > max_L:
+                max_L = ds[0].L
+
+        print(f' this is max L  {max_L}')
+        
+
+
+
         for i, (dname, ds) in enumerate(datasets):
             
             self.dnames.append(dname)
@@ -60,7 +75,8 @@ class TrialDataset(Dataset):
             x_ctx = np.zeros((args.T, ds[0].t_len))
             #args.T is the length of args.dataset, the number of different datasets we've loaded
             x_ctx[i] = 1 #make all entries equal to in the i-index row equal 1 
-            #we then add it to x_ctxs (notice the plural)
+            #we then add it to x_ctxs (notice the plural) 
+            #for task 0, the 0-index (first row of ctx will be 1's) the rest 0's (the one-hot encoding mentioned in RNN figure in Duncker et al and Yang Task representation paper)
             #that's our context cue it seems 18/03/2022
 
             self.x_ctxs.append(x_ctx)
@@ -76,6 +92,17 @@ class TrialDataset(Dataset):
             self.t_types.append(ds[0].t_type)
             self.lzs.append((ds[0].L, ds[0].Z))
 
+            #x_pads: 
+            if ds[0].L != max_L: #if stimulus for this dataset is not equal to max_L we need to insert max_L - ds[0].L zero rows inbetween stimulus and ctx. [Ofc for the task with max_L we don't have to pad]
+                    x_pad = np.zeros((max_L - ds[0].L, ds[0].t_len))
+                    self.x_pads.append(x_pad)
+            else: 
+                    x_pad = None
+                    self.x_pads.append(x_pad)
+            
+
+        
+
     def __len__(self):
         return self.max_idxs[-1]
 
@@ -88,11 +115,16 @@ class TrialDataset(Dataset):
         if context != 0:
             idx = idx - self.max_idxs[context-1]
 
-        trial = self.data[context][idx]
+        trial = self.data[context][idx] 
         x = trial.get_x(self.args)
         x_cts = self.x_ctxs[context]
-        # context comes after the stimulus
-        x = np.concatenate((x, x_cts))
+
+
+        x_padz= self.x_pads[context]
+        # context comes after the stimulus (i.e. under the stimulus if you print out a train input from enumerate(self.train_loader))
+        to_concat = [a for a in (x,x_padz,x_cts) if a is not None]
+        x=np.concatenate(to_concat)
+        #x = np.concatenate((x, x_padz, x_cts))
         y = trial.get_y(self.args)
 
         trial.context = context

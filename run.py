@@ -219,12 +219,13 @@ def adjust_args(args):
 
     L, Z = 0, 0
     for dset in args.dataset:
+        print(dset)
         config = get_config(dset, ctype='dset', to_bunch=True)
         L = max(L, config.L)
         Z = max(Z, config.Z)
     args.L = L
     args.Z = Z
-
+    print(args.L)
     # initializing logging before we actually train see Trainer(args) below 
 
     #notice the idea behind this code is that: on our way to training we've been adding all sorts of information to args specifying exactly what we're doing, how to do it etc and 

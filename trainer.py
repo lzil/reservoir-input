@@ -64,6 +64,7 @@ class Trainer:
             #if true we do "sequential training"
             
             self.train_set, self.train_loaders = trains #trains is a tuple, first element of tuple is the whole training data set and the second element is the training loader: train_loader and the training data train_set
+            
 
             self.test_set, self.test_loaders = tests
             self.train_idx = 0
@@ -95,6 +96,7 @@ class Trainer:
 
         # self.net = BasicNetwork(self.args)
         self.net = M2Net(self.args)
+        #the model with the input representation layer, reservoir etc
         # add hopfield net patterns
         if hasattr(self.args, 'fixed_pts') and self.args.fixed_pts > 0:
             #if the object we input has attribute 'some_attribute' return true
@@ -251,21 +253,29 @@ class Trainer:
             #yes bc the BPTT update is performed back for n=t_len time steps (so there's no truncation)
             #if k=0 its default or training is False then use 
             k = x.shape[2] 
-            print(k)
+            #print(k)
             #x.shape[2] is the lenght of the input time-series,it's always t_len and for the RSG it's 600
-
+            #np.set_printoptions(threshold=np.inf)
+            #print(x.shape)
+            #print(x)
+            
         for j in range(x.shape[2]):
             #x.shape[2] is T the length of the trial.
 
             #this looks to be the unrolling to compute the losses at each timestep j of the trial(training case)
-            print(x.shape)
+            #print(f'Am I here?{x.shape}')
             #see get_criteria in goodnotes for an explanation of x's shape: in short x[:, ;, j] is the input to the net at timestep j, we do this for each timestep starting with the 1st and ending with the 600th
-            net_in = x[:,:,j]
+            
+            net_in = x[:,:,j] # the single input x's value at time j  for j=1,..., T
+            #print(f'this is x[:, :, j] {x[:,:,j]}')
             #the input at time j
-
+            #print(f'what is net_in ? {net_in}')
             net_out, etc = self.net(net_in, extras=True) #see self.net above, it's the net we're training on 
             #recall we use nets like functions, we called the net on net in, and specified extras=True - this does a forward pass of our net on the net_in (at time j only, yes I think the idea at play here is that of the unrolling the recurrent net in time so in a single time series trial, we treat each input output pair in the time series as a single trial in a feedforward setting and we unroll the dynamics net in time so we have this unrolled feedforward net) (i.e. in def forward , o = net_in),
-            
+            #print(f'this is net out {net_out}')
+
+
+
             #see ipad goodnotes get_criteria:
             #net_out for x[:,;,j] is the z(j), we can think of j as a timestep here, 
             #etc stores the values of u where u = self.m1_act(self.M_u(o))
@@ -304,7 +314,9 @@ class Trainer:
                 
                 #i.e. when j == k-1 
                 # the first timestep with which to do BPTT
-                k_outs = torch.stack(outs[-k:], dim=2) #recall tBPTT with k means do BPTT using only the last k timesteps 
+                k_outs = torch.stack(outs[-k:], dim=2) 
+                print(f'this is k_outs {k_outs.shape}')
+                #recall tBPTT with k means do BPTT using only the last k timesteps 
                 #we select the last k elements of outs
                 #torch.stack concatenates these tensors along the 3rd dimension (dim=2), just as we did with x.shape[2], this 3rd dimension (with index 2) is the time dimension (see ipad), so we have z(t)'s evolution over time
                 k_targets = y[:,:,j+1-k:j+1] 
@@ -399,11 +411,15 @@ class Trainer:
             'vs': etc['vs'].detach(),
             'outs': etc['outs'].detach()
         }
+        
 
         return loss, etc
 
     # helper function for sequential training, for testing performance on all tasks
     def test_tasks(self, ids):
+        #computes the test losses for each task and appends them to a list losses which will be as long as the number of tasks.
+        #the each element of the list is a tuple (task integer id, loss for that task)
+        #ids is a list of the task ids(just integers) [0,1,2,.., r-1]  if r tasks of the tasks we're training on 
         losses = []
         for i in ids:
             self.test_loader = self.test_loaders[self.args.train_order[i]]
@@ -439,14 +455,30 @@ class Trainer:
         for e in range(self.args.n_epochs):
             #
             #
+            
+            # synaptic intelligence requires storing changes in parameter values after iterations, need the value of parameters before training (i.e. their initializations)
+
+            
+
             for epoch_idx, (x, y, info) in enumerate(self.train_loader):
-                #bc batch_size is 1: 
-                #train_loader is (0)
+                #print(f'x in train_loader {x,y.shape}, {info}')
+                #bc batch_size is 1: #but we can make it 5 - batch_size is the the number of L_i's (see RNNs notes in ipad) we add up to get the batch loss which we pass to our optimizer.
+                #if batch_size is 1: elements of train loader is a list of batches of size 1 i.e. each (x,y, info) is a single input-output pair
+                # the batch is (x,y,info) and we number them as we go 
                 
                 ix += 1
 
+                #a training iteration (see 'RNNs'notes on ipad, page 2 and look for Training and Losses in reservoir-input)
                 x, y = x.to(self.device), y.to(self.device)
+                
+                #storing changes in parameter values after iterations, need the initial value 
+
                 iter_loss, etc = self.train_iteration(x, y, info, ix_callback=ix_callback)
+                
+                #for synaptic intelligence need the differences in M_u and M_v  before and after each train iteration [so we're going to want to get the parameter values before the self.train_iteration above]
+                print(self.net.M_u.weight.shape)
+
+
 
 
                 if iter_loss == -1:
@@ -454,9 +486,11 @@ class Trainer:
                     ending = True
                     break
 
-                running_loss += iter_loss
+                running_loss += iter_loss 
 
-                if ix % self.log_interval == 0: #if ix the index of the training iteration we're on  is a multiple of 
+                if ix % self.log_interval == 0: 
+                    #if it's time to log or stop i.e. if ix the index of the training iteration we're on  is a multiple of the log interval
+
                     z = etc['outs'].cpu().numpy().squeeze()
                     train_loss = running_loss / self.log_interval
                     test_loss, test_etc = self.test()
@@ -467,6 +501,7 @@ class Trainer:
                     ]
                     if self.args.sequential:
                         losses = self.test_tasks(ids=range(self.train_idx))
+                        #test_tasks is a # helper function for sequential training, for testing performance on all tasks
                         for i, loss in losses:
                             log_arr.append(f't{i}: {loss:.3f}')
                     log_str = '\t| '.join(log_arr)
