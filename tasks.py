@@ -183,17 +183,21 @@ class DelayProAnti(Task):
         self.fix = args.fix_t
         self.stim = self.fix + args.stim_t
 
-        self.L = 3
-        self.Z = 3
+        self.L = 3 #3D input
+        self.Z = 3 #3D output
 
     def get_x(self, args=None):
         x = np.zeros((3, self.t_len))
+        #input is 3D input 
         # 0 is fixation, the remainder are stimulus
+        #(i.e. first dimension is the fixation input, second is cos(theta). 3rd is sin(theta))
+        #it gets the fixation from 0 untell the 
         x[0,:self.stim] = 1
         x[1,self.fix:] = self.stimulus[0]
         x[2,self.fix:] = self.stimulus[1]
         return x
-
+    #so look: #recall columns are the time dimension, it gets the fixation all the way until stim time self.stim then after self.stim th  x[0] is just a zero row (i..e fixation cue is removed and its time for the net to make a movement in a direction)
+    #at the time, there's a delay of 1 unit of time bc fixation leaves at time self.stime-1 [bc of how indexing works  bc x[0,:self.stim] = 1. After 1 second the gap i.e. at time=self.stim we want the net to produce the stimulus. So this is what the y's are doing directly below are doing
     def get_y(self, args=None):
         y = np.zeros((3, self.t_len))
         y[0,:self.stim] = 1
