@@ -128,11 +128,13 @@ class Trainer:
 
         #if xdg, train weights from context signal to hidden units so add M_u_cs, M_v_cs and M_x_cs to train_parts:
 
-        #if self.args.sequential and self.args.xdg:
-            #args.train_parts.append('M_u_cs')
-            #args.train_parts.append('M_x_cs')
-            #args.train_parts.append('M_v_cs')
+        if self.args.sequential and self.args.xdg:
+            args.train_parts.append('M_u_cs')
+            args.train_parts.append('M_x_cs')
+            args.train_parts.append('M_v_cs')
             
+        print(self.net.named_parameters)
+        print(args.train_parts)
         for k,v in self.net.named_parameters():
             #named_parameters is a built-in pytorch method
             #returns an iterator over module parameters[an interable storing pairs of the form (parameter_name, parameter)
@@ -499,14 +501,17 @@ class Trainer:
                 #storing changes in parameter values after iterations, need the initial value 
 
 
-                # if doing xdg, create intialize and context signal - one hot vector with 1 in first entry, 0 in the rest bc it's for the first task
+                
 
-
+                # if doing xdg, create intialize and context signal - one hot vector with 1 in first entry, 0 in the rest bc it's for the first task.
+                #NB: cs has to be a parameter for any function that uses the forward pass of the network bc if doing xdg (args.xdg), in network.py cs becomes a parameter for the net that needs to be not None. 
 
                 if self.args.sequential and self.args.xdg:
                     #context signal 
                     cs = torch.zeros((1, self.args.T))
                     cs[0, self.train_idx] = 1
+                else:
+                    cs=None
                     
 
                 iter_loss, etc = self.train_iteration(x, y, info, ix_callback=ix_callback, cs=cs)
