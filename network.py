@@ -115,7 +115,7 @@ class M2Net(nn.Module):
         self.M_u.weight.data = torch.cat((M, torch.zeros((M.shape[0],1))), dim=1) #horizontal concatenation 
         self.args.T += 1
 
-    def forward(self, o, cs=None, extras=False):
+    def forward(self, o, cs=None, extras=False, gate_layers=None):
         # pass through the forward part
         # o should have shape [batch size, self.args.T + self.args.L]
         
@@ -128,7 +128,46 @@ class M2Net(nn.Module):
             #print(f'yas{o.shape}')
             if self.args.sequential and self.args.xdg:
 
-                u=self.m1_act(self.M_u(o)+ self.M_u_cs(cs))
+                #gating for now just us and vs in pool, later put xs in
+                print(gate_layers)
+                #so we have this [u,v]
+
+                # want to know before doing the gating which units are in the gating pool 
+
+
+                #for layer in gate_layers: 
+                #we want a list u
+
+
+
+
+
+
+                if 'u' in gate_layers:
+                    #do gating for u:
+                    u=self.m1_act(self.M_u(o)+ self.M_u_cs(cs))
+                    print(u)
+                    print(u.shape)
+                    
+
+                else: #context signal for u but don't gate it [don't have a way to trigger this condition yet]
+                    u=self.m1_act(self.M_u(o)+ self.M_u_cs(cs))
+
+
+                if 'v' in gate_layers:
+                    #do gating for both 
+                    if extras:
+                        v, etc = self.reservoir(u, cs=cs, extras=True)
+                    else:
+                        v = self.reservoir(u, cs=cs, extras=False)
+
+                else: #not gating v
+                    if extras:
+                        v, etc = self.reservoir(u, cs=cs, extras=True)
+                    else:
+                        v = self.reservoir(u, cs=cs, extras=False)
+
+
             else:
                 u = self.m1_act(self.M_u(o))
         if extras:
@@ -226,7 +265,7 @@ class M2Reservoir(nn.Module):
         self.x.detach_()
 
     # extras currently doesn't do anything. maybe add x val, etc.
-    def forward(self, u=None, cs=None, extras=False):
+    def forward(self, u=None, cs=None, gate_layers=None, extras=False):
         if self.dynamics_mode == 0:
             #if doing xdg project context signal onto hidden units
             if u is None:
