@@ -69,6 +69,9 @@ class Trainer:
             self.test_set, self.test_loaders = tests
             self.train_idx = 0
             #index of the first task 
+
+            
+
         
             #and then we set the current train_loader and test loaders to be the ones for the first task(dataset) 
             
@@ -94,6 +97,14 @@ class Trainer:
         if self.args.sequential:
             logging.info(f'Sequential training. Starting with task {self.train_idx}')
 
+
+        
+            
+
+
+
+
+
         # self.net = BasicNetwork(self.args)
         self.net = M2Net(self.args)
         #the model with the input representation layer, reservoir etc
@@ -114,6 +125,14 @@ class Trainer:
 
         self.not_train_params = []
         logging.info('Training the following parameters:')
+
+        #if xdg, train weights from context signal to hidden units so add M_u_cs, M_v_cs and M_x_cs to train_parts:
+
+        #if self.args.sequential and self.args.xdg:
+            #args.train_parts.append('M_u_cs')
+            #args.train_parts.append('M_x_cs')
+            #args.train_parts.append('M_v_cs')
+            
         for k,v in self.net.named_parameters():
             #named_parameters is a built-in pytorch method
             #returns an iterator over module parameters[an interable storing pairs of the form (parameter_name, parameter)
@@ -228,7 +247,7 @@ class Trainer:
                 #open the file and dump the samples in 
 
     # runs an iteration where we want to match a certain trajectory
-    def run_trial(self, x, y, trial, training=True, extras=False):
+    def run_trial(self, x, y, trial, training=True, extras=False, cs = None):
         #this is for a single trial(a single task object i.e. a single training case) which we input in line above
         self.net.reset(self.args.res_x_init, device=self.device)
         #resets the net
@@ -241,6 +260,12 @@ class Trainer:
         vs = []
         # setting up k for t-BPTT
         #k defines the truncation window for BPTT so that we only unroll the network from T-k(inclusive) to T
+
+        
+
+
+
+
         if training and self.args.k != 0:
             #by default code uses k = 0 and Liang said atm we don't truncate
             #so we use the next code in else statement
@@ -270,7 +295,7 @@ class Trainer:
             #print(f'this is x[:, :, j] {x[:,:,j]}')
             #the input at time j
             #print(f'what is net_in ? {net_in}')
-            net_out, etc = self.net(net_in, extras=True) #see self.net above, it's the net we're training on 
+            net_out, etc = self.net(net_in, cs = cs,  extras=True) #see self.net above, it's the net we're training on 
             #recall we use nets like functions, we called the net on net in, and specified extras=True - this does a forward pass of our net on the net_in (at time j only, yes I think the idea at play here is that of the unrolling the recurrent net in time so in a single time series trial, we treat each input output pair in the time series as a single trial in a feedforward setting and we unroll the dynamics net in time so we have this unrolled feedforward net) (i.e. in def forward , o = net_in),
             #print(f'this is net out {net_out}')
 
@@ -314,12 +339,14 @@ class Trainer:
                 
                 #i.e. when j == k-1 
                 # the first timestep with which to do BPTT
-                k_outs = torch.stack(outs[-k:], dim=2) 
-                print(f'this is k_outs {k_outs.shape}')
+                k_outs = torch.stack(outs[-k:], dim=2) #take the 
+                #last k outputs from outs 
+                #(see:https://pytorch.org/docs/stable/generated/torch.stack.html)
+
                 #recall tBPTT with k means do BPTT using only the last k timesteps 
                 #we select the last k elements of outs
                 #torch.stack concatenates these tensors along the 3rd dimension (dim=2), just as we did with x.shape[2], this 3rd dimension (with index 2) is the time dimension (see ipad), so we have z(t)'s evolution over time
-                k_targets = y[:,:,j+1-k:j+1] 
+                k_targets = y[:,:,j+1-k:j+1] #if RSG: k is 600, dpro its 300
                 #recall y stores our targets, again 3rd dimenision is the time dimension and we want the targets from time step indices j+1 -k (inclusive) to j+1 (exclusive) i.e. from 0 to k i.e. from 1st time step to kth timestep exclusive (k-1th timestep inclusive)
                 #but why not just take the last k targets?
 
@@ -376,11 +403,12 @@ class Trainer:
             return trial_loss, etc
         return trial_loss
 
-    def train_iteration(self, x, y, trial, ix_callback=None):
+    def train_iteration(self, x, y, trial, ix_callback=None,  cs=None):
         self.optimizer.zero_grad()#put back to zero the gradients bc we want to use the new ones for the trial
-       
+
+
         #run trial computes trial loss and the gradients for a single trial 
-        trial_loss, etc = self.run_trial(x, y, trial, extras=True)
+        trial_loss, etc = self.run_trial(x, y, trial, extras=True, cs=cs)
         #computes trial loss and teh gra
 
 
@@ -397,12 +425,12 @@ class Trainer:
         }
         return trial_loss, etc
 
-    def test(self):
+    def test(self, cs=None):
         with torch.no_grad():
             x, y, trials = next(iter(self.test_loader))
 
             x, y = x.to(self.device), y.to(self.device)
-            loss, etc = self.run_trial(x, y, trials, training=False, extras=True)
+            loss, etc = self.run_trial(x, y, trials, training=False, cs =cs, extras=True)
 
         etc = {
             'ins': x,
@@ -423,7 +451,7 @@ class Trainer:
         losses = []
         for i in ids:
             self.test_loader = self.test_loaders[self.args.train_order[i]]
-            loss, _ = self.test()
+            loss, _ = self.test(cs)
             losses.append((i, loss))
         self.test_loader = self.test_loaders[self.train_idx]
         return losses
@@ -436,7 +464,7 @@ class Trainer:
         return P, S_avg
 
     def train(self, ix_callback=None):
-        #this is where we train using everythin above
+        #this is where we actually train using train-iteration 
         ix = 0
         # for convergence testing
         running_min_error = float('inf')
@@ -454,12 +482,9 @@ class Trainer:
 
         for e in range(self.args.n_epochs):
             #
-            #
-            
             # synaptic intelligence requires storing changes in parameter values after iterations, need the value of parameters before training (i.e. their initializations)
 
-            
-
+    
             for epoch_idx, (x, y, info) in enumerate(self.train_loader):
                 #print(f'x in train_loader {x,y.shape}, {info}')
                 #bc batch_size is 1: #but we can make it 5 - batch_size is the the number of L_i's (see RNNs notes in ipad) we add up to get the batch loss which we pass to our optimizer.
@@ -473,12 +498,21 @@ class Trainer:
                 
                 #storing changes in parameter values after iterations, need the initial value 
 
-                iter_loss, etc = self.train_iteration(x, y, info, ix_callback=ix_callback)
+
+                # if doing xdg, create intialize and context signal - one hot vector with 1 in first entry, 0 in the rest bc it's for the first task
+
+
+
+                if self.args.sequential and self.args.xdg:
+                    #context signal 
+                    cs = torch.zeros((1, self.args.T))
+                    cs[0, self.train_idx] = 1
+                    
+
+                iter_loss, etc = self.train_iteration(x, y, info, ix_callback=ix_callback, cs=cs)
                 
                 #for synaptic intelligence need the differences in M_u and M_v  before and after each train iteration [so we're going to want to get the parameter values before the self.train_iteration above]
-                print(self.net.M_u.weight.shape)
-
-
+                #print(self.net.M_u.weight.shape)
 
 
                 if iter_loss == -1:
@@ -493,7 +527,7 @@ class Trainer:
 
                     z = etc['outs'].cpu().numpy().squeeze()
                     train_loss = running_loss / self.log_interval
-                    test_loss, test_etc = self.test()
+                    test_loss, test_etc = self.test(cs)
                     log_arr = [
                         f'*{ix}',
                         f'train {train_loss:.3f}',
@@ -512,6 +546,7 @@ class Trainer:
                     running_loss = 0.0
 
                     # if training sequentially, move on to the next task
+
                     # if doing OWM-like updates, do them here
                     if self.args.sequential and test_loss < self.args.seq_threshold:
                         #args.seq_threshold 
@@ -534,12 +569,14 @@ class Trainer:
 
                         #synaptic stabilization:
                         
-
-                        
-
-
                         # done processing prior task, move on to the next one or quit
                         self.train_idx += 1 #this is us moving onto the next task
+
+                        # if doing XdG, update context signal
+                        if args.xdg:
+                            cs = torch.zeros((1, args.T))
+                            cs[0, self.train_idx] = 1
+                            
 
 
                         if self.train_idx == len(self.args.train_order):

@@ -90,7 +90,16 @@ def parse_args():
 
     #so we'll include a part of code that starts 'if ss and xdg:' to combine the two approaches
 
+    #note to self: context dependent gating means context signal as done in Masse and gating with X chosen below
+
     parser.add_argument('--xdg', action ='store_true', help = 'use context dependent gating')
+
+    parser.add_argument('--cs_bias', action='store_true', help='bias in context signal part of the network, with M_u_cs, M_x_cs, M_v_cs')
+    
+    
+
+    parser.add_argument('--X', type=float, default=80, help= "gatingt percentage the activity of X percent of hidden units, chosen randomly")
+    #context signal is implemented in network.py just as net_fb is 
     
     #parser.add_argument('--ss_xdg', action='store_true', help='use synaptic stabilization and context dependent gating(XdG)')
     
@@ -221,9 +230,10 @@ def adjust_args(args):
     for dset in args.dataset:
         print(dset)
         config = get_config(dset, ctype='dset', to_bunch=True)
-        L = max(L, config.L)
+        L = max(L, config.L) #so that the net has an input dimension large enough for the task with the task with largest input dimension wise
         Z = max(Z, config.Z)
     args.L = L
+    #(remove once bug from Mar 28 found)
     args.Z = Z
     print(args.L)
     # initializing logging before we actually train see Trainer(args) below 

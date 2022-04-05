@@ -65,6 +65,8 @@ class M2Net(nn.Module):
         self._init_vars()
         self.reset()
 
+        
+
     def _init_vars(self):
         with TorchSeed(self.args.network_seed):
             D1 = self.args.D1 if self.args.D1 != 0 else self.args.N
@@ -72,8 +74,32 @@ class M2Net(nn.Module):
             # net feedback into input layer
             if hasattr(self.args, 'net_fb') and self.args.net_fb:
                 self.M_u = nn.Linear(self.args.L + self.args.T + self.args.Z, D1, bias=self.args.ff_bias)
+
+                #context signal and xdg
+                if self.args.sequential and hasattr(self.args, 'xdg') and self.args.xdg:
+                    #weights from context signal(defined below) to u, context signal to x and cs to optional layer
+                    self.M_u_cs=nn.Linear(self.args.T, D1, bias=self.args.cs_bias)
+                    
+            
+            
+
+                #add weights from cs to optional layer later
+
             else:
+                #context signal and xdg
+                if self.args.sequential and hasattr(self.args, 'xdg') and self.args.xdg:
+                    #weights from context signal(defined below) to u, context signal to x and cs to optional layer v (u done here, x and v are done below
+                    self.M_u_cs=nn.Linear(self.args.T, D1, bias=self.args.cs_bias)
+
+            
+
+                #add weights from cs to optional layer later
+
                 self.M_u = nn.Linear(self.args.L + self.args.T, D1, bias=self.args.ff_bias)
+                #e.g T is the number of datasets
+
+
+
             self.M_ro = nn.Linear(D2, self.args.Z, bias=self.args.ff_bias)
         self.reservoir = M2Reservoir(self.args)
 
@@ -86,30 +112,41 @@ class M2Net(nn.Module):
 
     def add_task(self):
         M = self.M_u.weight.data
-        self.M_u.weight.data = torch.cat((M, torch.zeros((M.shape[0],1))), dim=1)
+        self.M_u.weight.data = torch.cat((M, torch.zeros((M.shape[0],1))), dim=1) #horizontal concatenation 
         self.args.T += 1
 
-    def forward(self, o, extras=False):
+    def forward(self, o, cs=None, extras=False):
         # pass through the forward part
         # o should have shape [batch size, self.args.T + self.args.L]
+        
         if hasattr(self.args, 'net_fb') and self.args.net_fb:
             #net feedback from output to input
             self.z = self.z.expand(o.shape[0], self.z.shape[1])
             oz = torch.cat((o, self.z), dim=1)
             u = self.m1_act(self.M_u(oz))
-        else:
-            u = self.m1_act(self.M_u(o))
+        else:                        
+            #print(f'yas{o.shape}')
+            if self.args.sequential and self.args.xdg:
+
+                u=self.m1_act(self.M_u(o)+ self.M_u_cs(cs))
+            else:
+                u = self.m1_act(self.M_u(o))
         if extras:
-            v, etc = self.reservoir(u, extras=True)
+            v, etc = self.reservoir(u, cs=cs, extras=True)
         else:
-            v = self.reservoir(u, extras=False)
+            v = self.reservoir(u, cs=cs, extras=False)
+        
+        
+
+
+
         z = self.M_ro(self.m2_act(v))
         self.z = self.out_act(z)
 
         if not extras:
             return self.z
         elif self.args.use_reservoir:
-            return self.z, {'u': u, 'x': etc['x'], 'v': v}
+            return self.z, {'u': u, 'x': etc['x'], 'v': v, }
         else:
             return self.z, {'u': u, 'v': v}
 
@@ -153,7 +190,12 @@ class M2Reservoir(nn.Module):
                 # recurrent weights
                 self.J = nn.Linear(self.args.N, self.args.N, bias=self.args.res_bias)
                 torch.nn.init.normal_(self.J.weight.data, std=self.args.res_init_g / np.sqrt(self.args.N))
+                
+                # if xdg: weights from context signal to recurrent units
+                if self.args.sequential and hasattr(self.args, 'xdg') and self.args.xdg:
+                    self.M_x_cs=nn.Linear(self.args.T, self.args.N, bias=self.args.cs_bias) 
 
+                
                 if self.args.D2 == 0:
                     # go straight to output
                     self.W_ro = nn.Identity()
@@ -161,6 +203,9 @@ class M2Reservoir(nn.Module):
                     # use low-D representation layer bw output
                     self.W_ro = nn.Linear(self.args.N, self.args.D2, bias=self.args.res_bias)
                     torch.nn.init.normal_(self.W_ro.weight.data, std=self.args.res_init_g / np.sqrt(self.args.D2))
+
+                    if self.args.sequential and self.args.xdg and hasattr(self.args, 'xdg'):
+                        self.M_v_cs=nn.Linear(self.args.T, self.args.D2, bias=self.args.ff_bias)
 
     # add designated fixed points using hopfield network
     def add_fixed_points(self, n_patterns):
@@ -181,12 +226,23 @@ class M2Reservoir(nn.Module):
         self.x.detach_()
 
     # extras currently doesn't do anything. maybe add x val, etc.
-    def forward(self, u=None, extras=False):
+    def forward(self, u=None, cs=None, extras=False):
         if self.dynamics_mode == 0:
+            #if doing xdg project context signal onto hidden units
             if u is None:
-                g = self.activation(self.J(self.x))
+                
+                if cs is not None:
+                    g = self.activation(self.J(self.x) + self.M_x_cs(self.x))
+
+                else:
+                    g = self.activation(self.J(self.x))
             else:
-                g = self.activation(self.J(self.x) + self.W_u(u))
+                if cs is not None: 
+                    g = self.activation(self.J(self.x) + self.W_u(u) + self.M_x_cs(cs))
+
+                else:
+                     g = self.activation(self.J(self.x) + self.W_u(u))
+
             # adding any inherent reservoir noise
             if self.args.res_noise > 0:
                 g = g + torch.normal(torch.zeros_like(g), self.args.res_noise)
