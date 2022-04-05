@@ -504,12 +504,19 @@ class Trainer:
                 
 
                 # if doing xdg, create intialize and context signal - one hot vector with 1 in first entry, 0 in the rest bc it's for the first task.
+                #for now the context signal is only used when doing xdg 
                 #NB: cs has to be a parameter for any function that uses the forward pass of the network bc if doing xdg (args.xdg), in network.py cs becomes a parameter for the net that needs to be not None. 
 
                 if self.args.sequential and self.args.xdg:
                     #context signal 
                     cs = torch.zeros((1, self.args.T))
                     cs[0, self.train_idx] = 1
+                    #context dependent gating 
+                    #pool of units to be gated
+                    print(self.args.gate_layers)
+
+                    # number of units to gate (selected randomly) so that only (1-X)% of units are active for any task 
+                    #m=args.*len(gate_pool)
                 else:
                     cs=None
                     

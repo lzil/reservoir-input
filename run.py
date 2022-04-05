@@ -98,8 +98,11 @@ def parse_args():
     
     
 
-    parser.add_argument('--X', type=float, default=80, help= "gatingt percentage the activity of X percent of hidden units, chosen randomly")
+    parser.add_argument('--X', type=float, default=80, help= "gating the activity of X percent of hidden units for each task, chosen randomly")
     #context signal is implemented in network.py just as net_fb is 
+    parser.add_argument('--gate_layers', type=str, default=['u','v'], help='the hidden layers of the net in which to apply the gating')
+    
+    #['u','v'] as default but eventually will work with any hidden layer
     
     #parser.add_argument('--ss_xdg', action='store_true', help='use synaptic stabilization and context dependent gating(XdG)')
     
