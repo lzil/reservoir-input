@@ -249,7 +249,7 @@ class Trainer:
                 #open the file and dump the samples in 
 
     # runs an iteration where we want to match a certain trajectory
-    def run_trial(self, x, y, trial, training=True, extras=False, cs = None, gate_layers= None):
+    def run_trial(self, x, y, trial, training=True, extras=False, cs = None, gate_layers= None, train_idx=None):
         #this is for a single trial(a single task object i.e. a single training case) which we input in line above
         self.net.reset(self.args.res_x_init, device=self.device)
         #resets the net
@@ -297,7 +297,9 @@ class Trainer:
             #print(f'this is x[:, :, j] {x[:,:,j]}')
             #the input at time j
             #print(f'what is net_in ? {net_in}')
-            net_out, etc = self.net(net_in, cs = cs, gate_layers= gate_layers, extras=True) #see self.net above, it's the net we're training on 
+            net_out, etc = self.net(net_in, cs = cs, gate_layers= gate_layers, train_idx = self.train_idx, extras = True) 
+            
+            #see self.net above, it's the net we're training on 
             #recall we use nets like functions, we called the net on net in, and specified extras=True - this does a forward pass of our net on the net_in (at time j only, yes I think the idea at play here is that of the unrolling the recurrent net in time so in a single time series trial, we treat each input output pair in the time series as a single trial in a feedforward setting and we unroll the dynamics net in time so we have this unrolled feedforward net) (i.e. in def forward , o = net_in),
             #print(f'this is net out {net_out}')
 
@@ -405,12 +407,12 @@ class Trainer:
             return trial_loss, etc
         return trial_loss
 
-    def train_iteration(self, x, y, trial, ix_callback=None,  cs=None, gate_layers=None):
+    def train_iteration(self, x, y, trial, ix_callback=None,  cs=None, gate_layers=None, train_idx =None):
         self.optimizer.zero_grad()#put back to zero the gradients bc we want to use the new ones for the trial
 
 
         #run trial computes trial loss and the gradients for a single trial 
-        trial_loss, etc = self.run_trial(x, y, trial, extras=True, cs=cs,gate_layers=gate_layers)
+        trial_loss, etc = self.run_trial(x, y, trial, extras=True, cs=cs,gate_layers=gate_layers, train_idx= self.train_idx)
         #computes trial loss and teh gra
 
 
@@ -427,12 +429,12 @@ class Trainer:
         }
         return trial_loss, etc
 
-    def test(self, cs=None, gate_layers= None):
+    def test(self, cs=None, gate_layers= None, train_idx = None):
         with torch.no_grad():
             x, y, trials = next(iter(self.test_loader))
 
             x, y = x.to(self.device), y.to(self.device)
-            loss, etc = self.run_trial(x, y, trials, training=False, cs =cs, gate_layers=gate_layers, extras=True)
+            loss, etc = self.run_trial(x, y, trials, training=False, cs =cs, gate_layers=gate_layers, train_idx = self.train_idx ,extras=True)
 
         etc = {
             'ins': x,
@@ -453,7 +455,7 @@ class Trainer:
         losses = []
         for i in ids:
             self.test_loader = self.test_loaders[self.args.train_order[i]]
-            loss, _ = self.test(cs,gate_layers)
+            loss, _ = self.test(cs,gate_layers, self.train_idx)
             losses.append((i, loss))
         self.test_loader = self.test_loaders[self.train_idx]
         return losses
