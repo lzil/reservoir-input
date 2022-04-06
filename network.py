@@ -130,13 +130,52 @@ class M2Net(nn.Module):
 
                 #gating for now just us and vs in pool, later put xs in
                 print(gate_layers)
-                #so we have this [u,v]
+                #so we have this ['u','v']
 
                 # want to know before doing the gating which units are in the gating pool 
 
 
-                #for layer in gate_layers: 
-                #we want a list u
+               
+                gate_pool_loading_bay=[]
+                for layer in gate_layers: 
+                    #i.e. (for i in ['u','v'])
+                #we want a list of all of us indices [ ('u', [0,0]),..., ('u', [0,D1-1] ) (D1-1 bc zero-indexing) and a list of all of vs in indices
+                #[('v',[0,0]),..., ('v', [0, D2-1])]
+                    if layer == 'u':
+                        u_idxs = [ (layer, [0,i])  for i in range(self.args.D1)]
+                        #print(u_idxs)
+                        gate_pool_loading_bay.append(u_idxs)
+                    elif layer =='v':
+                        v_idxs = [ (layer, [0,i]) for i in range(self.args.D2)]
+                        gate_pool_loading_bay.append(v_idxs)
+                    else:
+                        x_idxs = [ (layer, [0,i]) for i in range(self.args.N)]
+                        gate_pool_loading_bay.append(x_idxs)
+                        
+                print(f'this is the loading bay:{gate_pool_loading_bay}')
+
+                
+                #then concatenate lists, result is our gating pool so assign to variable called gate_pool
+
+                
+                gate_pool = [layer_idx for layer_idx_list in gate_pool_loading_bay for layer_idx in layer_idx_list]
+                #https://stackoverflow.com/questions/952914/how-to-make-a-flat-list-out-of-a-list-of-lists
+                print(f'this gate_pool {gate_pool}')
+
+
+
+
+                #then calculate m using args.X
+                # m = len(gate_pool)*X/100 
+                    # note m isn't necessarily going to be an integer so need to convert it
+
+                #then choose m things from gate pool
+                
+                #from these m units the ones with 'u' labels to index the us for gating
+                #and the ones with 'v' labels to select the vs for gating: 
+                #note u is a tensor with shape [1,D1], v is a tensor with shape [1,D2]
+
+                
 
 
 
@@ -147,7 +186,7 @@ class M2Net(nn.Module):
                     #do gating for u:
                     u=self.m1_act(self.M_u(o)+ self.M_u_cs(cs))
                     print(u)
-                    print(u.shape)
+                    print(u.shape) #right so u is a [1,50] tensor
                     
 
                 else: #context signal for u but don't gate it [don't have a way to trigger this condition yet]
