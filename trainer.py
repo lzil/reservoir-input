@@ -133,8 +133,8 @@ class Trainer:
             args.train_parts.append('M_x_cs')
             args.train_parts.append('M_v_cs')
             
-        print(self.net.named_parameters)
-        print(args.train_parts)
+        #print(self.net.named_parameters)
+        #print(args.train_parts)
         for k,v in self.net.named_parameters():
             #named_parameters is a built-in pytorch method
             #returns an iterator over module parameters[an interable storing pairs of the form (parameter_name, parameter)
@@ -297,7 +297,12 @@ class Trainer:
             #print(f'this is x[:, :, j] {x[:,:,j]}')
             #the input at time j
             #print(f'what is net_in ? {net_in}')
-            net_out, etc = self.net(net_in, cs = cs, gate_layers= gate_layers, train_idx = self.train_idx, extras = True) 
+            if self.args.sequential and self.args.xdg:
+                net_out, etc = self.net(net_in, cs = cs, gate_layers= self.args.gate_layers, train_idx = self.train_idx, extras = True) 
+
+            else:
+                net_out, etc = self.net(net_in, cs = cs, extras = True)
+                
             
             #see self.net above, it's the net we're training on 
             #recall we use nets like functions, we called the net on net in, and specified extras=True - this does a forward pass of our net on the net_in (at time j only, yes I think the idea at play here is that of the unrolling the recurrent net in time so in a single time series trial, we treat each input output pair in the time series as a single trial in a feedforward setting and we unroll the dynamics net in time so we have this unrolled feedforward net) (i.e. in def forward , o = net_in),
@@ -366,7 +371,7 @@ class Trainer:
                 trial_loss += k_loss.detach().item()
                 #k_loss.detach() returns a new tensor, detached from the current graph. The result will never require gradients
                 #computation graphs with andrew ng might be important
-                #why do we want this: well there
+                #why do we want this: because again we're doing something to the loss function that isn't part of the mathematical definition of the network and so we don't want this operation to be part of the computational graph through which we backprop (see colah's blog on backprop)
                  
                 if training:
                     k_loss.backward()  #calculates gradients
@@ -410,10 +415,15 @@ class Trainer:
     def train_iteration(self, x, y, trial, ix_callback=None,  cs=None, gate_layers=None, train_idx =None):
         self.optimizer.zero_grad()#put back to zero the gradients bc we want to use the new ones for the trial
 
+        if self.args.sequential and self.args.xdg:
 
-        #run trial computes trial loss and the gradients for a single trial 
-        trial_loss, etc = self.run_trial(x, y, trial, extras=True, cs=cs,gate_layers=gate_layers, train_idx= self.train_idx)
-        #computes trial loss and teh gra
+            trial_loss, etc = self.run_trial(x, y, trial, extras=True, cs=cs, gate_layers=self.args.gate_layers, train_idx= self.train_idx)
+
+        else:
+            #run trial computes trial loss and the gradients for a single trial 
+            trial_loss, etc = self.run_trial(x, y, trial, extras=True, cs=cs, gate_layers=self.args.gate_layers)
+        
+        #computes trial loss and the gradients for the updates
 
 
         if ix_callback is not None:
@@ -432,9 +442,15 @@ class Trainer:
     def test(self, cs=None, gate_layers= None, train_idx = None):
         with torch.no_grad():
             x, y, trials = next(iter(self.test_loader))
+            print(f'these are the trials: {trials}')
 
             x, y = x.to(self.device), y.to(self.device)
-            loss, etc = self.run_trial(x, y, trials, training=False, cs =cs, gate_layers=gate_layers, train_idx = self.train_idx ,extras=True)
+            if self.args.sequential and self.args.xdg:
+                loss, etc = self.run_trial(x, y, trials, training=False, cs =cs, gate_layers= self.args.gate_layers, train_idx = self.train_idx ,extras=True)
+
+            else:
+                loss, etc = self.run_trial(x, y, trials, training=False, cs =cs, extras=True) 
+
 
         etc = {
             'ins': x,
@@ -526,7 +542,7 @@ class Trainer:
                     cs=None
                     
 
-                iter_loss, etc = self.train_iteration(x, y, info, ix_callback=ix_callback, cs=cs, gate_layers= gate_layers)
+                iter_loss, etc = self.train_iteration(x, y, info, ix_callback=ix_callback, cs=cs, gate_layers= self.args.gate_layers)
                 
                 #for synaptic intelligence need the differences in M_u and M_v  before and after each train iteration [so we're going to want to get the parameter values before the self.train_iteration above]
                 #print(self.net.M_u.weight.shape)
