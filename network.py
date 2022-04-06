@@ -160,16 +160,25 @@ class M2Net(nn.Module):
                 
                 gate_pool = [layer_idx for layer_idx_list in gate_pool_loading_bay for layer_idx in layer_idx_list]
                 #https://stackoverflow.com/questions/952914/how-to-make-a-flat-list-out-of-a-list-of-lists
-                print(f'this gate_pool {gate_pool}')
-
-
-
+                
+                
 
                 #then calculate m using args.X
                 # m = len(gate_pool)*X/100 
                     # note m isn't necessarily going to be an integer so need to convert it
+                m= len(gate_pool)*self.args.X/100
+                print(f'this is m: {m}')
+                #m is the number of units to select (from all units in network that are in gate layers) and gate so that X% of network is gated for any one task 
+                #note 
 
-                #then choose m things from gate pool
+
+                #then choose m things randomly from gate pool for each task: 
+                #note to self for one task we want to choose m units once
+
+                gated_units = random.choices(gate_pool, k=round(m))
+                print(f'these are the m gated units: {gated_units}, checking length {len(gated_units)}')
+
+
                 
                 #from these m units the ones with 'u' labels to index the us for gating
                 #and the ones with 'v' labels to select the vs for gating: 
