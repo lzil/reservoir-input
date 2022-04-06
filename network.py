@@ -167,7 +167,7 @@ class M2Net(nn.Module):
                 # m = len(gate_pool)*X/100 
                     # note m isn't necessarily going to be an integer so need to convert it
                 m= len(gate_pool)*self.args.X/100
-                print(f'this is m: {m}')
+                
                 #m is the number of units to select (from all units in network that are in gate layers) and gate so that X% of network is gated for any one task 
                 #note 
 
@@ -175,31 +175,52 @@ class M2Net(nn.Module):
                 #then choose m things randomly from gate pool for each task: 
                 #note to self for one task we want to choose m units once
 
-                gated_units = random.choices(gate_pool, k=round(m))
-                print(f'these are the m gated units: {gated_units}, checking length {len(gated_units)}')
-
-
-                
+                gated_units = random.sample(gate_pool, k=round(m))
+                # .sample bc we want to sample without replacement as opposed .choice
+                print(f'these are my gated units {gated_units}')
                 #from these m units the ones with 'u' labels to index the us for gating
                 #and the ones with 'v' labels to select the vs for gating: 
                 #note u is a tensor with shape [1,D1], v is a tensor with shape [1,D2]
 
+                u_gate_idxs = []
+                v_gate_idxs = []
+                x_gate_idxs = []
+
+                for layer, idx in gated_units:
+                    print(f'{layer,idx}')
+
+                    if layer == 'u': 
+                        u_gate_idxs.append(idx)
+                    elif layer == 'v':
+                        v_gate_idxs.append(idx)
+                    else:
+                        x_gate_idxs.append(idx)
+                
+                print(f'these are the u_gate_idx{u_gate_idxs}')
+                print(f'these are the v_gate_idx{v_gate_idxs}')
+                print(f'these are the x_gate_idx{x_gate_idxs}')
                 
 
-
-
-
-
-
-                if 'u' in gate_layers:
+                if 'u' in gate_layers: #i.e. if we said that we want to gate units in u
                     #do gating for u:
                     u=self.m1_act(self.M_u(o)+ self.M_u_cs(cs))
-                    print(u)
-                    print(u.shape) #right so u is a [1,50] tensor
+                    with torch.no_grad():
+                        #use torch.no_grad context manager because we don't want the gating to be recorded in calculation of the gradient
+                        print(f'this is u: {u}')
+                        
+                        for idx in u_gate_idxs:
+                            u[0][idx[1]]=0
+                            # u is matrix with shape [1,50], want the first row and 
+                            
+                
+
                     
 
-                else: #context signal for u but don't gate it [don't have a way to trigger this condition yet]
+                else: #context signal for u but don't gate it 
                     u=self.m1_act(self.M_u(o)+ self.M_u_cs(cs))
+                print(f'check if us are gated: {u}')
+                
+                print(f'check to see if u is gated: {u}')
 
 
                 if 'v' in gate_layers:
