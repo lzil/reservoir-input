@@ -95,8 +95,8 @@ class M2Net(nn.Module):
             
 
                 #add weights from cs to optional layer later
-
-                self.M_u = nn.Linear(self.args.L + self.args.T, D1, bias=self.args.ff_bias)
+                else:
+                    self.M_u = nn.Linear(self.args.L + self.args.T, D1, bias=self.args.ff_bias)
                 #e.g T is the number of datasets
 
 
