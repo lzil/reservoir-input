@@ -512,6 +512,20 @@ class Trainer:
             S_v = 0
             S_z = 0
 
+        # for SS (running synaptic importances)
+        if self.args.ss:
+            c = self.args.c_strength
+            omegas=np.zeros((1, self.args.D1)) #cumulative importance of parameters across tasks 
+                        
+            #different ways of calculating importance of paramaters for different tasks
+            if self.args.ss_type == 'SI':
+                damp_c = self.args.C
+
+            elif self.args.ss_type == 'EWC':
+                
+
+
+
         for e in range(self.args.n_epochs):
             #
             # synaptic intelligence requires storing changes in parameter values after iterations, need the value of parameters before training (i.e. their initializations)
@@ -553,12 +567,32 @@ class Trainer:
                     #this line isn't really necessary because cs will be None by default in all the functions.
                     cs=None
                 
-                
+                if self.args.sequential and self.args.ss and self.args.SI:
+                    #weights before training step so that we can calculate the change in weights brought about by a single train_iteration ( the t variable for number of batches in Masse paper methods)
+                    with torch.no_grad:
+                    M_u_bf = self.net.M_u.weight
+                    M_ro_bf = self.net.M_u.weight
+
+
+                    
+                    
 
                 iter_loss, etc = self.train_iteration(x, y, info, ix_callback=ix_callback, cs=cs, gate_layers= self.args.gate_layers)
                 
                 #for synaptic intelligence need the differences in M_u and M_v  before and after each train iteration [so we're going to want to get the parameter values before the self.train_iteration above]
                 #print(self.net.M_u.weight.shape)
+
+                if self.args.sequential and self.args.ss and self.args.SI:
+                    #calculate the w^k_i's for task k while training task k 
+                    #we treat the w's for M_ro and the ws for M_u separately for now 
+                    with torch.no_grad:
+                        delta_M_u += self.net.M_u.weight - M_u_bf)
+                        delta_M_ro += (self.net.M_ro.weight - M_u_ro) 
+                        w_M_u += (self.net.M_u.weight - M_u_bf) * (-self.net.M_u.weight.grad)
+                        w_M_ro += (self.net.M_ro.weight - M_u_ro) * (-self.net.M_ro.weight.grad)
+                        #reset weights before training step after calculating 
+                        M_u_bf = 0
+                        M_ro_bf = 0 
 
 
                 if iter_loss == -1:
@@ -614,6 +648,7 @@ class Trainer:
                             logging.info(f'...updated projection matrices for OWM')
 
                         #synaptic stabilization:
+
                         
                         # done processing prior task, move on to the next one or quit
                         self.train_idx += 1 #this is us moving onto the next task
@@ -623,7 +658,11 @@ class Trainer:
                             cs = torch.zeros((1, args.T))
                             cs[0, self.train_idx] = 1
 
-                        if arg
+                        #if doing ss, update loss function:
+                        if self.args.ss:
+                            if self.args.SI :
+                                #work out importance for task k add to cumulative importance
+
                             
 
 
