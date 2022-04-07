@@ -365,11 +365,10 @@ class Trainer:
                             k_loss += c(k_outs, k_targets, i=trial, t_ix=j+1-k) + c_strength*torch.sum(big_omega_M_u_weights* torch.square(self.net.M_u - M_u_prev)) + c_strength *torch.sum(big_omega_M_ro* torch.square(self.net.M_ro - M_ro_prev))
 
                         else: #no biases just weights
-                            print(f'c_strength{c_strength.shape}')
+                            
                             print(f'big_omega_M_u_weights{big_omega_M_u_weights.shape}')
-                            print(f'self.net.M_u.weight{self.net.M_u.weight.shape}')
-                            print(f'c_strength{c_strength.shape}')
-                            print(f'c_strength{c_strength.shape}')
+                            print(f'self.net.M_u.weight{self.net.M_u.weight.data.shape}')
+                            print(M_u_weights_prev.shape)
 
 
                             k_loss += c(k_outs, k_targets, i=trial, t_ix=j+1-k) + c_strength*torch.sum(big_omega_M_u_weights* torch.square(self.net.M_u.weight - M_u_weights_prev)) + c_strength *torch.sum(big_omega_M_ro* torch.square(self.net.M_ro.weight - M_ro_weights_prev))
