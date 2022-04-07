@@ -367,7 +367,8 @@ class Trainer:
                         if self.args.ss_type == 'SI':
                             damp_c = self.args.C
 
-                        elif self.args.ss_type == 'EWC':
+                        #elif self.args.ss_type == 'EWC':
+                            
 
 
                     else:
@@ -521,7 +522,8 @@ class Trainer:
             if self.args.ss_type == 'SI':
                 damp_c = self.args.C
 
-            elif self.args.ss_type == 'EWC':
+            #elif self.args.ss_type == 'EWC':
+
                 
 
 
@@ -570,15 +572,16 @@ class Trainer:
                 if self.args.sequential and self.args.ss and self.args.SI:
                     #weights before training step so that we can calculate the change in weights brought about by a single train_iteration ( the t variable for number of batches in Masse paper methods)
                     with torch.no_grad:
-                    M_u_bf = self.net.M_u.weight
-                    M_ro_bf = self.net.M_u.weight
+                        M_u_bf = self.net.M_u.weight
+                        M_ro_bf = self.net.M_u.weight
 
 
                     
                     
 
                 iter_loss, etc = self.train_iteration(x, y, info, ix_callback=ix_callback, cs=cs, gate_layers= self.args.gate_layers)
-                
+                #print(self.net.M_u.weight-10*torch.ones(50,2)) 
+                #great can treat these .weight objects like matrices
                 #for synaptic intelligence need the differences in M_u and M_v  before and after each train iteration [so we're going to want to get the parameter values before the self.train_iteration above]
                 #print(self.net.M_u.weight.shape)
 
@@ -586,7 +589,8 @@ class Trainer:
                     #calculate the w^k_i's for task k while training task k 
                     #we treat the w's for M_ro and the ws for M_u separately for now 
                     with torch.no_grad:
-                        delta_M_u += self.net.M_u.weight - M_u_bf)
+                        #
+                        delta_M_u += (self.net.M_u.weight - M_u_bf)
                         delta_M_ro += (self.net.M_ro.weight - M_u_ro) 
                         w_M_u += (self.net.M_u.weight - M_u_bf) * (-self.net.M_u.weight.grad)
                         w_M_ro += (self.net.M_ro.weight - M_u_ro) * (-self.net.M_ro.weight.grad)
@@ -658,10 +662,24 @@ class Trainer:
                             cs = torch.zeros((1, args.T))
                             cs[0, self.train_idx] = 1
 
-                        #if doing ss, update loss function:
+                        #if doing ss, update loss new loss function for new tasks
                         if self.args.ss:
                             if self.args.SI :
-                                #work out importance for task k add to cumulative importance
+                                # Omegas (importances) for the task we just finished training on:
+                                with torch.no_grad:
+                                    omega_M_u_s = torch.maximum(torch.zeros_like((self.net.M_u.weight)), torch.div(w_M_u,delta_M_u + C*torch.ones_like(self.net.M_u.weight)))
+                                    
+
+
+
+                                #zero out small omegas and delta omegas before starting the next task:
+                                delta_M_u = 0
+                                delta_M_ro = 0
+                                w_M_u = 0
+                                w_M_ro = 0
+
+                                
+                                # add to cumulative importance and then use cumulative importance for next loss function
 
                             
 
