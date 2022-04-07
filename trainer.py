@@ -249,7 +249,7 @@ class Trainer:
                 #open the file and dump the samples in 
 
     # runs an iteration where we want to match a certain trajectory
-    def run_trial(self, x, y, trial, training=True, extras=False, cs = None, gate_layers= None, train_idx=None):
+    def run_trial(self, x, y, trial, training=True, extras=False, cs = None, gate_layers= None, train_idx=None,c_strength=self.args.c_strength, damp_c=self.args.C):
         #this is for a single trial(a single task object i.e. a single training case) which we input in line above
         #trial a.k.a info is the task object a particular instantiation from the class definitions in tasks.py
         #it tells us which task we're doing which is NB because it tells us what the x and y present 
@@ -360,15 +360,18 @@ class Trainer:
                 for c in self.criteria:
 
                     if self.args.ss:
-                        c = self.args.c_strength
-                        omegas=np.zeros((1, self.args.D1)) #cumulative importance of parameters across tasks 
+        
+                        
                         
                         #different ways of calculating importance of paramaters for different tasks
-                        if self.args.ss_type == 'SI':
+                        #if self.args.ss_type == 'SI':
                             damp_c = self.args.C
+                        
 
                         #elif self.args.ss_type == 'EWC':
-                            
+
+                        k_loss += c(k_outs, k_targets, i=trial, t_ix=j+1-k) + c_strength*sum(big_omega_M_u* torch.square(self.net.M_u - M_u_prev) + c_strength *sum(big_omega_M_ro* torch.square(self.net.M_ro - M_ro_prev)
+                        
 
 
                     else:
@@ -425,9 +428,15 @@ class Trainer:
     def train_iteration(self, x, y, trial, ix_callback=None,  cs=None, gate_layers=None, train_idx =None):
         self.optimizer.zero_grad()#put back to zero the gradients bc we want to use the new ones for the trial
 
+        #if self.args.sequential and self.args.ss and self.args.xdg:
+            #and then elif for the statement below
+
         if self.args.sequential and self.args.xdg:
 
             trial_loss, etc = self.run_trial(x, y, trial, extras=True, cs=cs, gate_layers=self.args.gate_layers, train_idx= self.train_idx)
+
+
+        
 
         else:
             #run trial computes trial loss and the gradients for a single trial 
@@ -455,6 +464,11 @@ class Trainer:
             #print(f'these are the trials: {trials}')
 
             x, y = x.to(self.device), y.to(self.device)
+
+            #if self.args.sequential and self.args.ss and self.args.xdg:
+            #and then elif for the statement below
+
+
             if self.args.sequential and self.args.xdg:
                 loss, etc = self.run_trial(x, y, trials, training=False, cs =cs, gate_layers= self.args.gate_layers, train_idx = self.train_idx ,extras=True)
 
@@ -481,6 +495,10 @@ class Trainer:
         losses = []
         for i in ids:
             self.test_loader = self.test_loaders[self.args.train_order[i]]
+
+            #if self.args.sequential and self.args.ss and self.args.xdg:
+            #and then elif for the statement below
+
             if self.args.sequential and self.args.xdg:
                 loss, _ = self.test(cs=cs, gate_layers=self.args.gate_layers, train_idx= self.args.train_idx)
             else:
@@ -515,8 +533,12 @@ class Trainer:
 
         # for SS (running synaptic importances)
         if self.args.ss:
+            
             c = self.args.c_strength
-            omegas=np.zeros((1, self.args.D1)) #cumulative importance of parameters across tasks 
+            #instantiate cumulative importances of parameters across tasks 
+            big_omega_M_u = 0
+            big_omega_M_ro = 0
+            #then we're going to pass these into the loss functions throuh train_iteration below and crucially these big omegas will be 0 for the first task so we can use the loss function with the quadratic penalty term from the get go.
                         
             #different ways of calculating importance of paramaters for different tasks
             if self.args.ss_type == 'SI':
@@ -579,7 +601,7 @@ class Trainer:
                     
                     
 
-                iter_loss, etc = self.train_iteration(x, y, info, ix_callback=ix_callback, cs=cs, gate_layers= self.args.gate_layers)
+                iter_loss, etc = self.train_iteration(x, y, info, ix_callback=ix_callback, cs=cs, gate_layers= self.args.gate_layers, big_omega_M_u = big_omega_M_u, big_omega_M_ro=big_omega_M_ro)
                 #print(self.net.M_u.weight-10*torch.ones(50,2)) 
                 #great can treat these .weight objects like matrices
                 #for synaptic intelligence need the differences in M_u and M_v  before and after each train iteration [so we're going to want to get the parameter values before the self.train_iteration above]
@@ -667,8 +689,28 @@ class Trainer:
                             if self.args.SI :
                                 # Omegas (importances) for the task we just finished training on:
                                 with torch.no_grad:
-                                    omega_M_u_= torch.maximum(torch.zeros_like(self.net.M_u.weight), torch.div(w_M_u,delta_M_u + C*torch.ones_like(self.net.M_u.weight)))
-                                    omega_M_ro = torch.maximum(torch.zeros_like(self.net.M_ro.weight), torch.div(w_M_ro, delta_M_ro + C*torch.ones_like(self.net.M_ro.weight)))
+                                    omega_M_u= torch.maximum(torch.zeros_like(self.net.M_u.weight), torch.div(w_M_u,delta_M_u + damp_c*torch.ones_like(self.net.M_u.weight)))
+                                    omega_M_ro = torch.maximum(torch.zeros_like(self.net.M_ro.weight), torch.div(w_M_ro, delta_M_ro + damp_c*torch.ones_like(self.net.M_ro.weight)))
+
+
+                            elif self.args.EWC:
+                                abc=0
+
+                            #add the omegas for recently completed task above to cumulative importance and then zero them for the next task
+                            with torch.no_grad:
+                                big_omega_M_u += omega_M_u
+                                big_omega_M_ro += omega_M_ro 
+                                omega_M_u = 0 
+                                omega_M_ro = 0
+
+                                # for the loss function in next task we want the theta_prevs which are the parameter values at the end of the training on task k
+                                M_u_prev = self.net.M_u.weight
+                                M_ro_prev = self.net.M_ro.weight
+
+
+
+                            #use the quadratic penalty for the first task but we'll just have the big omega's equal to 0 bc we'll instantiate them as suhc    
+
 
 
 
