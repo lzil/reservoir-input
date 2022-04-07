@@ -49,59 +49,22 @@ class TrialDataset(Dataset):
         self.data = []      # dsets themselves
         self.t_types = []   # task type
         self.lzs = []       # Ls and Zs for task trials
-        self.x_ctxs = []    # precomputed context inputs (i.e. context input matrix for each task)
-        self.x_pads = []    # zero rows so that inputs have same number of rows across tasks when sequential learning 
+        self.x_ctxs = []    # precomputed context inputs
         self.max_idxs = np.zeros(len(datasets), dtype=int)
-        self.t_lens = []    #the t_lens for the datasets
-
-        #code for x_pads: need to know max(L) before the 2nd loop after this line of code
-        max_L=0
+        self.t_lens = []
         for i, (dname, ds) in enumerate(datasets):
-            
-            print(f'ds[0].L for task {i} is {ds[0].L}')
-            if ds[0].L > max_L:
-                max_L = ds[0].L
-
-        print(f' this is max L  {max_L}')
-        
-
-
-
-        for i, (dname, ds) in enumerate(datasets):
-            
             self.dnames.append(dname)
             self.data.append(ds)
             # setting context cue for appropriate task
             x_ctx = np.zeros((args.T, ds[0].t_len))
-            #args.T is the length of args.dataset, the number of different datasets we've loaded
-            x_ctx[i] = 1 #make all entries equal to in the i-index row equal 1 
-            #we then add it to x_ctxs (notice the plural) 
-            #for task 0, the 0-index (first row of ctx will be 1's) the rest 0's (the one-hot encoding mentioned in RNN figure in Duncker et al and Yang Task representation paper)
-            #that's our context cue it seems 18/03/2022
-
+            x_ctx[i] = 1
             self.x_ctxs.append(x_ctx)
-            self.t_lens.append(ds[0].t_len) #the t_lens for the datasets (just take the 1st the length of the first row)
-
+            self.t_lens.append(ds[0].t_len)
             # cumulative lengths of data, for indexing
             self.max_idxs[i] = self.max_idxs[i-1] + len(ds)
-            #cumulative: [length_of_first_data_set, length_of_first_dataset+length_of+second_dataset,..., sum_of_lengths_of_all_datasets]
-            #len(2d_array) is the number of rows of the array 
-
-
             # use ds[0] as exemplar to set t_type, L, Z
             self.t_types.append(ds[0].t_type)
             self.lzs.append((ds[0].L, ds[0].Z))
-
-            #x_pads: 
-            if ds[0].L != max_L: #if stimulus for this dataset is not equal to max_L we need to insert max_L - ds[0].L zero rows inbetween stimulus and ctx. [Ofc for the task with max_L we don't have to pad]
-                    x_pad = np.zeros((max_L - ds[0].L, ds[0].t_len))
-                    self.x_pads.append(x_pad)
-            else: 
-                    x_pad = None
-                    self.x_pads.append(x_pad)
-            
-
-        
 
     def __len__(self):
         return self.max_idxs[-1]
@@ -115,22 +78,18 @@ class TrialDataset(Dataset):
         if context != 0:
             idx = idx - self.max_idxs[context-1]
 
-        trial = self.data[context][idx] 
+        trial = self.data[context][idx]
         x = trial.get_x(self.args)
         x_cts = self.x_ctxs[context]
-
-
-        x_padz= self.x_pads[context]
-        # context comes after the stimulus (i.e. under the stimulus if you print out a train input from enumerate(self.train_loader))
-        to_concat = [a for a in (x,x_padz,x_cts) if a is not None]
-        x=np.concatenate(to_concat)
-        #x = np.concatenate((x, x_padz, x_cts))
+        # context comes after the stimulus
+        x = np.concatenate((x, x_cts))
         y = trial.get_y(self.args)
 
         trial.context = context
         trial.dname = self.dnames[context]
         trial.lz = self.lzs[context]
         return x, y, trial
+
 
     def get_context(self, idx):
         return np.argmax(self.max_idxs > idx)
@@ -279,18 +238,17 @@ def get_criteria(args):
 
 
 
-            loss = 0.
-            #a notice initialize loss as 0 but going '0.' to ensure that it's a float
+            loss = 0.   #a notice initialize loss as 0 but going '0.' to ensure that it's a float
             if single:
-                # how would we pass 
-
+                
                 #i.e. MSE has the functionality to compute the loss on a single case (a single input output pair) as opposed to on a batch but the code is built to deal with batches of inputs o's (for model outputs), and batches of targets so we need to do the unsqueezing that's seen below to represent a single output as batch containing only 1 training case.
 
                 # a single task 
 
                 
                 o = o.unsqueeze(0)
-                #torch.unsqueeze() returns a new tensor with a dimension of size one inserted at the specified position, so zero #if o had shape(2,1) initially, after this we'd have it of shape (1,2,1) bc #we've inserted a dimension of size 1 at the 0 index entry of the o's shape vector
+                #torch.unsqueeze() returns a new tensor with a dimension of size one inserted at the specified position, so zero 
+                #e.g. if o had shape(2,1) initially, after this we'd have it of shape (1,2,1) bc #we've inserted a dimension of size 1 at the 0 index entry of the o's shape vector
 
                 #reason we want this is so that we can multi-dimensional inputs i.e. each input is of shape (1,2) and
                 #o is actually a vector of inputs so we need to be able to index them: so if o has shape (5,2,1)
@@ -302,7 +260,7 @@ def get_criteria(args):
                 #e.g. suppose x=torch.rand(4,5) --> x.shape is torch.Size([4,5])
                 #and len(x) is 4
                 #if we go x=x.unsqueze(0) we get x.shape as torch.Size([1,4,5]) and
-                #len(x) is 4
+                #len(x) is 1
 
                 #so if single is False , yes len(t) is the number of rows of t
                 #which is the number of targets

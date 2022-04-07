@@ -174,17 +174,14 @@ class M2Net(nn.Module):
 
 
                 #then choose m things randomly from gate pool for each task: 
-                #note to self for one task we want to choose m units once
-
-
-                #we want the random sample to be the same each time until train_idx changes (so that for a particular train_idx the gated units are the same every time we call the net) so need to set a seed for 
-
-                
+                #note to self for one task we want to choose randomly the same m units each time. 
                 
 
-                
+
+                #we want the random sample to be the same each time until train_idx changes (so that for a particular train_idx the gated units are the same every time we call the net) so need to set the same seed and have it change only when we move to the next task
+
                 random.seed(train_idx)
-                print(f'train_idx is {train_idx}')
+                #print(f'train_idx is {train_idx}')
                 gated_units = random.sample(gate_pool, k=round(m))
                 # .sample bc we want to sample without replacement as opposed .choice
                 #print(f'these are my gated units {gated_units}')
@@ -206,7 +203,7 @@ class M2Net(nn.Module):
                     else:
                         x_gate_idxs.append(idx)
                 
-                print(f'these are the u_gate_idx{u_gate_idxs}')
+                #print(f'these are the u_gate_idx{u_gate_idxs}')
                 #print(f'these are the v_gate_idx{v_gate_idxs}')
                 #print(f'these are the x_gate_idx{x_gate_idxs}')
                 
@@ -228,7 +225,7 @@ class M2Net(nn.Module):
 
                 else: #context signal for u but don't gate it 
                     u=self.m1_act(self.M_u(o)+ self.M_u_cs(cs))
-                print(f'check if us are gated: {u}')
+                #print(f'check if us are gated: {u}')
                 
                 
 
@@ -255,7 +252,7 @@ class M2Net(nn.Module):
                     else:
                         v = self.reservoir(u, cs=cs, extras=False)
 
-                print(f'check if vs are gated: {v}')
+                #print(f'check if vs are gated: {v}')
 
             else:
                 u = self.m1_act(self.M_u(o))

@@ -251,6 +251,8 @@ class Trainer:
     # runs an iteration where we want to match a certain trajectory
     def run_trial(self, x, y, trial, training=True, extras=False, cs = None, gate_layers= None, train_idx=None):
         #this is for a single trial(a single task object i.e. a single training case) which we input in line above
+        #trial a.k.a info is the task object a particular instantiation from the class definitions in tasks.py
+        #it tells us which task we're doing which is NB because it tells us what the x and y present 
         self.net.reset(self.args.res_x_init, device=self.device)
         #resets the net
         trial_loss = 0.
@@ -269,10 +271,11 @@ class Trainer:
 
 
         if training and self.args.k != 0:
+            #the k we specify for BPTT, if k != 0, then do truncated bptt with k
             #by default code uses k = 0 and Liang said atm we don't truncate
             #so we use the next code in else statement
 
-            #the k we specify for BPTT, if k != 0, then do truncated bptt with k
+            
             k = self.args.k
         else:
             # we don't truncate atm (26 March 2022): so k is task length
@@ -281,10 +284,8 @@ class Trainer:
             #if k=0 its default or training is False then use 
             k = x.shape[2] 
             #print(k)
-            #x.shape[2] is the lenght of the input time-series,it's always t_len and for the RSG it's 600
-            #np.set_printoptions(threshold=np.inf)
-            #print(x.shape)
-            #print(x)
+            #x.shape[2] is the lenght of the input time-series,it's always t_len and so for the RSG it's 600
+            
             
         for j in range(x.shape[2]):
             #x.shape[2] is T the length of the trial.
@@ -331,31 +332,25 @@ class Trainer:
             #t BPTT
             # we start BPTT at j+1==k index timestep in task length i.e. when index is k-1 so that the timestep is k which is ofc by def when we want start BPTT if k
             if (j+1) % k == 0: 
-
-                # the first timestep with which to do BPTT
-
-                #i.e. if the remainder is 0 then 
-                #this clause gets triggered so long as j+1 is less than or equal to k
-                    #if k=600, every j in the above "for" loop triggers this clause including the last 1
-
-                    # if k is lt 600 then say it's 50 so we want BPTT on the last 50 timesteps
-                        #when j=0, to j=49 (i.e from j+1=1,..., j+1=50)
-                        #this clause is activated:
-                        #take the last k outputs
-                        #take the first take k_targets=y[:, :,  1-k:1]
-                        #but when j=0 k_targets=y[:, :, -50:1] is actually going to give us an empty tensor
-                        #and in fact it will keep doing this until we get to j=49 at which point we'll get the first targets
                 
-                #i.e. when j == k-1 
-                # the first timestep with which to do BPTT
-                k_outs = torch.stack(outs[-k:], dim=2) #take the 
-                #last k outputs from outs 
+                #explanation when not truncating i.e. k=600:
+                #note 50 % 600 = 50 
+               #therefore this clause will only be triggered the first time j+1=600
+               #at which point we've got all the model outputs for the inputs and we stored them in k_outs
+                
+                
+                k_outs = torch.stack(outs[-k:], dim=2) 
+                #take the last k outputs from outs and 
                 #(see:https://pytorch.org/docs/stable/generated/torch.stack.html)
 
-                #recall tBPTT with k means do BPTT using only the last k timesteps 
+                
                 #we select the last k elements of outs
-                #torch.stack concatenates these tensors along the 3rd dimension (dim=2), just as we did with x.shape[2], this 3rd dimension (with index 2) is the time dimension (see ipad), so we have z(t)'s evolution over time
-                k_targets = y[:,:,j+1-k:j+1] #if RSG: k is 600, dpro its 300
+                #torch.stack concatenates these tensors along the 3rd dimension (dim=2), just as we did with x.shape[2], this 3rd dimension (with index 2) is the time dimension (see ipad), so we have z(t)'s evolution over time the time steps 
+                
+                k_targets = y[:,:,j+1-k:j+1] 
+                # we take the last k target values, if no truncation this is the whole target trajectory for the trial 
+                
+                #if RSG: k is 600, dpro its 300
                 #recall y stores our targets, again 3rd dimenision is the time dimension and we want the targets from time step indices j+1 -k (inclusive) to j+1 (exclusive) i.e. from 0 to k i.e. from 1st time step to kth timestep exclusive (k-1th timestep inclusive)
                 #but why not just take the last k targets?
 
@@ -363,7 +358,20 @@ class Trainer:
                 #yes we want the last k outputs the outputs in the truncation window but 
                 #in order to calculate the loss at the first time step in the truncation window, we need the error 
                 for c in self.criteria:
-                    k_loss += c(k_outs, k_targets, i=trial, t_ix=j+1-k)
+
+                    if self.args.ss:
+                        c = self.args.c_strength
+                        omegas=np.zeros((1, self.args.D1)) #cumulative importance of parameters across tasks 
+                        
+                        #different ways of calculating importance of paramaters for different tasks
+                        if self.args.ss_type == 'SI':
+
+                        elif self.args.ss_type == 'EWC':
+
+
+                    else:
+                        k_loss += c(k_outs, k_targets, i=trial, t_ix=j+1-k) #if no truncation j+1-k in here is going to be 0 (because we're nested in if j+1 % k ==0)so for '+=' is really just an = (bc its zero initially and then we only add something to it once if no truncation) and now in ss implementation we can just add the quadratic penalyt term 
+
                     #if we specified mse in args.loss at runtime, then c will only take one value and that will be to calculate the mse for this single trial here between k_outs and k_targets
                     
                     #this will give us the mse and we want t_ix, the truncate index here to be zero bc we've already truncated and we want the mse between each k_outs, k targets
@@ -442,7 +450,7 @@ class Trainer:
     def test(self, cs=None, gate_layers= None, train_idx = None):
         with torch.no_grad():
             x, y, trials = next(iter(self.test_loader))
-            print(f'these are the trials: {trials}')
+            #print(f'these are the trials: {trials}')
 
             x, y = x.to(self.device), y.to(self.device)
             if self.args.sequential and self.args.xdg:
@@ -464,14 +472,17 @@ class Trainer:
         return loss, etc
 
     # helper function for sequential training, for testing performance on all tasks
-    def test_tasks(self, ids):
+    def test_tasks(self, ids, cs=None, train_idx= None):
         #computes the test losses for each task and appends them to a list losses which will be as long as the number of tasks.
         #the each element of the list is a tuple (task integer id, loss for that task)
         #ids is a list of the task ids(just integers) [0,1,2,.., r-1]  if r tasks of the tasks we're training on 
         losses = []
         for i in ids:
             self.test_loader = self.test_loaders[self.args.train_order[i]]
-            loss, _ = self.test(cs,gate_layers, self.train_idx)
+            if self.args.sequential and self.args.xdg:
+                loss, _ = self.test(cs=cs, gate_layers=self.args.gate_layers, train_idx= self.args.train_idx)
+            else:
+                loss, _ = self.test()
             losses.append((i, loss))
         self.test_loader = self.test_loaders[self.train_idx]
         return losses
@@ -506,7 +517,7 @@ class Trainer:
 
     
             for epoch_idx, (x, y, info) in enumerate(self.train_loader):
-                #print(f'x in train_loader {x,y.shape}, {info}')
+                #print(f'x in train_loader {x,y}, {info}')
                 #bc batch_size is 1: #but we can make it 5 - batch_size is the the number of L_i's (see RNNs notes in ipad) we add up to get the batch loss which we pass to our optimizer.
                 #if batch_size is 1: elements of train loader is a list of batches of size 1 i.e. each (x,y, info) is a single input-output pair
                 # the batch is (x,y,info) and we number them as we go 
