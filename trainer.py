@@ -365,6 +365,7 @@ class Trainer:
                         
                         #different ways of calculating importance of paramaters for different tasks
                         if self.args.ss_type == 'SI':
+                            damp_c = self.args.C
 
                         elif self.args.ss_type == 'EWC':
 
@@ -551,7 +552,8 @@ class Trainer:
                 else:
                     #this line isn't really necessary because cs will be None by default in all the functions.
                     cs=None
-                    
+                
+                
 
                 iter_loss, etc = self.train_iteration(x, y, info, ix_callback=ix_callback, cs=cs, gate_layers= self.args.gate_layers)
                 
@@ -617,9 +619,11 @@ class Trainer:
                         self.train_idx += 1 #this is us moving onto the next task
 
                         # if doing XdG, update context signal
-                        if args.xdg:
+                        if self.args.xdg:
                             cs = torch.zeros((1, args.T))
                             cs[0, self.train_idx] = 1
+
+                        if arg
                             
 
 
