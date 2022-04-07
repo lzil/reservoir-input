@@ -667,8 +667,9 @@ class Trainer:
                             if self.args.SI :
                                 # Omegas (importances) for the task we just finished training on:
                                 with torch.no_grad:
-                                    omega_M_u_s = torch.maximum(torch.zeros_like((self.net.M_u.weight)), torch.div(w_M_u,delta_M_u + C*torch.ones_like(self.net.M_u.weight)))
-                                    
+                                    omega_M_u_= torch.maximum(torch.zeros_like(self.net.M_u.weight), torch.div(w_M_u,delta_M_u + C*torch.ones_like(self.net.M_u.weight)))
+                                    omega_M_ro = torch.maximum(torch.zeros_like(self.net.M_ro.weight), torch.div(w_M_ro, delta_M_ro + C*torch.ones_like(self.net.M_ro.weight)))
+
 
 
 
