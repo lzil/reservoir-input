@@ -249,7 +249,7 @@ class Trainer:
                 #open the file and dump the samples in 
 
     # runs an iteration where we want to match a certain trajectory
-    def run_trial(self, x, y, trial, training=True, extras=False, cs = None, gate_layers= None, train_idx=None,c_strength=None, damp_c=None, big_omega_M_u_weights = None, big_omega_M_ro_weights=None,big_omega_M_u_biases=None, big_omega_M_ro_biases= None,):
+    def run_trial(self, x, y, trial, training=True, extras=False, cs = None, gate_layers= None, train_idx=None,c_strength=None, damp_c=None, big_omega_M_u_weights = None, big_omega_M_ro_weights=None,big_omega_M_u_biases=None, big_omega_M_ro_biases= None, M_u_weights_prev=None,M_ro_weights_prev=None, M_u_biases_prev =None, M_ro_biases_prev=None):
         #this is for a single trial(a single task object i.e. a single training case) which we input in line above
         #trial a.k.a info is the task object a particular instantiation from the class definitions in tasks.py
         #it tells us which task we're doing which is NB because it tells us what the x and y present 
@@ -365,7 +365,14 @@ class Trainer:
                             k_loss += c(k_outs, k_targets, i=trial, t_ix=j+1-k) + c_strength*torch.sum(big_omega_M_u_weights* torch.square(self.net.M_u - M_u_prev)) + c_strength *torch.sum(big_omega_M_ro* torch.square(self.net.M_ro - M_ro_prev))
 
                         else: #no biases just weights
-                            k_loss += c(k_outs, k_targets, i=trial, t_ix=j+1-k) + c_strength*torch.sum(big_omega_M_u_weights* torch.square(self.net.M_u.weight - M_u_prev)) + c_strength *torch.sum(big_omega_M_ro* torch.square(self.net.M_ro.weight - M_ro_prev))
+                            print(f'c_strength{c_strength.shape}')
+                            print(f'big_omega_M_u_weights{big_omega_M_u_weights.shape}')
+                            print(f'self.net.M_u.weight{self.net.M_u.weight.shape}')
+                            print(f'c_strength{c_strength.shape}')
+                            print(f'c_strength{c_strength.shape}')
+
+
+                            k_loss += c(k_outs, k_targets, i=trial, t_ix=j+1-k) + c_strength*torch.sum(big_omega_M_u_weights* torch.square(self.net.M_u.weight - M_u_weights_prev)) + c_strength *torch.sum(big_omega_M_ro* torch.square(self.net.M_ro.weight - M_ro_weights_prev))
 
                         
 
@@ -421,16 +428,19 @@ class Trainer:
             return trial_loss, etc
         return trial_loss
 
-    def train_iteration(self, x, y, trial, ix_callback=None,  cs=None, gate_layers=None, train_idx =None,big_omega_M_u_weights = None, big_omega_M_ro_weights=None, big_omega_M_u_biases=None, big_omega_M_ro_biases= None):
+    def train_iteration(self, x, y, trial, ix_callback=None,  cs=None, gate_layers=None, train_idx =None, damp_c=None, c_strength=None, big_omega_M_u_weights = None, big_omega_M_ro_weights=None, big_omega_M_u_biases=None, big_omega_M_ro_biases= None, M_u_weights_prev=None,M_ro_weights_prev=None, M_u_biases_prev =None, M_ro_biases_prev=None):
         self.optimizer.zero_grad()#put back to zero the gradients bc we want to use the new ones for the trial
 
         #if self.args.sequential and self.args.ss and self.args.xdg:
             #and then elif for the statement below
 
-        if self.args.sequential and self.args.xdg:
+        if self.args.sequential and self.args.xdg and self.args.ss:
+            trial_loss, etc = self.run_trial(x, y, trial, extras=True, cs=cs, gate_layers=self.args.gate_layers, train_idx= self.train_idx, c_strength=c_strength, big_omega_M_u_weights = big_omega_M_ro_weights, big_omega_M_ro_weights=big_omega_M_ro_weights, big_omega_M_u_biases=big_omega_M_u_biases, big_omega_M_ro_biases= big_omega_M_ro_biases, M_u_weights_prev=M_u_weights_prev, M_ro_weights_prev=M_ro_weights_prev, M_u_biases_prev =M_u_biases_prev, M_ro_biases_prev=M_ro_biases_prev)
+
+
+        elif self.args.sequential and self.args.xdg:
 
             trial_loss, etc = self.run_trial(x, y, trial, extras=True, cs=cs, gate_layers=self.args.gate_layers, train_idx= self.train_idx)
-
 
         
 
@@ -530,16 +540,27 @@ class Trainer:
         # for SS (running synaptic importances)
         if self.args.ss:
             
-            c = self.args.c_strength
+            c_strength = self.args.c_strength
             #instantiate running cumulative importances of parameters across tasks 
             #(notice all the 'running' stuff above :) )
+
+            #initialise weights prev:
+            M_u_weights_prev = torch.zeros_like(self.net.M_u.weight.data)
+            print(f'what about the shape{self.net.M_u.weight.data.shape}')
+            print(f'what about the shape of the linear layer{self.net.M_u.weight.shape}')
+            M_ro_weights_prev= torch.zeros_like(self.net.M_ro.weight.data)
+            if self.args.ff_bias:
+                M_u_biases_prev = torch.zeros_like(self.net.M_u.bias.data)
+                M_ro_biases_prev = torch.zeros_like(self.net.M_ro.bias.data)
+
+            
 
             #for the weights
             big_omega_M_u_weights= torch.zeros_like(self.net.M_u.weight.data)
             big_omega_M_ro_weights = torch.zeros_like(self.net.M_ro.weight.data)
             #for the biases if any:
             if self.args.ff_bias:
-                big_omega_M_u_biases= torch.zeros_like(self.net.M_u.weight.data)
+                big_omega_M_u_biases= torch.zeros_like(self.net.M_u.bias.data)
                 big_omega_M_ro_biases = torch.zeros_like(self.net.M_ro.bias.data)
 
 
@@ -608,10 +629,10 @@ class Trainer:
                                 M_ro_bf_biases = self.net.M_u.weight.data
 
                         if self.args.ff_bias:
-                            iter_loss, etc = self.train_iteration(x, y, info, ix_callback=ix_callback, cs=cs, gate_layers= self.args.gate_layers, big_omega_M_u_weights = big_omega_M_u_weights, big_omega_M_ro_weights=big_omega_M_ro_weights,big_omega_M_u_biases=big_omega_M_u_biases, big_omega_M_ro_biases= big_omega_M_ro_biases)
+                            iter_loss, etc = self.train_iteration(x, y, info, ix_callback=ix_callback, cs=cs, gate_layers= self.args.gate_layers, c_strength = c_strength, big_omega_M_u_weights = big_omega_M_u_weights, big_omega_M_ro_weights=big_omega_M_ro_weights,big_omega_M_u_biases=big_omega_M_u_biases, big_omega_M_ro_biases= big_omega_M_ro_biases, M_u_weights_prev=M_u_weights_prev, M_ro_weights_prev=M_ro_weights_prev, M_u_biases_prev =M_u_biases_prev, M_ro_biases_prev=M_ro_biases_prev)
                         
                         else:
-                            iter_loss, etc = self.train_iteration(x, y, info, ix_callback=ix_callback, cs=cs, gate_layers= self.args.gate_layers, big_omega_M_u_weights = big_omega_M_u_weights, big_omega_M_ro_weights=big_omega_M_ro_weights)
+                            iter_loss, etc = self.train_iteration(x, y, info, ix_callback=ix_callback, cs=cs, gate_layers= self.args.gate_layers, c_strength=c_strength,big_omega_M_u_weights = big_omega_M_u_weights, big_omega_M_ro_weights=big_omega_M_ro_weights,M_u_weights_prev=M_u_weights_prev, M_ro_weights_prev=M_ro_weights_prev)
 
 
 
