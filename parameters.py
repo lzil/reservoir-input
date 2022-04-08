@@ -9,11 +9,10 @@ def create_parameters(debug):
     mapping = {}
     ix = 1
 
-    D1s = [10, 50]
-    D2s = [10, 50]
-    Ns = [500]
+    D1s = [10, 50, 100, 200]
+    Ns = [200, 500]
 
-    lr = 1e-4
+    lr = 1e-3
     n_epochs = 20
     patience = 5000
     batch_size = 3
@@ -22,16 +21,17 @@ def create_parameters(debug):
     log_checkpoint_models = False
 
     n_seeds = 2
-    n_rseeds = 2
+    n_rseeds = 3
 
-    m_noises = [0, 2]
+    m_noises = [0, 2, 4, 10]
+    # m_noises = [0]
     r_noises = [0.01]
-    train_parts = [['M_u', 'M_ro']]
-    # train_parts = [['all'], ['M_u', 'M_ro']]
+    # train_parts = [['M_u', 'M_ro']]
+    train_parts = [['all'], ['M_u', 'M_ro']]
 
     datasets = [
-        # ['datasets/rsg-100-150.pkl', 'datasets/rsg-150-200.pkl'],
-        ['datasets/delaypro.pkl', 'datasets/delayanti.pkl', 'datasets/memorypro.pkl', 'datasets/memoryanti.pkl']
+        ['datasets/rsg-100-150.pkl', 'datasets/rsg-150-200.pkl'],
+        # ['datasets/delaypro.pkl', 'datasets/delayanti.pkl', 'datasets/memorypro.pkl', 'datasets/memoryanti.pkl']
     ]
     losses = [
         # ['mse-e'],
@@ -42,7 +42,6 @@ def create_parameters(debug):
         datasets = [['datasets/delaypro.pkl']]
         Ns = [80]
         D1s = [20]
-        D2s = [10]
         n_seeds = 1
         n_rseeds = 1
         m_noises = [0]
@@ -57,15 +56,14 @@ def create_parameters(debug):
     seed_samples = [i + seed_offset for i in range(n_seeds)]
     rseed_samples = [i + rseed_offset for i in range(n_rseeds)]
 
-    for (d, nN, nD1, nD2, loss, rnoise, mnoise, tp, nseed, rseed) in product(datasets, Ns, D1s, D2s, losses, r_noises, m_noises, train_parts, range(n_seeds), range(n_rseeds)):
-        if nD1 > nN or nD2 > nN:
+    for (d, nN, nD1, loss, rnoise, mnoise, tp, nseed, rseed) in product(datasets, Ns, D1s, losses, r_noises, m_noises, train_parts, range(n_seeds), range(n_rseeds)):
+        if nD1 > nN:
             continue
         run_params = {}
         run_params['dataset'] = d
         run_params['loss'] = loss
 
         run_params['D1'] = nD1
-        run_params['D2'] = nD2
         run_params['N'] = nN
 
         # these parameters only useful when training with adam

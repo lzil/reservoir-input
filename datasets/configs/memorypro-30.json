@@ -4,8 +4,10 @@
   "config": null,
   "t_type": "memory-pro",
   "n_trials": 2000,
+  "task_args": [],
   "intervals": null,
   "angles": [
+    0.0,
     30.0,
     60.0,
     90.0,
@@ -18,13 +20,11 @@
     300.0,
     330.0
   ],
-  "motifs": null,
-  "task_args": [],
   "t_len": 300,
   "fix_t": 50,
   "stim_t": 100,
   "memory_t": 50,
-  "argv": "tasks.py create memorypro-30 -t memory-pro --angles 30 60 90 120 150 180 210 240 270 300 330",
+  "argv": "tasks.py create memorypro-30 -t memory-pro --angles 0 30 60 90 120 150 180 210 240 270 300 330",
   "L": 3,
   "Z": 3
 }
