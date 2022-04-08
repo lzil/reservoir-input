@@ -360,19 +360,14 @@ class Trainer:
                 #in order to calculate the loss at the first time step in the truncation window, we need the error 
                 for c in self.criteria:
 
-                    if self.args.ss:
+                    if self.args.ss and training:
                         #loss function for either SI or EWC
+                        #note we use the ss and xdg loss for training but not testing - if you use it for testing you'll get a growing loss
                         if self.args.ff_bias:
-
-                            #debugging:
-                                #problem: the 
-
 
                             k_loss += c(k_outs, k_targets, i=trial, t_ix=j+1-k) + c_strength*torch.sum(big_omega_M_u_weights* torch.square(self.net.M_u - M_u_prev)) + c_strength *torch.sum(big_omega_M_ro* torch.square(self.net.M_ro - M_ro_prev))
 
                         else: #no biases just weights
-                            
-
                             k_loss += c(k_outs, k_targets, i=trial, t_ix=j+1-k) + c_strength*torch.sum(big_omega_M_u_weights * torch.square(self.net.M_u.weight - M_u_weights_prev)) + c_strength *torch.sum(big_omega_M_ro_weights* torch.square(self.net.M_ro.weight - M_ro_weights_prev))
                             #print(k_loss)
                             # print('no biases just weights')
@@ -481,16 +476,12 @@ class Trainer:
             #if self.args.sequential and self.args.ss and self.args.xdg:
             #and then elif for the statement below
 
-            if self.args.sequential and self.args.xdg and self.args.ss:
-                    if self.args.ss_type == 'SI':
+            #if self.args.sequential and self.args.xdg and self.args.ss:
+            if self.args.ss_type == 'SI':
                         if self.args.ff_bias:
                             loss, etc = self.run_trial(x, y, trials, extras=True, training=False, cs=cs, gate_layers=self.args.gate_layers, train_idx= self.train_idx, c_strength=c_strength, big_omega_M_u_weights = big_omega_M_u_weights, big_omega_M_ro_weights=big_omega_M_ro_weights, big_omega_M_u_biases=big_omega_M_u_biases, big_omega_M_ro_biases= big_omega_M_ro_biases, M_u_weights_prev=M_u_weights_prev, M_ro_weights_prev=M_ro_weights_prev, M_u_biases_prev =M_u_biases_prev, M_ro_biases_prev=M_ro_biases_prev)
                         else:
                             loss, etc = self.run_trial(x, y, trials, extras=True, cs=cs, training=False, gate_layers=self.args.gate_layers, train_idx= self.train_idx, c_strength=c_strength, big_omega_M_u_weights = big_omega_M_u_weights, big_omega_M_ro_weights=big_omega_M_ro_weights, M_u_weights_prev=M_u_weights_prev, M_ro_weights_prev=M_ro_weights_prev)
-
-
-                        
-
 
             elif self.args.sequential and self.args.xdg:
                 loss, etc = self.run_trial(x, y, trials, training=False, cs =cs, gate_layers= self.args.gate_layers, train_idx = self.train_idx ,extras=True)
@@ -666,11 +657,6 @@ class Trainer:
 
                         if self.args.ff_bias:
                             iter_loss, etc = self.train_iteration(x, y, info, ix_callback=ix_callback, cs=cs, gate_layers= self.args.gate_layers, c_strength = c_strength, big_omega_M_u_weights = big_omega_M_u_weights, big_omega_M_ro_weights=big_omega_M_ro_weights,big_omega_M_u_biases=big_omega_M_u_biases, big_omega_M_ro_biases= big_omega_M_ro_biases, M_u_weights_prev=M_u_weights_prev, M_ro_weights_prev=M_ro_weights_prev, M_u_biases_prev =M_u_biases_prev, M_ro_biases_prev=M_ro_biases_prev)
-                        
-                        else:
-                            iter_loss, etc = self.train_iteration(x, y, info, ix_callback=ix_callback, cs=cs, gate_layers= self.args.gate_layers, c_strength=c_strength,big_omega_M_u_weights = big_omega_M_u_weights, big_omega_M_ro_weights=big_omega_M_ro_weights,M_u_weights_prev=M_u_weights_prev, M_ro_weights_prev=M_ro_weights_prev)
-
-
 
                             with torch.no_grad():
                                 delta_M_u_weights += (self.net.M_u.weight.data - M_u_bf_weights)
@@ -689,6 +675,24 @@ class Trainer:
                                     #reset weights before training step after calculating 
                                     M_u_bf_biases = 0
                                     M_ro_bf_biases = 0 
+
+
+                        
+                        else:
+                            iter_loss, etc = self.train_iteration(x, y, info, ix_callback=ix_callback, cs=cs, gate_layers= self.args.gate_layers, c_strength=c_strength,big_omega_M_u_weights = big_omega_M_u_weights, big_omega_M_ro_weights=big_omega_M_ro_weights,M_u_weights_prev=M_u_weights_prev, M_ro_weights_prev=M_ro_weights_prev)
+
+
+
+                            with torch.no_grad():
+                                delta_M_u_weights += (self.net.M_u.weight.data - M_u_bf_weights)
+                                delta_M_ro_weights += (self.net.M_ro.weight.data - M_ro_bf_weights)
+                                w_M_u_weights += (self.net.M_u.weight.data - M_u_bf_weights) * (-self.net.M_u.weight.grad)
+                                w_M_ro_weights += (self.net.M_ro.weight.data - M_ro_bf_weights) * (-self.net.M_ro.weight.grad)
+                                #reset weights before training step after calculating 
+                                M_u_bf_weights = 0
+                                M_ro_bf_weights = 0 
+
+                                
 
                                 
                 #if doing  ss but no Xdg
@@ -735,11 +739,18 @@ class Trainer:
 
                     z = etc['outs'].cpu().numpy().squeeze()
                     train_loss = running_loss / self.log_interval
-                    if self.args.ff_bias:
-                        
-                        test_loss, test_etc = self.test(cs=cs, gate_layers= self.args.gate_layers, c_strength = c_strength, big_omega_M_u_weights = big_omega_M_u_weights, big_omega_M_ro_weights=big_omega_M_ro_weights,big_omega_M_u_biases=big_omega_M_u_biases, big_omega_M_ro_biases= big_omega_M_ro_biases, M_u_weights_prev=M_u_weights_prev, M_ro_weights_prev=M_ro_weights_prev, M_u_biases_prev =M_u_biases_prev, M_ro_biases_prev=M_ro_biases_prev)
+                    if self.args.sequential and self.args.ss and self.args.xdg:
+                        if self.args.ff_bias:
+                            test_loss, test_etc = self.test(cs=cs, gate_layers= self.args.gate_layers, c_strength = c_strength, big_omega_M_u_weights = big_omega_M_u_weights, big_omega_M_ro_weights=big_omega_M_ro_weights,big_omega_M_u_biases=big_omega_M_u_biases, big_omega_M_ro_biases= big_omega_M_ro_biases, M_u_weights_prev=M_u_weights_prev, M_ro_weights_prev=M_ro_weights_prev, M_u_biases_prev =M_u_biases_prev, M_ro_biases_prev=M_ro_biases_prev)
+                        else:
+                            test_loss, test_etc = self.test(cs=cs, gate_layers= self.args.gate_layers, c_strength=c_strength,big_omega_M_u_weights = big_omega_M_u_weights, big_omega_M_ro_weights=big_omega_M_ro_weights,M_u_weights_prev=M_u_weights_prev, M_ro_weights_prev=M_ro_weights_prev)
+
+                    elif self.args.sequential and self.args.xdg:
+                        test_loss, test_etc = self.test(cs =cs, gate_layers= self.args.gate_layers, train_idx = self.train_idx)
+
                     else:
-                        test_loss, test_etc = self.test(cs=cs, gate_layers= self.args.gate_layers, c_strength=c_strength,big_omega_M_u_weights = big_omega_M_u_weights, big_omega_M_ro_weights=big_omega_M_ro_weights,M_u_weights_prev=M_u_weights_prev, M_ro_weights_prev=M_ro_weights_prev)
+                        test_loss, test_etc = self.test()
+
 
                     log_arr = [
                         f'*{ix}',
