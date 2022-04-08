@@ -4,15 +4,14 @@
   "config": null,
   "t_type": "flip-flop",
   "n_trials": 2000,
-  "intervals": null,
-  "angles": null,
-  "motifs": null,
   "task_args": [
     "dim",
     "2",
     "p",
     ".01"
   ],
+  "intervals": null,
+  "angles": null,
   "t_len": 500,
   "dim": 2,
   "p_len": 5,

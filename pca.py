@@ -42,7 +42,7 @@ def main(args):
 
 def pca_rsg(args, A_uncut, trials, n_reps):
 
-    setting = 'estimation'
+    setting = 'both'
 
     As = []
     for idx in range(n_reps):
@@ -51,6 +51,8 @@ def pca_rsg(args, A_uncut, trials, n_reps):
             As.append(A_uncut[idx,t_ready:t_set])
         elif setting == 'prediction':
             As.append(A_uncut[idx,t_set:t_go])
+        elif setting == 'both':
+            As.append(A_uncut[idx,t_ready:t_go])
 
     A_proj = pca(As, 3)
 
@@ -87,8 +89,11 @@ def pca_rsg(args, A_uncut, trials, n_reps):
             if setting == 'estimation':
                 marker_a = '^'
                 marker_b = 'o'
-            else:
+            elif setting == 'prediction':
                 marker_a = 'o'
+                marker_b = 's'
+            elif setting == 'both':
+                marker_a = '^'
                 marker_b = 's'
             ax.scatter(t[0][0], t[1][0], t[2][0], s=40, color=c, marker=marker_a)
             ax.scatter(t[0][-1], t[1][-1], t[2][-1], s=30, color=c, marker=marker_b)

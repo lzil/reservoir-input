@@ -4,40 +4,49 @@ import matplotlib.pyplot as plt
 
 import argparse
 import pdb
+import sys
 
-from testers import load_model, test_model
-from network import Network
-from utils import Bunch, load_rb
+sys.path.append('../')
+
+# from testers import load_model, test_model
+from network import M2Net
+from utils import Bunch, load_rb, get_config
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument('model')
-parser.add_argument('dset')
+parser.add_argument('models', nargs='+')
+# parser.add_argument('dset')
 args = parser.parse_args()
 
-with open(args.model, 'rb') as f:
-    m_dict = torch.load(f)
+nets = []
+for path in args.models:
+    config = get_config(path)
+    # with open(path, 'rb') as f:
+    net = M2Net(config)
+    net.load_state_dict(torch.load(path))
+    nets.append(net)
     
+pdb.set_trace()
 
 
     
-J = m_dict['W_f.weight']
-v = J.std()
-shp = J.shape
-m_dict['W_f.weight'] += torch.normal(0, v * .01, shp)
+# J = m_dict['W_f.weight']
+# v = J.std()
+# shp = J.shape
+# m_dict['W_f.weight'] += torch.normal(0, v * .01, shp)
 
-J = m_dict['W_ro.weight']
-v = J.std()
-shp = J.shape
-m_dict['W_ro.weight'] += torch.normal(0, v * .01, shp)
+# J = m_dict['W_ro.weight']
+# v = J.std()
+# shp = J.shape
+# m_dict['W_ro.weight'] += torch.normal(0, v * .01, shp)
 
 
-dset = load_rb(args.dset)
+# dset = load_rb(args.dset)
 
-test_data = test_model(m_dict, dset, n_tests=200)
-i, xs, ys, zs, losses = list(zip(*test_data))
+# test_data = test_model(m_dict, dset, n_tests=200)
+# i, xs, ys, zs, losses = list(zip(*test_data))
 
-print(np.mean(losses))
+# print(np.mean(losses))
 
 
 

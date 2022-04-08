@@ -69,7 +69,11 @@ class M2Net(nn.Module):
         with TorchSeed(self.args.network_seed):
             D1 = self.args.D1 if self.args.D1 != 0 else self.args.N
             D2 = self.args.D2 if self.args.D2 != 0 else self.args.N
-            self.M_u = nn.Linear(self.args.L + self.args.T, D1, bias=self.args.ff_bias)
+            # net feedback into input layer
+            if hasattr(self.args, 'net_fb') and self.args.net_fb:
+                self.M_u = nn.Linear(self.args.L + self.args.T + self.args.Z, D1, bias=self.args.ff_bias)
+            else:
+                self.M_u = nn.Linear(self.args.L + self.args.T, D1, bias=self.args.ff_bias)
             self.M_ro = nn.Linear(D2, self.args.Z, bias=self.args.ff_bias)
         self.reservoir = M2Reservoir(self.args)
 
@@ -88,19 +92,28 @@ class M2Net(nn.Module):
     def forward(self, o, extras=False):
         # pass through the forward part
         # o should have shape [batch size, self.args.T + self.args.L]
-        u = self.m1_act(self.M_u(o))
-        v, etc = self.reservoir(u, extras=True)
+        if hasattr(self.args, 'net_fb') and self.args.net_fb:
+            self.z = self.z.expand(o.shape[0], self.z.shape[1])
+            oz = torch.cat((o, self.z), dim=1)
+            u = self.m1_act(self.M_u(oz))
+        else:
+            u = self.m1_act(self.M_u(o))
+        if extras:
+            v, etc = self.reservoir(u, extras=True)
+        else:
+            v = self.reservoir(u, extras=False)
         z = self.M_ro(self.m2_act(v))
-        z = self.out_act(z)
+        self.z = self.out_act(z)
 
         if not extras:
-            return z
+            return self.z
         elif self.args.use_reservoir:
-            return z, {'u': u, 'x': etc['x'], 'v': v}
+            return self.z, {'u': u, 'x': etc['x'], 'v': v}
         else:
-            return z, {'u': u, 'v': v}
+            return self.z, {'u': u, 'v': v}
 
     def reset(self, res_state=None, device=None):
+        self.z = torch.zeros((1, self.args.Z))
         if self.args.use_reservoir:
             self.reservoir.reset(res_state=res_state, device=device)
 

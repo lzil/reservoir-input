@@ -64,6 +64,8 @@ class TrialDataset(Dataset):
         return self.max_idxs[-1]
 
     def __getitem__(self, idx):
+        if isinstance(idx, slice):
+            return [self[ii] for ii in range(len(self))[idx]]
         # index into the appropriate dataset to get the trial
         context = self.get_context(idx)
         # idx variable now references position within dataset
@@ -73,6 +75,7 @@ class TrialDataset(Dataset):
         trial = self.data[context][idx]
         x = trial.get_x(self.args)
         x_cts = self.x_ctxs[context]
+        # context comes after the stimulus
         x = np.concatenate((x, x_cts))
         y = trial.get_y(self.args)
 
@@ -254,4 +257,4 @@ def get_dim(a):
     else:
         return 1
 
-    return l2 * total_loss
+    # return l2 * total_loss

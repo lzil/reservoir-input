@@ -322,6 +322,34 @@ class DurationDisc(Task):
         return y
 
 
+class DM(Task):
+    def __init__(self, args, dset_id=None, n=None):
+        super().__init__(args.t_len, dset_id, n)
+
+        self.t_type = args.t_type
+        assert self.t_type in ['dm1', 'dm2', 'dm1-ctx', 'dm2-ctx', 'dm-multi']
+
+        # hexagonal ring for dm
+        c1s1, c2s1 = np.random.randint(0, 6, 2)
+        d_c1s2, d_c2s2 = np.random.randint(1, 6, 2)
+        c1s2, c2s2 = (c1s1 + d_c1s2) % 6, (c2s1 + d_c2s2) % 6
+        gamma_mean = np.random.uniform(.8, 1.2)
+        c = np.random.choice([-.08, -.04, -.02, -.01, .01, .02, .04, .08])
+
+        self.L = 12
+        self.Z = 6
+
+    def get_x(self, args=None):
+        x = np.zeros((12, self.t_len))
+        x[c1s1, :] = gamma_mean + c
+        x[c1s2, :] = gamma_mean - c
+        x[6 + c2s1, :] = gamma_mean + c
+        x[6 + c2s2, :] = gamma_mean - c
+
+
+
+
+
 # ways to add noise to x
 def corrupt_x(args, x):
     x += np.random.normal(scale=args.x_noise, size=x.shape)

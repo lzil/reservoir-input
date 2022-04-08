@@ -22,7 +22,7 @@ import pandas as pd
 from network import M2Net
 
 from utils import log_this, load_rb, get_config, update_args
-from helpers import get_optimizer, get_scheduler, get_criteria, create_loaders
+from helpers import get_optimizer, get_scheduler, get_criteria, create_loaders, collater
 
 class Trainer:
     def __init__(self, args):
@@ -349,4 +349,104 @@ class Trainer:
         return running_min_error, ix
 
 
+    def optimize_lbfgs(self):
+        xs, ys, trials = collater(self.train_set[:1000])
+        xs, ys = xs.to(self.device), ys.to(self.device)
 
+        # xs_test, ys_test, trials_test = collater(self.test_set)
+        # so that the callback for scipy.optimize.minimize knows what step it is on
+        self.scipy_ix = 0
+        vis_samples = []
+
+        # this is what happens every iteration
+        # run through all examples (x, y) and get loss, gradient
+        def closure(v):
+            # setting the parameters in the network with the new values in v
+            ind = 0
+            for k,nums in self.n_params.items():
+                # nums[0] is shape, nums[1] is number of elements
+                weight = v[ind:ind+nums[1]].reshape(nums[0])
+                self.net.state_dict()[k][:] = torch.Tensor(weight)
+                ind += nums[1]
+
+            # res state starting from same random seed for each iteration
+            self.net.reset()
+            self.net.zero_grad()
+
+            # total_loss = torch.tensor(0.)
+            total_loss = self.run_trial(xs, ys, trials, extras=False)
+            # total_loss.backward()
+
+            # turn param grads into list
+            grad_list = []
+            for v in self.train_params:
+                grad = v.grad.clone().numpy().reshape(-1)
+                grad_list.append(grad)
+            vec = np.concatenate(grad_list)
+            post = np.float64(vec)
+
+            return total_loss, post
+
+        # callback just does logging
+        def callback(xk):
+            if self.args.no_log:
+                return
+            self.scipy_ix += 1
+            if self.scipy_ix % self.log_interval == 0:
+                sample_n = random.randrange(1000)
+
+                with torch.no_grad():
+                    self.net.reset()
+                    self.net.zero_grad()
+                    # outs = []
+                    # total_loss = torch.tensor(0.)
+
+                    # pdb.set_trace()
+
+                    loss, etc = self.test()
+
+                    # x = xs[sample_n,:].reshape(1,1,-1)
+                    # y = ys[sample_n,:].reshape(1,1,-1)
+
+                    # trial_loss, etc = self.run_trial(xs_test, ys_test, trials_test, training=False, extras=True)
+                    # pdb.set_trace()
+                    # for j in range(xs.shape[0]):
+                    #     net_in = x[j]
+                    #     net_out, etc = self.net(net_in, extras=True)
+                    #     outs.append(net_out)
+                    #     net_out, step_loss, _ = self.run_iteration(xs[j], ys[j])
+                    #     outs.append(net_out.item())
+                    #     total_loss += step_loss
+                    # z = etc['outs']
+
+                    # z = np.stack(outs).squeeze()
+                    self.log_checkpoint(self.scipy_ix, etc['ins'].numpy(), etc['goals'].numpy(), etc['outs'].numpy(), loss, loss)
+
+                    # self.log_checkpoint(self.scipy_ix, xs_test.numpy(), ys_test.numpy(), etc['outs'], total_loss.item(), total_loss.item())
+
+                    logging.info(f'iteration {self.scipy_ix}\t| loss {loss:.3f}')
+
+        # getting the initial values to put into the algorithm
+        init_list = []
+        for v in self.train_params:
+            init_list.append(v.detach().clone().numpy().reshape(-1))
+        init = np.concatenate(init_list)
+
+        optim_options = {
+            'iprint': self.log_interval,
+            'maxiter': self.args.maxiter,
+            # 'ftol': 1e-16
+        }
+        optim = minimize(closure, init, method='L-BFGS-B', jac=True, callback=callback, options=optim_options)
+
+        error_final = optim.fun
+        n_iters = optim.nit
+
+        if not self.args.no_log:
+            self.log_model(name='model_final.pth')
+            if self.args.log_checkpoint_samples:
+                with open(self.plot_checkpoint_path, 'wb') as f:
+                    pickle.dump(self.vis_samples, f)
+            self.csv_path.close()
+
+        return error_final, n_iters

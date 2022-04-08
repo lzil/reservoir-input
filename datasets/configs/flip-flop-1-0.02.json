@@ -1,22 +1,22 @@
 {
   "mode": "create",
-  "name": "flip-flop-2-0.02",
+  "name": "flip-flop-1-0.02",
   "config": null,
   "t_type": "flip-flop",
   "n_trials": 2000,
   "task_args": [
     "dim",
-    "2",
+    "1",
     "p",
     ".02"
   ],
   "intervals": null,
   "angles": null,
   "t_len": 500,
-  "dim": 2,
+  "dim": 1,
   "p_len": 5,
   "geop": 0.02,
-  "argv": "tasks.py create flip-flop-2-0.02 -t flip-flop -a dim 2 p .02",
-  "L": 2,
-  "Z": 2
+  "argv": "tasks.py create flip-flop-1-0.02 -t flip-flop -a dim 1 p .02",
+  "L": 1,
+  "Z": 1
 }

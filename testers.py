@@ -96,14 +96,14 @@ def test_fixed_pts():
 
     D2 = 3
     D1 = 50
-    fixed_pts = 2
+    fixed_pts = 1
     t_len = 1000
     args = Bunch(
         N=500,
         D1=D1,
         D2=D2,
         # fixed_pts=fixed_pts,
-        fixed_beta=1.6,
+        fixed_beta=1.5,
         res_x_seed=0,
         res_seed=0,
         res_init_g=1.5
@@ -116,7 +116,7 @@ def test_fixed_pts():
         # print(len(patterns))
 
     # pdb.set_trace()
-    us = np.random.normal(0, 1, (16, D1))
+    us = np.random.normal(0, .3, (16, D1))
     # us = np.zeros((16, D1))
     # us = np.random.normal(0, 1, (1, D1)) + np.random.normal(0, 0.1, (16, D1))
     us = torch.as_tensor(us, dtype=torch.float)
@@ -125,7 +125,7 @@ def test_fixed_pts():
         reservoir.reset()
         trial_vs = []
         for t in range(t_len):
-            if t < 200:
+            if t < 500:
                 v = reservoir(u)
             else:
                 v = reservoir(None)
