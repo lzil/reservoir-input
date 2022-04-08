@@ -362,6 +362,11 @@ class Trainer:
                     if self.args.ss:
                         #loss function for either SI or EWC
                         if self.args.ff_bias:
+
+                            #debugging:
+                                #problem: the 
+
+
                             k_loss += c(k_outs, k_targets, i=trial, t_ix=j+1-k) + c_strength*torch.sum(big_omega_M_u_weights* torch.square(self.net.M_u - M_u_prev)) + c_strength *torch.sum(big_omega_M_ro* torch.square(self.net.M_ro - M_ro_prev))
 
                         else: #no biases just weights
@@ -371,7 +376,7 @@ class Trainer:
                             print(M_u_weights_prev.shape)
 
 
-                            k_loss += c(k_outs, k_targets, i=trial, t_ix=j+1-k) + c_strength*torch.sum(big_omega_M_u_weights* torch.square(self.net.M_u.weight - M_u_weights_prev)) + c_strength *torch.sum(big_omega_M_ro* torch.square(self.net.M_ro.weight - M_ro_weights_prev))
+                            k_loss += c(k_outs, k_targets, i=trial, t_ix=j+1-k) + c_strength*torch.sum(big_omega_M_u_weights * torch.square(self.net.M_u.weight - M_u_weights_prev)) + c_strength *torch.sum(big_omega_M_ro_weights* torch.square(self.net.M_ro.weight - M_ro_weights_prev))
 
                         
 
@@ -434,7 +439,7 @@ class Trainer:
             #and then elif for the statement below
 
         if self.args.sequential and self.args.xdg and self.args.ss:
-            trial_loss, etc = self.run_trial(x, y, trial, extras=True, cs=cs, gate_layers=self.args.gate_layers, train_idx= self.train_idx, c_strength=c_strength, big_omega_M_u_weights = big_omega_M_ro_weights, big_omega_M_ro_weights=big_omega_M_ro_weights, big_omega_M_u_biases=big_omega_M_u_biases, big_omega_M_ro_biases= big_omega_M_ro_biases, M_u_weights_prev=M_u_weights_prev, M_ro_weights_prev=M_ro_weights_prev, M_u_biases_prev =M_u_biases_prev, M_ro_biases_prev=M_ro_biases_prev)
+            trial_loss, etc = self.run_trial(x, y, trial, extras=True, cs=cs, gate_layers=self.args.gate_layers, train_idx= self.train_idx, c_strength=c_strength, big_omega_M_u_weights = big_omega_M_u_weights, big_omega_M_ro_weights=big_omega_M_ro_weights, big_omega_M_u_biases=big_omega_M_u_biases, big_omega_M_ro_biases= big_omega_M_ro_biases, M_u_weights_prev=M_u_weights_prev, M_ro_weights_prev=M_ro_weights_prev, M_u_biases_prev =M_u_biases_prev, M_ro_biases_prev=M_ro_biases_prev)
 
 
         elif self.args.sequential and self.args.xdg:
@@ -553,9 +558,12 @@ class Trainer:
                 M_ro_biases_prev = torch.zeros_like(self.net.M_ro.bias.data)
 
             
-
+            print(f'M_u.weight.data just before it goes into torch.zeros_like{self.net.M_u.weight.data.shape}')    
             #for the weights
-            big_omega_M_u_weights= torch.zeros_like(self.net.M_u.weight.data)
+            big_omega_M_u_weights = torch.zeros_like(self.net.M_u.weight.data)
+            print(f'What is big_omega_M_u{big_omega_M_u_weights.shape}')    
+            #okay it's the right size here
+
             big_omega_M_ro_weights = torch.zeros_like(self.net.M_ro.weight.data)
             #for the biases if any:
             if self.args.ff_bias:
@@ -568,6 +576,23 @@ class Trainer:
             #different ways of calculating importance of paramaters for different tasks
             if self.args.ss_type == 'SI':
                 damp_c = self.args.C
+
+                #initialize delta theta_i's and small omegas
+                delta_M_u_weights = 0
+                delta_M_ro_weights = 0
+
+                w_M_u_weights = 0 
+                w_M_ro_weights = 0
+                
+
+
+                if self.args.ff_bias:
+                    delta_M_u_biases = 0
+                    delta_M_ro_biases = 0
+                    if self.args.ff_bias:
+                        w_M_u_biases = 0
+                        w_M_ro_biases = 0
+
 
             #elif self.args.ss_type == 'EWC':
 
@@ -622,7 +647,7 @@ class Trainer:
                         #weights before training step so that we can calculate the change in weights brought about by a single train_iteration ( the t variable for number of batches in Masse paper methods)
                         with torch.no_grad():
                             M_u_bf_weights = self.net.M_u.weight.data
-                            M_ro_bf_weights = self.net.M_u.weight.data
+                            M_ro_bf_weights = self.net.M_ro.weight.data
                             if self.args.ff_bias:
                                 M_u_bf_biases = self.net.M_u.weight.data
                                 M_ro_bf_biases = self.net.M_u.weight.data
@@ -636,30 +661,30 @@ class Trainer:
 
 
                             with torch.no_grad():
-                                delta_M_u_weights += (self.net.M_u.weight.data - M_u_bf)
-                                delta_M_ro_weights += (self.net.M_ro.weight.data - M_u_ro)
-                                w_M_u_weights += (self.net.M_u.weight.data - M_u_bf) * (-self.net.M_u.weight.grad)
-                                w_M_ro_weights += (self.net.M_ro.weight.data - M_u_ro) * (-self.net.M_ro.weight.grad)
+                                delta_M_u_weights += (self.net.M_u.weight.data - M_u_bf_weights)
+                                delta_M_ro_weights += (self.net.M_ro.weight.data - M_ro_bf_weights)
+                                w_M_u_weights += (self.net.M_u.weight.data - M_u_bf_weights) * (-self.net.M_u.weight.grad)
+                                w_M_ro_weights += (self.net.M_ro.weight.data - M_ro_bf_weights) * (-self.net.M_ro.weight.grad)
                                 #reset weights before training step after calculating 
                                 M_u_bf_weights = 0
                                 M_ro_bf_weights = 0 
 
                                 if self.args.ff_bias:
-                                    delta_M_u_biases+= (self.net.M_u.bias.data - M_u_bf)
-                                    delta_M_ro_biases+= (self.net.M_ro.bias.data - M_u_ro)
-                                    w_M_u_biases += (self.net.M_u.bias.data - M_u_bf) * (-self.net.M_u.bias.grad)
-                                    w_M_ro_biases += (self.net.M_ro.bias.data - M_u_ro) * (-self.net.M_ro.weight.grad)
+                                    delta_M_u_biases+= (self.net.M_u.bias.data - M_u_bf_biases)
+                                    delta_M_ro_biases+= (self.net.M_ro.bias.data - M_u_ro_biases)
+                                    w_M_u_biases += (self.net.M_u.bias.data - M_u_bf_biases) * (-self.net.M_u.bias.grad)
+                                    w_M_ro_biases += (self.net.M_ro.bias.data - M_u_ro_biases) * (-self.net.M_ro.weight.grad)
                                     #reset weights before training step after calculating 
                                     M_u_bf_biases = 0
                                     M_ro_bf_biases = 0 
 
                                 
-
+                #if doing  ss but no Xdg
                 elif self.args.sequential and self.args.ss:
                     if self.args.SI:
                         print(f'implementing synaptic intelligence')
                         with torch.no_grad():
-                            M_u_bf = self.net.M_u.weight.data
+                            M_u_bf_weights = self.net.M_u.weight.data
                             M_ro_bf = self.net.M_u.weight.data
 
                         iter_loss, etc = self.train_iteration(x, y, info, ix_callback=ix_callback, big_omega_M_u = big_omega_M_u, big_omega_M_ro=big_omega_M_ro)
