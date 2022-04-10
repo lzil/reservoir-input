@@ -30,7 +30,7 @@ class Trainer:
     def __init__(self, args):
         self.args = args
         self.device = torch.device('cuda' if torch.cuda.is_available() and args.use_cuda else 'cpu')
-        #device we will train on will automatically be cuda (a GPU) if 1) it's available and we specify --use_cuda see run.py arguments under control logging
+        #will  automatically be cuda (a GPU) if 1) it's available and we specify --use_cuda see run.py arguments under control logging
 
         trains, tests = create_loaders(self.args.dataset, self.args, split_test=True, test_size=50)
         #take .dataset from self.args: it's a list containing the datsets we're going to use  and
@@ -96,21 +96,13 @@ class Trainer:
 
         if self.args.sequential:
             logging.info(f'Sequential training. Starting with task {self.train_idx}')
-
-
-        
             
-
-
-
-
-
         # self.net = BasicNetwork(self.args)
         self.net = M2Net(self.args)
         #the model with the input representation layer, reservoir etc
         # add hopfield net patterns
         if hasattr(self.args, 'fixed_pts') and self.args.fixed_pts > 0:
-            #if the object we input has attribute 'some_attribute' return true
+            #syntax: hasattr(object, 'potential_attribute') if the object we input has attribute 'some_attribute' return true
             self.net.reservoir.add_fixed_points(self.args.fixed_pts)
         self.net.to(self.device) #?
         
@@ -136,11 +128,12 @@ class Trainer:
         #print(self.net.named_parameters)
         #print(args.train_parts)
         for k,v in self.net.named_parameters():
+            # k is name, v is weight
+            #PT_syntax:
             #named_parameters is a built-in pytorch method
             #returns an iterator over module parameters[an interable storing pairs of the form (parameter_name, parameter)
             #note we have recurse=True by default [see documentation]
 
-            # k is name, v is weight
             found = False
             # filtering just for the parts that will be trained -we specified which parts in parameters.py
             #
@@ -258,7 +251,7 @@ class Trainer:
         trial_loss = 0.
         #the loss on this single trial
         #need trial loss bc it's an input output pair is a pair of sequences bc it's time series(so the loss at each time point in the trial )
-        k_loss = 0. #what is k_loss ?
+        k_loss = 0. #k_loss bc we calculate the loss for the trial over the last k timesteps of the of the trial - k is the length of the truncation window counting backward from the last timestep of the trial 
         outs = []
         us = []
         vs = []
@@ -302,7 +295,7 @@ class Trainer:
                 net_out, etc = self.net(net_in, cs = cs, gate_layers= self.args.gate_layers, train_idx = self.train_idx, extras = True) 
 
             else:
-                net_out, etc = self.net(net_in, cs = cs, extras = True)
+                net_out, etc = self.net(net_in, extras = True)
                 
             
             #see self.net above, it's the net we're training on 
@@ -340,7 +333,7 @@ class Trainer:
                 
                 
                 k_outs = torch.stack(outs[-k:], dim=2) 
-                #take the last k outputs from outs and 
+                #take the last k outputs from outs concatenates them a long the dimension 2 which is 
                 #(see:https://pytorch.org/docs/stable/generated/torch.stack.html)
 
 
@@ -359,16 +352,21 @@ class Trainer:
                 #yes we want the last k outputs the outputs in the truncation window but 
                 #in order to calculate the loss at the first time step in the truncation window, we need the error 
                 for c in self.criteria:
+                    k_loss += c(k_outs, k_targets, i=trial, t_ix=j+1-k)
+                    
 
                     if self.args.ss and training:
                         #loss function for either SI or EWC
                         #note we use the ss and xdg loss for training but not testing - if you use it for testing you'll get a growing loss
-                        if self.args.ff_bias:
+                        if self.args.ff_bias: #add bbias terms
 
-                            k_loss += c(k_outs, k_targets, i=trial, t_ix=j+1-k) + c_strength*torch.sum(big_omega_M_u_weights* torch.square(self.net.M_u - M_u_prev)) + c_strength *torch.sum(big_omega_M_ro* torch.square(self.net.M_ro - M_ro_prev))
 
-                        else: #no biases just weights
-                            k_loss += c(k_outs, k_targets, i=trial, t_ix=j+1-k) + c_strength*torch.sum(big_omega_M_u_weights * torch.square(self.net.M_u.weight - M_u_weights_prev)) + c_strength *torch.sum(big_omega_M_ro_weights* torch.square(self.net.M_ro.weight - M_ro_weights_prev))
+                            k_loss += c_strength*torch.sum(big_omega_M_u_weights* torch.square(self.net.M_u - M_u_prev)) + c_strength *torch.sum(big_omega_M_ro* torch.square(self.net.M_ro - M_ro_prev))
+
+                        else: 
+
+                            print(c_strength*torch.sum(big_omega_M_u_weights * torch.square(self.net.M_u.weight - M_u_weights_prev)) + c_strength *torch.sum(big_omega_M_ro_weights* torch.square(self.net.M_ro.weight - M_ro_weights_prev)))
+                            k_loss +=  c_strength*torch.sum(big_omega_M_u_weights * torch.square(self.net.M_u.weight - M_u_weights_prev)) + c_strength *torch.sum(big_omega_M_ro_weights* torch.square(self.net.M_ro.weight - M_ro_weights_prev))
                             #print(k_loss)
                             # print('no biases just weights')
                             # pdb.set_trace()
@@ -376,8 +374,8 @@ class Trainer:
                         
 
 
-                    else:
-                        k_loss += c(k_outs, k_targets, i=trial, t_ix=j+1-k) #if no truncation j+1-k in here is going to be 0 (because we're nested in if j+1 % k ==0)so for '+=' is really just an = (bc its zero initially and then we only add something to it once if no truncation) and now in ss implementation we can just add the quadratic penalyt term 
+        
+                        #k_loss += c(k_outs, k_targets, i=trial, t_ix=j+1-k) #if no truncation j+1-k in here is going to be 0 (because we're nested in if j+1 % k ==0)so for '+=' is really just an = (bc its zero initially and then we only add something to it once if no truncation) and now in ss implementation we can just add the quadratic penalyt term 
                         #print(k_loss)
                         # pdb.set_trace()
 
@@ -391,6 +389,7 @@ class Trainer:
                 #why do we want this: because again we're doing something to the loss function that isn't part of the mathematical definition of the network and so we don't want this operation to be part of the computational graph through which we backprop (see colah's blog on backprop)
                  
                 if training:
+                    
                     k_loss.backward()  #calculates gradients
                     
                     # strategies for continual learning that involve modifying gradients we computed in line above
@@ -477,13 +476,9 @@ class Trainer:
             #and then elif for the statement below
 
             #if self.args.sequential and self.args.xdg and self.args.ss:
-            if self.args.ss_type == 'SI':
-                        if self.args.ff_bias:
-                            loss, etc = self.run_trial(x, y, trials, extras=True, training=False, cs=cs, gate_layers=self.args.gate_layers, train_idx= self.train_idx, c_strength=c_strength, big_omega_M_u_weights = big_omega_M_u_weights, big_omega_M_ro_weights=big_omega_M_ro_weights, big_omega_M_u_biases=big_omega_M_u_biases, big_omega_M_ro_biases= big_omega_M_ro_biases, M_u_weights_prev=M_u_weights_prev, M_ro_weights_prev=M_ro_weights_prev, M_u_biases_prev =M_u_biases_prev, M_ro_biases_prev=M_ro_biases_prev)
-                        else:
-                            loss, etc = self.run_trial(x, y, trials, extras=True, cs=cs, training=False, gate_layers=self.args.gate_layers, train_idx= self.train_idx, c_strength=c_strength, big_omega_M_u_weights = big_omega_M_u_weights, big_omega_M_ro_weights=big_omega_M_ro_weights, M_u_weights_prev=M_u_weights_prev, M_ro_weights_prev=M_ro_weights_prev)
+            
 
-            elif self.args.sequential and self.args.xdg:
+            if self.args.sequential and self.args.xdg:
                 loss, etc = self.run_trial(x, y, trials, training=False, cs =cs, gate_layers= self.args.gate_layers, train_idx = self.train_idx ,extras=True)
 
             else:
@@ -649,7 +644,7 @@ class Trainer:
                     if self.args.ss_type == 'SI':
                         #weights before training step so that we can calculate the change in weights brought about by a single train_iteration ( the t variable for number of batches in Masse paper methods)
                         with torch.no_grad():
-                            M_u_bf_weights = self.net.M_u.weight.data
+                            M_u_bf_weights = self.net.M_u.weight.data #theta(t-1 in Masse paper)
                             M_ro_bf_weights = self.net.M_ro.weight.data
                             if self.args.ff_bias:
                                 M_u_bf_biases = self.net.M_u.weight.data
@@ -739,13 +734,13 @@ class Trainer:
 
                     z = etc['outs'].cpu().numpy().squeeze()
                     train_loss = running_loss / self.log_interval
-                    if self.args.sequential and self.args.ss and self.args.xdg:
-                        if self.args.ff_bias:
-                            test_loss, test_etc = self.test(cs=cs, gate_layers= self.args.gate_layers, c_strength = c_strength, big_omega_M_u_weights = big_omega_M_u_weights, big_omega_M_ro_weights=big_omega_M_ro_weights,big_omega_M_u_biases=big_omega_M_u_biases, big_omega_M_ro_biases= big_omega_M_ro_biases, M_u_weights_prev=M_u_weights_prev, M_ro_weights_prev=M_ro_weights_prev, M_u_biases_prev =M_u_biases_prev, M_ro_biases_prev=M_ro_biases_prev)
-                        else:
-                            test_loss, test_etc = self.test(cs=cs, gate_layers= self.args.gate_layers, c_strength=c_strength,big_omega_M_u_weights = big_omega_M_u_weights, big_omega_M_ro_weights=big_omega_M_ro_weights,M_u_weights_prev=M_u_weights_prev, M_ro_weights_prev=M_ro_weights_prev)
+                    #if self.args.sequential and self.args.ss and self.args.xdg:
+                        #if self.args.ff_bias:
+                            #test_loss, test_etc = self.test(cs=cs, gate_layers= self.args.gate_layers, c_strength = c_strength, big_omega_M_u_weights = big_omega_M_u_weights, big_omega_M_ro_weights=big_omega_M_ro_weights,big_omega_M_u_biases=big_omega_M_u_biases, big_omega_M_ro_biases= big_omega_M_ro_biases, M_u_weights_prev=M_u_weights_prev, M_ro_weights_prev=M_ro_weights_prev, M_u_biases_prev =M_u_biases_prev, M_ro_biases_prev=M_ro_biases_prev)
+                        #else:
+                            #test_loss, test_etc = self.test(cs=cs, gate_layers= self.args.gate_layers, c_strength=c_strength,big_omega_M_u_weights = big_omega_M_u_weights, big_omega_M_ro_weights=big_omega_M_ro_weights,M_u_weights_prev=M_u_weights_prev, M_ro_weights_prev=M_ro_weights_prev)
 
-                    elif self.args.sequential and self.args.xdg:
+                    if self.args.sequential and self.args.xdg:
                         test_loss, test_etc = self.test(cs =cs, gate_layers= self.args.gate_layers, train_idx = self.train_idx)
 
                     else:
