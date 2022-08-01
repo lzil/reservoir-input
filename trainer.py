@@ -63,6 +63,7 @@ class Trainer:
             #args.sequential is defined in run.py under dataset arguments
             #if true we do "sequential training"
             
+            # pdb.set_trace()
             self.train_set, self.train_loaders = trains #trains is a tuple, first element of tuple is the whole training data set and the second element is the training loader: train_loader and the training data train_set
             
 
@@ -293,6 +294,8 @@ class Trainer:
             #print(f'what is net_in ? {net_in}')
             if self.args.sequential and self.args.xdg:
                 net_out, etc = self.net(net_in, cs = cs, gate_layers= self.args.gate_layers, train_idx = self.train_idx, extras = True) 
+                
+
 
             else:
                 net_out, etc = self.net(net_in, extras = True)
@@ -361,17 +364,22 @@ class Trainer:
                         if self.args.ff_bias: #add bbias terms
 
 
+
+                            # to edit: define loss function using criteria in helpers .py as Liang did (an example can be found direcly above)
                             k_loss += c_strength*torch.sum(big_omega_M_u_weights* torch.square(self.net.M_u - M_u_prev)) + c_strength *torch.sum(big_omega_M_ro* torch.square(self.net.M_ro - M_ro_prev))
 
                         else: 
 
-                            print(c_strength*torch.sum(big_omega_M_u_weights * torch.square(self.net.M_u.weight - M_u_weights_prev)) + c_strength *torch.sum(big_omega_M_ro_weights* torch.square(self.net.M_ro.weight - M_ro_weights_prev)))
-                            k_loss +=  c_strength*torch.sum(big_omega_M_u_weights * torch.square(self.net.M_u.weight - M_u_weights_prev)) + c_strength *torch.sum(big_omega_M_ro_weights* torch.square(self.net.M_ro.weight - M_ro_weights_prev))
+                            ss_loss= c_strength*torch.sum(big_omega_M_u_weights * torch.square(self.net.M_u.weight - M_u_weights_prev)) + c_strength *torch.sum(big_omega_M_ro_weights* torch.square(self.net.M_ro.weight - M_ro_weights_prev))
+
+                            
+                            k_loss +=  ss_loss
                             #print(k_loss)
                             # print('no biases just weights')
                             # pdb.set_trace()
 
-                        
+                           # print(f' this is the quadratic penalty during training{ss_loss}')
+                            #print(f'this is k_loss {k_loss}')
 
 
         
@@ -402,14 +410,14 @@ class Trainer:
                             if self.args.ff_bias:
                                 self.net.M_u.bias.grad = self.P_u @ self.net.M_u.bias.grad
                                 self.net.M_ro.bias.grad = self.P_z @ self.net.M_ro.bias.grad
-                        elif self.args.swt:
-                            # keeping sensory and output weights constant after learning first task
-                            #this is important we need this for implementation
-                            self.net.M_u.weight.grad[:,:self.args.L] = 0
-                            self.net.M_ro.weight.grad[:] = 0
-                            if self.args.ff_bias:
-                                self.net.M_u.bias.grad[:] = 0
-                                self.net.M_ro.bias.grad[:] = 0
+                        # elif self.args.swt:
+                        #     # keeping sensory and output weights constant after learning first task
+                        #     #this is important we need this for implementation
+                        #     self.net.M_u.weight.grad[:,:self.args.L] = 0
+                        #     self.net.M_ro.weight.grad[:] = 0
+                        #     if self.args.ff_bias:
+                        #         self.net.M_u.bias.grad[:] = 0
+                        #         self.net.M_ro.bias.grad[:] = 0
                             
                 k_loss = 0.
                 self.net.reservoir.x = self.net.reservoir.x.detach() #why do we do detach this
@@ -446,8 +454,7 @@ class Trainer:
 
         else:
             #run trial computes trial loss and the gradients for a single trial 
-            trial_loss, etc = self.run_trial(x, y, trial, extras=True, cs=cs, gate_layers=self.args.gate_layers)
-        
+            trial_loss, etc = self.run_trial(x, y, trial, extras=True)
         #computes trial loss and the gradients for the updates
 
 
@@ -496,6 +503,7 @@ class Trainer:
 
         return loss, etc
 
+
     # helper function for sequential training, for testing performance on all tasks
     def test_tasks(self, ids, cs=None, train_idx= None):
         #computes the test losses for each task and appends them to a list losses which will be as long as the number of tasks.
@@ -518,6 +526,7 @@ class Trainer:
 
     def update_P(self, S, states):
         S_new = torch.einsum('ijk,ilk->jl',states,states) / states.shape[0] / states.shape[2]
+        print(states)
         S_avg = (S * self.train_idx + S_new) / (self.train_idx + 1)
         alpha = 1e-3
         P = torch.inverse(S_avg / alpha + torch.eye(S_avg.shape[0]))
@@ -743,6 +752,20 @@ class Trainer:
                     if self.args.sequential and self.args.xdg:
                         test_loss, test_etc = self.test(cs =cs, gate_layers= self.args.gate_layers, train_idx = self.train_idx)
 
+                        
+                        
+
+                        #code to check that the percentage of units that actually gated is indeed the X we input at the start:
+                        print(etc['vs'][:,:,-1])
+                        print(etc['us'].size())
+                        #size is [1,10,600] so a list of length 600 of 1x10 tensors - we'll take the last one
+
+                        num_gated = (torch.sum(etc['vs'][:,:,-1].detach()==0)+torch.sum(etc['us'][:,:,-1].detach()==0))
+
+
+                        print(f'percentage of units gated: { num_gated/(self.args.D1+self.args.D2)}*100')
+                        
+
                     else:
                         test_loss, test_etc = self.test()
 
@@ -856,8 +879,8 @@ class Trainer:
                         logging.info(f'...moving on to task {self.train_idx}.')
                         self.train_loader = self.train_loaders[self.args.train_order[self.train_idx]]
                         #new train loader for new task 
-                        self.test_loader = self.test_loaders
-                        [self.args.train_order[self.train_idx]]
+
+                        self.test_loader = self.test_loaders[self.args.train_order[self.train_idx]]
                         #test loader for new task
                         running_min_error = float('inf')
                         running_no_min = 0
