@@ -91,6 +91,8 @@ class M2Net(nn.Module):
                 if self.args.sequential and hasattr(self.args, 'xdg') and self.args.xdg:
                     #weights from context signal(defined below) to u, context signal to x and cs to optional layer v (u done here, x and v are done below
                     self.M_u_cs=nn.Linear(self.args.T, D1, bias=self.args.cs_bias)
+                    
+                    self.M_u = nn.Linear(self.args.L + self.args.T, D1, bias=self.args.ff_bias)
 
             
 
@@ -244,7 +246,7 @@ class M2Net(nn.Module):
                         v = self.reservoir(u, cs=cs, extras=False)
                         with torch.no_grad():
                             for idx in v_gate_idxs:
-                                v[0][idx[1]]
+                                v[0][idx[1]]=0 
 
                 else: #not gating v but use context signal
                     if extras:
@@ -256,14 +258,11 @@ class M2Net(nn.Module):
 
             else:
                 u = self.m1_act(self.M_u(o))
-        if extras:
-            v, etc = self.reservoir(u, cs=cs, extras=True)
-        else:
-            v = self.reservoir(u, cs=cs, extras=False)
+                if extras:
+                        v, etc = self.reservoir(u, extras=True)
+                else:
+                        v = self.reservoir(u, extras=False)
         
-        
-
-
 
         z = self.M_ro(self.m2_act(v))
         self.z = self.out_act(z)
