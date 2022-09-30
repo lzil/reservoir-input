@@ -304,26 +304,31 @@ def get_criteria(args):
 
 
                 if t_ix + t.shape[-1] <= length:
-                    #so if we specify a valid truncate index (value)
-                    #by valid we mean one that actually activates truncation i.e. if t_ix positive this condition is False, the next one i
-                    #if we specify t_ix =0, t.shape[-1] will equal length task length (by def)
-                    #and so we won't truncate
 
-                    #if we specify a negative truncate index which doesn't make sense, this condition ensures that no truncating happens and code runs anyway
+                    #for now(as in on 7 April 2022): t_ix will be 0 bc no truncation for BPTT for now  and so t.shape[-1] will be equal to length
+
+                        #can ignore these comments for now we'll read them over later 
+                        #so if we specify a valid truncate index (value)
+                        #by valid we mean one that actually activates truncation i.e. if t_ix positive this condition is False, the next one i
+                        #if we specify t_ix =0, t.shape[-1] will equal length task length (by def)
+                        #and so we won't truncate
+
+                        #if we specify a negative truncate index which doesn't make sense, this condition ensures that no truncating happens and code runs anyway
 
 
 
-                    #this looks to be the condition that, if satisfied, means we do 'regular' BPTT rather than truncated BPTT see below
-                    #t.shape[-1]is last element of the shape tuple for a target i.e. which is the "length" of the trial # for RSG this is t_len
-                    #length also looks to contain t_len (will know for sure once we figure out what i[j] holds)
-                    #so if t_ix + t_len is <= length then we do regular BPTT it seems (confirm?)
-                    #and length= t_len in this case, and if we call
-                    #this MSE function with t_ix gt 0 we get truncated bptt vs if we call it with t_ix =0 we get normal bptt
-                    #bc in this case, I think that t_ix will equal length
+                        #this looks to be the condition that, if satisfied, means we do 'regular' BPTT rather than truncated BPTT see below
+                        #t.shape[-1]is last element of the shape tuple for a target i.e. which is the "length" of the trial # for RSG this is t_len
+                        #length also looks to contain t_len (will know for sure once we figure out what i[j] holds)
+                        #so if t_ix + t_len is <= length then we do regular BPTT it seems (confirm?)
+                        #and length= t_len in this case, and if we call
+                        #this MSE function with t_ix gt 0 we get truncated bptt vs if we call it with t_ix =0 we get normal bptt
+                        #bc in this case, I think that t_ix will equal length
                     
                     #now we use our loss function on a *single* training case: t[j] is a jth target vector and o[j] is jth produced vector 
                     #loss on a time-series training case
                     loss += fn(t[j], o[j])# / length
+                    #sum up the MSE losses for the single trial i.e. the MSE loss between a target trajectory and the model trajectory for the in
                     
                 
                 elif t_ix < length:

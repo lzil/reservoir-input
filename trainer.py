@@ -394,7 +394,7 @@ class Trainer:
                 trial_loss += k_loss.detach().item()
                 #k_loss.detach() returns a new tensor, detached from the current graph. The result will never require gradients
                 #computation graphs with andrew ng might be important
-                #why do we want this: because again we're doing something to the loss function that isn't part of the mathematical definition of the network and so we don't want this operation to be part of the computational graph through which we backprop (see colah's blog on backprop)
+                #why do we want this: because again we're doing something (namely summing the losses) to compute the total loss. This summing isn't part of the mathematical definition of the network and so we don't want this operation to be part of the computational graph through which we backprop (see colah's blog on backprop)
                  
                 if training:
                     
@@ -499,7 +499,7 @@ class Trainer:
             'vs': etc['vs'].detach(),
             'outs': etc['outs'].detach()
         }
-        
+        #
 
         return loss, etc
 
@@ -526,11 +526,30 @@ class Trainer:
 
     def update_P(self, S, states):
         S_new = torch.einsum('ijk,ilk->jl',states,states) / states.shape[0] / states.shape[2]
-        print(states)
-        S_avg = (S * self.train_idx + S_new) / (self.train_idx + 1)
+
+        #S_new_2 #delete this line once done checking
+       
+        S_avg = (S * self.train_idx + S_new) / (self.train_idx + 1) #the cov. matrix update
+
         alpha = 1e-3 
         P = torch.inverse(S_avg / alpha + torch.eye(S_avg.shape[0]))
         return P, S_avg
+
+    #Paul OWM
+
+    #def update_proj(self, S, states):
+        # S is the previous total covariance matrix
+        #S_new is the covariance matrix for the kth task
+        #states refer are the inputs seen /output generated during tested
+        
+
+
+
+
+
+
+
+
 
     def train(self, ix_callback=None):
         #this is where we actually train using train-iteration 
@@ -545,6 +564,7 @@ class Trainer:
         # for OWM
         if self.args.owm:
             #initialise the covariance matrices for training 
+            #equivalent to initialising the projection matrices to identity matrices for first task
             S_s = 0
             S_u = 0
             S_v = 0
@@ -769,6 +789,8 @@ class Trainer:
 
                     else:
                         test_loss, test_etc = self.test()
+                        print(test_etc['ins'][0,0,:].size())
+                        
 
 
                     log_arr = [
@@ -793,10 +815,11 @@ class Trainer:
                     # if doing OWM-like updates, do them here
                     if self.args.sequential and test_loss < self.args.seq_threshold:
                         #args.seq_threshold 
-                        #when training sequentially we move onto next tasks as soon as test_loss is less than args.seq_threshold which has default value 5   
+                        #when training sequentially we move onto next task as soon as test_loss is less than args.seq_threshold which has default value 5   
                         logging.info(f'Successfully trained task {self.train_idx}...')
                         
                         losses = self.test_tasks(ids=range(self.train_idx + 1))
+
                         for i, loss in losses:
                             logging.info(f'...loss on task {i}: {loss:.3f}')
 
@@ -804,7 +827,7 @@ class Trainer:
                         if self.args.owm:
                             # 0th dimension is test batch size, 2nd dimension is number of timesteps
                             # 1st dimension is the actual vector representation
-                            self.P_s, S_s = self.calc_P(S_s, test_etc['ins'])
+                            self.P_s, S_s = self.update_P(S_s, test_etc['ins'])
                             #notice it's this idea of the online update where we don't need to keep the entire record but only the result of the last S and then we increment it using test_etc['ins']
                             #equation (3) on page 4 of paper - calculation of the covariance matrix S (I think) and the projection matrix P
                             self.P_u, S_u = self.update_P(S_u, test_etc['us'])

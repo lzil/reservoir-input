@@ -95,6 +95,7 @@ class RSG(Task):
         # noisy up/down corruption
         if args is not None and args.x_noise != 0:
             x = corrupt_x(args, x)
+
         return x
 
     def get_y(self, args=None):
@@ -663,6 +664,8 @@ if __name__ == '__main__':
 
             trial = samples[i]
             trial_x = trial.get_x()
+            
+            
             trial_y = trial.get_y()
 
             if t_type in [RSG, CSG]:

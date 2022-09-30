@@ -89,13 +89,13 @@ def parse_args():
     # synaptic stabilization
     parser.add_argument('--ss', action='store_true', help='use synaptic stabilization')
     #we're only doing ss for units in u layer for now but we'll extend it to the v units and x units later as we did for xdg
-    parser.add_argument('--stabilize_layers', type=str, default='u', help='the hidden layers of the net in which to apply the synaptic stabilization') #later make default ['u', v;u]
+    parser.add_argument('--stabilize_layers', type=str, default='u', help='the hidden layers of the net in which to apply the synaptic stabilization') #later make default ['u', 'v']
     parser.add_argument('--c_strength', type=float, default=0.5, help= 'stabilization strength')
-    parser.add_argument('-ss_type', type=str, default='SI', choices=['SI', 'EWC'], help= 'choices for synaptic stabilization; default is synaptic intelligence')
+    parser.add_argument('--ss_type', type=str, default='SI', choices=['SI', 'EWC'], help= 'choices for synaptic stabilization; default is synaptic intelligence')
     parser.add_argument('-C', type=float, default=0.0055,  help='damping term for synaptic intelligence')
     #after we experiment with different c (C) values, make the optimal-for-default-net-arguments c (C) the default,
 
-    #so we'll include a part of code that starts 'if ss and xdg:' to combine the two approaches
+    #to run ss and xdg together simply go: --ss --xdg
 
     #note to self: context dependent gating means context signal as done in Masse and gating with X chosen below
     # context dependent gating (XdG)
@@ -103,7 +103,7 @@ def parse_args():
 
     parser.add_argument('--cs_bias', action='store_true', help='bias in context signal part of the network, with M_u_cs, M_x_cs, M_v_cs')
     
-    parser.add_argument('--X', type=float, default=80, help= "gating the activity of X percent of hidden units for each task, chosen randomly")
+    parser.add_argument('--X', type=float, default=50, help= "gating the activity of X percent of hidden units for each task, chosen randomly")
     #context signal is implemented in network.py just as net_fb is 
     parser.add_argument('--gate_layers', type=str, default=['u','v'], help='the hidden layers of the net in which to apply the gating')
     
