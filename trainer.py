@@ -528,7 +528,7 @@ class Trainer:
         S_new = torch.einsum('ijk,ilk->jl',states,states) / states.shape[0] / states.shape[2]
         print(states)
         S_avg = (S * self.train_idx + S_new) / (self.train_idx + 1)
-        alpha = 1e-3
+        alpha = 1e-3 
         P = torch.inverse(S_avg / alpha + torch.eye(S_avg.shape[0]))
         return P, S_avg
 
@@ -544,6 +544,7 @@ class Trainer:
 
         # for OWM
         if self.args.owm:
+            #initialise the covariance matrices for training 
             S_s = 0
             S_u = 0
             S_v = 0
@@ -756,14 +757,14 @@ class Trainer:
                         
 
                         #code to check that the percentage of units that actually gated is indeed the X we input at the start:
-                        print(etc['vs'][:,:,-1])
-                        print(etc['us'].size())
+                        #print(etc['vs'][:,:,-1])
+                        #print(etc['us'].size())
                         #size is [1,10,600] so a list of length 600 of 1x10 tensors - we'll take the last one
 
                         num_gated = (torch.sum(etc['vs'][:,:,-1].detach()==0)+torch.sum(etc['us'][:,:,-1].detach()==0))
 
 
-                        print(f'percentage of units gated: { num_gated/(self.args.D1+self.args.D2)}*100')
+                        print(f'percentage of units gated: { num_gated/(self.args.D1+self.args.D2)*100}%')
                         
 
                     else:
@@ -804,6 +805,8 @@ class Trainer:
                             # 0th dimension is test batch size, 2nd dimension is number of timesteps
                             # 1st dimension is the actual vector representation
                             self.P_s, S_s = self.calc_P(S_s, test_etc['ins'])
+                            #notice it's this idea of the online update where we don't need to keep the entire record but only the result of the last S and then we increment it using test_etc['ins']
+                            #equation (3) on page 4 of paper - calculation of the covariance matrix S (I think) and the projection matrix P
                             self.P_u, S_u = self.update_P(S_u, test_etc['us'])
                             self.P_v, S_v = self.update_P(S_v, test_etc['vs'])
                             self.P_z, S_z = self.update_P(S_z, test_etc['outs'])
