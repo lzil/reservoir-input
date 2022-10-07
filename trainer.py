@@ -366,14 +366,16 @@ class Trainer:
 
 
                             # to edit: define loss function using criteria in helpers .py as Liang did (an example can be found direcly above)
-                            k_loss += c_strength*torch.sum(big_omega_M_u_weights* torch.square(self.net.M_u - M_u_prev)) + c_strength *torch.sum(big_omega_M_ro* torch.square(self.net.M_ro - M_ro_prev))
+                            with torch.no_grad():
+                                k_loss += c_strength*torch.sum(big_omega_M_u_weights* torch.square(self.net.M_u.weight - M_u_weights_prev)) + c_strength *torch.sum(big_omega_M_ro* torch.square(self.net.M_ro.weight - M_ro_prev))
 
                         else: 
-
-                            ss_loss= c_strength*torch.sum(big_omega_M_u_weights * torch.square(self.net.M_u.weight - M_u_weights_prev)) + c_strength *torch.sum(big_omega_M_ro_weights* torch.square(self.net.M_ro.weight - M_ro_weights_prev))
+                            with torch.no_grad():
+                                ss_loss= c_strength*torch.sum(big_omega_M_u_weights * torch.square(self.net.M_u.weight - M_u_weights_prev)) + c_strength *torch.sum(big_omega_M_ro_weights* torch.square(self.net.M_ro.weight - M_ro_weights_prev)) 
+                                k_loss +=  ss_loss
 
                             
-                            k_loss +=  ss_loss
+                           
                             #print(k_loss)
                             # print('no biases just weights')
                             # pdb.set_trace()
