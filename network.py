@@ -139,120 +139,119 @@ class M2Net(nn.Module):
 
 
                #train_idx
-                gate_pool_loading_bay=[]
-                for layer in gate_layers: 
+               with torch.no_grad():
+                   gate_pool_loading_bay=[]
+                   for layer in gate_layers: 
                     #i.e. (for i in ['u','v'])
-                #we want a list of all of us indices [ ('u', [0,0]),..., ('u', [0,D1-1] ) (D1-1 bc zero-indexing) and a list of all of vs in indices
-                #[('v',[0,0]),..., ('v', [0, D2-1])]
-                    if layer == 'u':
-                        u_idxs = [ (layer, [0,i])  for i in range(self.args.D1)]
-                        #print(u_idxs)
-                        gate_pool_loading_bay.append(u_idxs)
-                    elif layer =='v':
-                        v_idxs = [ (layer, [0,i]) for i in range(self.args.D2)]
-                        gate_pool_loading_bay.append(v_idxs)
-                    else:
-                        x_idxs = [ (layer, [0,i]) for i in range(self.args.N)]
-                        gate_pool_loading_bay.append(x_idxs)
+                    # #we want a list of all of us indices [ ('u', [0,0]),..., ('u', [0,D1-1] ) (D1-1 bc zero-indexing) and a list of all of vs in indices#[('v',[0,0]),..., ('v', [0, D2-1])]
+                        if layer == 'u':
+                            u_idxs = [ (layer, [0,i])  for i in range(self.args.D1)]
+                            #print(u_idxs)
+                            gate_pool_loading_bay.append(u_idxs)
+                        elif layer =='v':
+                            v_idxs = [ (layer, [0,i]) for i in range(self.args.D2)]
+                            gate_pool_loading_bay.append(v_idxs)
+                        else:
+                            x_idxs = [ (layer, [0,i]) for i in range(self.args.N)]
+                            gate_pool_loading_bay.append(x_idxs)
                         
-                #print(f'this is the loading bay:{gate_pool_loading_bay}')
-
-                
-                #then concatenate lists, result is our gating pool so assign to variable called gate_pool
-
-                
-                gate_pool = [layer_idx for layer_idx_list in gate_pool_loading_bay for layer_idx in layer_idx_list]
-                #https://stackoverflow.com/questions/952914/how-to-make-a-flat-list-out-of-a-list-of-lists
+                        gate_pool = [layer_idx for layer_idx_list in gate_pool_loading_bay for layer_idx in layer_idx_list]
+                    
+                    
+                    #print(f'this is the loading bay:{gate_pool_loading_bay}')
+                    # #then concatenate lists, result is our gating pool so assign to variable called gate_pool
+                    #https://stackoverflow.com/questions/952914/how-to-make-a-flat-list-out-of-a-list-of-lists
                 
                 
 
-                #then calculate m using args.X
-                # m = len(gate_pool)*X/100 
+                    #then calculate m using args.X
+                    # m = len(gate_pool)*X/100 
                     # note m isn't necessarily going to be an integer so need to convert it
-                m= len(gate_pool)*self.args.X/100
+                        m= len(gate_pool)*self.args.X/100
                 
-                #m is the number of units to select (from all units in network that are in gate layers) and gate so that X% of network is gated for any one task 
-                #note 
+                    #m is the number of units to select (from all units in network that are in gate layers) and gate so that X% of network is gated for any one task 
+                    #note 
 
 
-                #then choose m things randomly from gate pool for each task: 
-                #note to self for one task we want to choose randomly the same m units each time. 
-                
-
-
-                #we want the random sample to be the same each time until train_idx changes (so that for a particular train_idx the gated units are the same every time we call the net) so need to set the same seed and have it change only when we move to the next task
-
-                random.seed(train_idx)
-                #print(f'train_idx is {train_idx}')
-                gated_units = random.sample(gate_pool, k=round(m))
-                # .sample bc we want to sample without replacement as opposed .choice
-                #print(f'these are my gated units {gated_units}')
-                #from these m units the ones with 'u' labels to index the us for gating
-                #and the ones with 'v' labels to select the vs for gating: 
-                #note u is a tensor with shape [1,D1], v is a tensor with shape [1,D2]
-
-                u_gate_idxs = []
-                v_gate_idxs = []
-                x_gate_idxs = []
-
-                for layer, idx in gated_units:
-                    #print(f'{layer,idx}')
-
-                    if layer == 'u': 
-                        u_gate_idxs.append(idx)
-                    elif layer == 'v':
-                        v_gate_idxs.append(idx)
-                    else:
-                        x_gate_idxs.append(idx)
-                
-                #print(f'these are the u_gate_idx{u_gate_idxs}')
-                #print(f'these are the v_gate_idx{v_gate_idxs}')
-                #print(f'these are the x_gate_idx{x_gate_idxs}')
+                    #then choose m things randomly from gate pool for each task: 
+                    #note to self for one task we want to choose randomly the same m units each time. 
                 
 
-                if 'u' in gate_layers: #i.e. if we said that we want to gate units in u
-                    #do gating for u:
-                    u=self.m1_act(self.M_u(o)+ self.M_u_cs(cs))
-                    with torch.no_grad():
-                        #use torch.no_grad context manager because we don't want the gating to be recorded in calculation of the gradient
-                        #print(f'this is u: {u}')
+
+                    #we want the random sample to be the same each time until train_idx changes (so that for a particular train_idx the gated units are the same every time we call the net) so need to set the same seed and have it change only when we move to the next task
+
+                        random.seed(train_idx)
+                    #print(f'train_idx is {train_idx}')
+                        gated_units = random.sample(gate_pool, k=round(m))
+                    # .sample bc we want to sample without replacement as opposed .choice
+                    #print(f'these are my gated units {gated_units}')
+                    #from these m units the ones with 'u' labels to index the us for gating
+                    #and the ones with 'v' labels to select the vs for gating: 
+                    #note u is a tensor with shape [1,D1], v is a tensor with shape [1,D2]
+
+                        u_gate_idxs = []
+                        v_gate_idxs = []
+                        x_gate_idxs = []
+
+                        for layer, idx in gated_units:
+                            #print(f'{layer,idx}')
+
+                            if layer == 'u': 
+                                u_gate_idxs.append(idx)
+                            elif layer == 'v':
+                                v_gate_idxs.append(idx)
+                            else:
+                                x_gate_idxs.append(idx)
+                
+                    #print(f'these are the u_gate_idx{u_gate_idxs}')
+                    #print(f'these are the v_gate_idx{v_gate_idxs}')
+                    # print(f'these are the x_gate_idx{x_gate_idxs}')
+                
+
+                        if 'u' in gate_layers: #i.e. if we said that we want to gate units in u
+                        #do gating for u:
+                            u=self.m1_act(self.M_u(o)+ self.M_u_cs(cs))
+                            with torch.no_grad():
+                            #use torch.no_grad context manager because we don't want the gating to be recorded in calculation of the gradient
+                            #print(f'this is u: {u}')
                         
-                        for idx in u_gate_idxs:
-                            u[0][idx[1]]=0
-                            # u is matrix with shape [1,50], want the first row and 
+                                for idx in u_gate_idxs:
+                                    u[0][idx[1]]=0
+                                    # u is matrix with shape [1,50], want the first row and 
                             
                 
 
                     
 
-                else: #context signal for u but don't gate it 
-                    u=self.m1_act(self.M_u(o)+ self.M_u_cs(cs))
-                #print(f'check if us are gated: {u}')
+                        else: #context signal for u but don't gate it 
+                            u=self.m1_act(self.M_u(o)+ self.M_u_cs(cs))
+                            #print(f'check if us are gated: {u}')
                 
                 
 
 
-                if 'v' in gate_layers:
-                    #do gating for both 
+                        if 'v' in gate_layers:
+                            #do gating for both 
                     
-                    if extras:
-                        v, etc = self.reservoir(u, cs=cs, extras=True)
-                        with torch.no_grad():
-                            for idx in v_gate_idxs:
-                                v[0][idx[1]]=0
+                            if extras:
+                                v, etc = self.reservoir(u, cs=cs, extras=True)
+                                with torch.no_grad():
+                                    for idx in v_gate_idxs:
+                                        v[0][idx[1]]=0
                             
                         
-                    else:
-                        v = self.reservoir(u, cs=cs, extras=False)
-                        with torch.no_grad():
-                            for idx in v_gate_idxs:
-                                v[0][idx[1]]=0 
+                            else:
+                                v = self.reservoir(u, cs=cs, extras=False)
+                                with torch.no_grad():
+                                    for idx in v_gate_idxs:
+                                        v[0][idx[1]]=0 
 
-                else: #not gating v but use context signal
-                    if extras:
-                        v, etc = self.reservoir(u, cs=cs, extras=True)
-                    else:
-                        v = self.reservoir(u, cs=cs, extras=False)
+                        else: 
+                            #not gating v but use context signal
+                            if extras:
+                                v, etc = self.reservoir(u, cs=cs, extras=True)
+                            else:
+                                v = self.reservoir(u, cs=cs, extras=False)
 
                 #print(f'check if vs are gated: {v}')
 
@@ -286,6 +285,7 @@ class M2Reservoir(nn.Module):
 
         if self.args.res_seed is None:
             self.args.res_seed = random.randrange(1e6)
+
         if self.args.res_x_seed is None:
             self.args.res_x_seed = np.random.randint(1e6)
 
