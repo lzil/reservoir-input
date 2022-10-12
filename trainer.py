@@ -119,13 +119,11 @@ class Trainer:
         self.not_train_params = []
         logging.info('Training the following parameters:')
 
-        #if xdg, train weights from context signal to hidden units so add M_u_cs, M_v_cs and M_x_cs to train_parts:
+        
 
-        if self.args.sequential and self.args.xdg:
-            args.train_parts.append('M_u_cs')
-            args.train_parts.append('M_x_cs')
-            args.train_parts.append('M_v_cs')
-            
+
+        #Masse et al don't use a context signal on the rnn just xdg and ss
+        
         #print(self.net.named_parameters)
         #print(args.train_parts)
         for k,v in self.net.named_parameters():
@@ -243,7 +241,7 @@ class Trainer:
                 #open the file and dump the samples in 
 
     # runs an iteration where we want to match a certain trajectory
-    def run_trial(self, x, y, trial, training=True, extras=False, cs = None, gate_layers= None, train_idx=None,c_strength=None, damp_c=None, big_omega_M_u_weights = None, big_omega_M_ro_weights=None,big_omega_M_u_biases=None, big_omega_M_ro_biases= None, M_u_weights_prev=None,M_ro_weights_prev=None, M_u_biases_prev =None, M_ro_biases_prev=None):
+    def run_trial(self, x, y, trial, training=True, extras=False, gate_layers= None, train_idx=None,c_strength=None, damp_c=None, big_omega_M_u_weights = None, big_omega_M_ro_weights=None,big_omega_M_u_biases=None, big_omega_M_ro_biases= None, M_u_weights_prev=None,M_ro_weights_prev=None, M_u_biases_prev =None, M_ro_biases_prev=None):
         #this is for a single trial(a single task object i.e. a single training case) which we input in line above
         #trial a.k.a info is the task object a particular instantiation from the class definitions in tasks.py
         #it tells us which task we're doing which is NB because it tells us what the x and y present 
@@ -293,7 +291,7 @@ class Trainer:
             #the input at time j
             #print(f'what is net_in ? {net_in}')
             if self.args.sequential and self.args.xdg:
-                net_out, etc = self.net(net_in, cs = cs, gate_layers= self.args.gate_layers, train_idx = self.train_idx, extras = True) 
+                net_out, etc = self.net(net_in, gate_layers= self.args.gate_layers, train_idx = self.train_idx, extras = True) 
                 
 
 
@@ -438,19 +436,19 @@ class Trainer:
             return trial_loss, etc
         return trial_loss
 
-    def train_iteration(self, x, y, trial, ix_callback=None,  cs=None, gate_layers=None, train_idx =None, damp_c=None, c_strength=None, big_omega_M_u_weights = None, big_omega_M_ro_weights=None, big_omega_M_u_biases=None, big_omega_M_ro_biases= None, M_u_weights_prev=None, M_ro_weights_prev=None, M_u_biases_prev =None, M_ro_biases_prev=None):
+    def train_iteration(self, x, y, trial, ix_callback=None, gate_layers=None, train_idx =None, damp_c=None, c_strength=None, big_omega_M_u_weights = None, big_omega_M_ro_weights=None, big_omega_M_u_biases=None, big_omega_M_ro_biases= None, M_u_weights_prev=None, M_ro_weights_prev=None, M_u_biases_prev =None, M_ro_biases_prev=None):
         self.optimizer.zero_grad()#put back to zero the gradients bc we want to use the new ones for the trial
 
         #if self.args.sequential and self.args.ss and self.args.xdg:
             #and then elif for the statement below
 
         if self.args.sequential and self.args.xdg and self.args.ss:
-            trial_loss, etc = self.run_trial(x, y, trial, extras=True, cs=cs, gate_layers=self.args.gate_layers, train_idx= self.train_idx, c_strength=c_strength, big_omega_M_u_weights = big_omega_M_u_weights, big_omega_M_ro_weights=big_omega_M_ro_weights, big_omega_M_u_biases=big_omega_M_u_biases, big_omega_M_ro_biases= big_omega_M_ro_biases, M_u_weights_prev=M_u_weights_prev, M_ro_weights_prev=M_ro_weights_prev, M_u_biases_prev =M_u_biases_prev, M_ro_biases_prev=M_ro_biases_prev)
+            trial_loss, etc = self.run_trial(x, y, trial, extras=True, gate_layers=self.args.gate_layers, train_idx= self.train_idx, c_strength=c_strength, big_omega_M_u_weights = big_omega_M_u_weights, big_omega_M_ro_weights=big_omega_M_ro_weights, big_omega_M_u_biases=big_omega_M_u_biases, big_omega_M_ro_biases= big_omega_M_ro_biases, M_u_weights_prev=M_u_weights_prev, M_ro_weights_prev=M_ro_weights_prev, M_u_biases_prev =M_u_biases_prev, M_ro_biases_prev=M_ro_biases_prev)
 
 
         elif self.args.sequential and self.args.xdg:
 
-            trial_loss, etc = self.run_trial(x, y, trial, extras=True, cs=cs, gate_layers=self.args.gate_layers, train_idx= self.train_idx)
+            trial_loss, etc = self.run_trial(x, y, trial, extras=True, gate_layers=self.args.gate_layers, train_idx= self.train_idx)
 
         
 
@@ -473,7 +471,7 @@ class Trainer:
         }
         return trial_loss, etc
 
-    def test(self, cs=None, gate_layers= None, train_idx = None, c_strength=None, big_omega_M_u_weights = None, big_omega_M_ro_weights=None, big_omega_M_u_biases=None, big_omega_M_ro_biases= None, M_u_weights_prev=None, M_ro_weights_prev=None, M_u_biases_prev =None, M_ro_biases_prev=None):
+    def test(self, gate_layers= None, train_idx = None, c_strength=None, big_omega_M_u_weights = None, big_omega_M_ro_weights=None, big_omega_M_u_biases=None, big_omega_M_ro_biases= None, M_u_weights_prev=None, M_ro_weights_prev=None, M_u_biases_prev =None, M_ro_biases_prev=None):
         with torch.no_grad():
             #note since we're in a no_grad, make sure that you're not running code in the environment that's going to try to compute gradients here bc no gradients are being 'recorded'
             x, y, trials = next(iter(self.test_loader))
@@ -488,10 +486,10 @@ class Trainer:
             
 
             if self.args.sequential and self.args.xdg:
-                loss, etc = self.run_trial(x, y, trials, training=False, cs =cs, gate_layers= self.args.gate_layers, train_idx = self.train_idx ,extras=True)
+                loss, etc = self.run_trial(x, y, trials, training=False, gate_layers= self.args.gate_layers, train_idx = self.train_idx ,extras=True)
 
             else:
-                loss, etc = self.run_trial(x, y, trials, training=False, cs =cs, extras=True) 
+                loss, etc = self.run_trial(x, y, trials, training=False, extras=True) 
 
 
         etc = {
@@ -507,7 +505,7 @@ class Trainer:
 
 
     # helper function for sequential training, for testing performance on all tasks
-    def test_tasks(self, ids, cs=None, train_idx= None):
+    def test_tasks(self, ids, train_idx= None):
         #computes the test losses for each task and appends them to a list losses which will be as long as the number of tasks.
         #the each element of the list is a tuple (task integer id, loss for that task)
         #ids is a list of the task ids(just integers) [0,1,2,.., r-1]  if r tasks of the tasks we're training on 
@@ -519,7 +517,7 @@ class Trainer:
             #and then elif for the statement below
 
             if self.args.sequential and self.args.xdg:
-                loss, _ = self.test(cs=cs, gate_layers=self.args.gate_layers, train_idx= self.args.train_idx)
+                loss, _ = self.test(gate_layers=self.args.gate_layers, train_idx= self.args.train_idx)
             else:
                 loss, _ = self.test()
             losses.append((i, loss))
@@ -651,28 +649,20 @@ class Trainer:
 
                 
 
-                # if doing xdg, create intialize and context signal - one hot vector with 1 in first entry, 0 in the rest bc it's for the first task.
-                #for now the context signal is only used when doing xdg 
-                #NB: cs has to be a parameter for any function that uses the forward pass of the network bc if doing xdg (args.xdg), in network.py cs becomes a parameter for the net that needs to be not None. 
+                
 
-                if self.args.sequential and self.args.xdg:
+                #if self.args.sequential and self.args.xdg:
                     #context signal 
-                    cs = torch.zeros((1, self.args.T))
-                    cs[0, self.train_idx] = 1
-                    #context dependent gating 
-                    #pool of units to be gated
-                    #print(self.args.gate_layers)
+        
                     #args.gate_layers is assigned ['u', 'v'] by default:
-                    gate_layers=self.args.gate_layers
+                    #gate_layers=self.args.gate_layers
 
                     # number of units to gate (selected randomly) so that only (1-X)% of units are active for any task 
                     #m=args.*len(gate_pool)
-                else:
-                    #this line isn't really necessary because cs will be None by default in all the functions.
-                    cs=None
+               
 
-
-                if self.args.sequential and self.args.xdg and self.args.ss:
+                #synaptic stabilization
+                if self.args.sequential and self.args.ss:
                     if self.args.ss_type == 'SI':
                         #weights before training step so that we can calculate the change in weights brought about by a single train_iteration ( the t variable for number of batches in Masse paper methods)
                         with torch.no_grad():
@@ -683,7 +673,7 @@ class Trainer:
                                 M_ro_bf_biases = self.net.M_u.weight.data
 
                         if self.args.ff_bias:
-                            iter_loss, etc = self.train_iteration(x, y, info, ix_callback=ix_callback, cs=cs, gate_layers= self.args.gate_layers, c_strength = c_strength, big_omega_M_u_weights = big_omega_M_u_weights, big_omega_M_ro_weights=big_omega_M_ro_weights,big_omega_M_u_biases=big_omega_M_u_biases, big_omega_M_ro_biases= big_omega_M_ro_biases, M_u_weights_prev=M_u_weights_prev, M_ro_weights_prev=M_ro_weights_prev, M_u_biases_prev =M_u_biases_prev, M_ro_biases_prev=M_ro_biases_prev)
+                            iter_loss, etc = self.train_iteration(x, y, info, ix_callback=ix_callback, gate_layers= self.args.gate_layers, c_strength = c_strength, big_omega_M_u_weights = big_omega_M_u_weights, big_omega_M_ro_weights=big_omega_M_ro_weights,big_omega_M_u_biases=big_omega_M_u_biases, big_omega_M_ro_biases= big_omega_M_ro_biases, M_u_weights_prev=M_u_weights_prev, M_ro_weights_prev=M_ro_weights_prev, M_u_biases_prev =M_u_biases_prev, M_ro_biases_prev=M_ro_biases_prev)
 
                             with torch.no_grad():
                                 delta_M_u_weights += (self.net.M_u.weight.data - M_u_bf_weights)
@@ -706,7 +696,7 @@ class Trainer:
 
                         
                         else:
-                            iter_loss, etc = self.train_iteration(x, y, info, ix_callback=ix_callback, cs=cs, gate_layers= self.args.gate_layers, c_strength=c_strength,big_omega_M_u_weights = big_omega_M_u_weights, big_omega_M_ro_weights=big_omega_M_ro_weights,M_u_weights_prev=M_u_weights_prev, M_ro_weights_prev=M_ro_weights_prev)
+                            iter_loss, etc = self.train_iteration(x, y, info, ix_callback=ix_callback, gate_layers= self.args.gate_layers, c_strength=c_strength,big_omega_M_u_weights = big_omega_M_u_weights, big_omega_M_ro_weights=big_omega_M_ro_weights,M_u_weights_prev=M_u_weights_prev, M_ro_weights_prev=M_ro_weights_prev)
 
 
 
@@ -747,7 +737,7 @@ class Trainer:
 
 
                 else:
-                    iter_loss, etc = self.train_iteration(x, y, info, ix_callback=ix_callback, cs=cs, gate_layers= self.args.gate_layers)
+                    iter_loss, etc = self.train_iteration(x, y, info, ix_callback=ix_callback, gate_layers= self.args.gate_layers)
                 #print(self.net.M_u.weight-10*torch.ones(50,2)) 
                 #great can treat these .weight objects like matrices
                 #for synaptic intelligence need the differences in M_u and M_v  before and after each train iteration [so we're going to want to get the parameter values before the self.train_iteration above]
@@ -768,12 +758,12 @@ class Trainer:
                     train_loss = running_loss / self.log_interval
                     #if self.args.sequential and self.args.ss and self.args.xdg:
                         #if self.args.ff_bias:
-                            #test_loss, test_etc = self.test(cs=cs, gate_layers= self.args.gate_layers, c_strength = c_strength, big_omega_M_u_weights = big_omega_M_u_weights, big_omega_M_ro_weights=big_omega_M_ro_weights,big_omega_M_u_biases=big_omega_M_u_biases, big_omega_M_ro_biases= big_omega_M_ro_biases, M_u_weights_prev=M_u_weights_prev, M_ro_weights_prev=M_ro_weights_prev, M_u_biases_prev =M_u_biases_prev, M_ro_biases_prev=M_ro_biases_prev)
+                            #test_loss, test_etc = self.test(gate_layers= self.args.gate_layers, c_strength = c_strength, big_omega_M_u_weights = big_omega_M_u_weights, big_omega_M_ro_weights=big_omega_M_ro_weights,big_omega_M_u_biases=big_omega_M_u_biases, big_omega_M_ro_biases= big_omega_M_ro_biases, M_u_weights_prev=M_u_weights_prev, M_ro_weights_prev=M_ro_weights_prev, M_u_biases_prev =M_u_biases_prev, M_ro_biases_prev=M_ro_biases_prev)
                         #else:
-                            #test_loss, test_etc = self.test(cs=cs, gate_layers= self.args.gate_layers, c_strength=c_strength,big_omega_M_u_weights = big_omega_M_u_weights, big_omega_M_ro_weights=big_omega_M_ro_weights,M_u_weights_prev=M_u_weights_prev, M_ro_weights_prev=M_ro_weights_prev)
+                            #test_loss, test_etc = self.test(gate_layers= self.args.gate_layers, c_strength=c_strength,big_omega_M_u_weights = big_omega_M_u_weights, big_omega_M_ro_weights=big_omega_M_ro_weights,M_u_weights_prev=M_u_weights_prev, M_ro_weights_prev=M_ro_weights_prev)
 
                     if self.args.sequential and self.args.xdg:
-                        test_loss, test_etc = self.test(cs =cs, gate_layers= self.args.gate_layers, train_idx = self.train_idx)
+                        test_loss, test_etc = self.test(gate_layers= self.args.gate_layers, train_idx = self.train_idx)
 
                         
                         
@@ -843,10 +833,7 @@ class Trainer:
                         # done processing prior task, move on to the next one or quit
                         self.train_idx += 1 #this is us moving onto the next task
 
-                        # if doing XdG, update context signal
-                        if self.args.xdg:
-                            cs = torch.zeros((1, args.T))
-                            cs[0, self.train_idx] = 1
+                        
 
                         #if doing ss, update loss new loss function for new tasks
                         if self.args.ss:
