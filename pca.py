@@ -25,7 +25,7 @@ def main(args):
     if len(args.dataset) == 0:
         args.dataset = config.dataset
 
-    n_reps = 1000
+    n_reps = 100
     # don't show these contexts
     context_filter = []
 

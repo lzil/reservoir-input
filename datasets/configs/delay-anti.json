@@ -1,0 +1,19 @@
+{
+  "mode": "create",
+  "name": "delay-anti",
+  "config": null,
+  "t_type": "rsg",
+  "n_trials": 2000,
+  "task_args": [],
+  "intervals": null,
+  "angles": null,
+  "t_len": 600,
+  "p_len": 5,
+  "gain": 1,
+  "max_ready": 80,
+  "min_t": 20,
+  "max_t": 200,
+  "argv": "tasks.py create delay-anti",
+  "L": 1,
+  "Z": 1
+}

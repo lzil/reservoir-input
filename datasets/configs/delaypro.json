@@ -6,24 +6,11 @@
   "n_trials": 2000,
   "task_args": [],
   "intervals": null,
-  "angles": [
-    0.0,
-    30.0,
-    60.0,
-    90.0,
-    120.0,
-    150.0,
-    180.0,
-    210.0,
-    240.0,
-    270.0,
-    300.0,
-    330.0
-  ],
+  "angles": null,
   "t_len": 300,
   "fix_t": 50,
   "stim_t": 150,
-  "argv": "tasks.py create delaypro -t delay-pro --angles 0 30 60 90 120 150 180 210 240 270 300 330",
+  "argv": "tasks.py create delaypro -t delay-pro",
   "L": 3,
   "Z": 3
 }
