@@ -73,8 +73,13 @@ class M2Net(nn.Module):
             D1 = self.args.D1 if self.args.D1 != 0 else self.args.N
             D2 = self.args.D2 if self.args.D2 != 0 else self.args.N
             # net feedback into input layer
+            print(self.args)
+            #note net feeback is 'off' by default
             if hasattr(self.args, 'net_fb') and self.args.net_fb:
+            
                 self.M_u = nn.Linear(self.args.L + self.args.T + self.args.Z, D1, bias=self.args.ff_bias)
+                #adding the number of tasks args.T to facilitate the rule input
+                # we augment the sensory input with a rule input telling us which task is being done see OWM diagram with rule input
 
                 
                     
@@ -82,10 +87,35 @@ class M2Net(nn.Module):
                 self.M_u = nn.Linear(self.args.L + self.args.T, D1, bias=self.args.ff_bias)
                 #e.g T is the number of datasets
 
-
+            
 
             self.M_ro = nn.Linear(D2, self.args.Z, bias=self.args.ff_bias)
         self.reservoir = M2Reservoir(self.args)
+
+        #context signal weights must be trainable and shoulld always project to the hidden units 
+        #still need to create the context signal itself - I think this should be done in trainer 
+        if self.args.xdg: 
+            if D1 == 0: 
+                if D2 == 0: 
+                    self.M_cs = nn.Linear(self.args.T, self.args.N)
+                else:
+                    self.M_cs = nn.Linear(self.args.T, D2 + self.args.N)
+
+            elif D2 ==0:
+                if D1 == 0:
+                    #project context signal only to recurrent units
+                    self.M_cs = nn.Linear(self.args.T, self.args.N)
+                
+                else:
+                    #project context signal only to recurrent units and u 
+                    self.M_cs = nn.Linear(self.args.T, D1 + self.args.N)
+            
+            else:
+                self.M_cs = nn.Linear(self.args.T, D1 + D2+ self.args.N)
+
+
+
+
 
         # load params for reservoir if they exist
         if self.args.M_path is not None:
@@ -103,12 +133,13 @@ class M2Net(nn.Module):
         # pass through the forward part
         # o should have shape [batch size, self.args.T + self.args.L]
         
+        
         if hasattr(self.args, 'net_fb') and self.args.net_fb:
             #net feedback from output to input
             self.z = self.z.expand(o.shape[0], self.z.shape[1])
             oz = torch.cat((o, self.z), dim=1)
             u = self.m1_act(self.M_u(oz))
-            print(f'def brahq')
+            
 
             if self.args.sequential and self.args.xdg:
 
