@@ -158,13 +158,14 @@ class Trainer:
             if not found:
                 #then this means parameter is not in args.train_parts so we specified not to train it
                 self.not_train_params.append(k)
-            print(self.train_params[0].data)    
+           
             
         logging.info('Not training:')
         for k in self.not_train_params:
             logging.info(f'  {k}')
 
 
+        #print(f'this is self.train_params: {self.train_params}')
 
         self.criteria = get_criteria(self.args)
         #what's in self.criteria --> get_criteria defined in helper.py
@@ -243,7 +244,7 @@ class Trainer:
                 #open the file and dump the samples in 
 
     # runs an iteration where we want to match a certain trajectory
-    def run_trial(self, x, y, trial, training=True, extras=False, gate_layers= None, train_idx=None,c_strength=None, damp_c=None, total_omega=None):
+    def run_trial(self, x, y, trial, training=True, extras=False, gate_layers= None, train_idx=None,c_strength=None, damp_c=None, total_omega=None,prev_task_params=None):
         #this is for a single trial(a single task object i.e. a single training case) which we input in line above
         #trial a.k.a info is the task object a particular instantiation from the class definitions in tasks.py
         #it tells us which task we're doing which is NB because it tells us what the x and y present 
@@ -380,7 +381,10 @@ class Trainer:
                 
                 if training and self.args.ss: 
                     for i in range(len(self.train_params)):
-                        k_loss += c_strength + torch.sum(total_omega[i] * torch.square(differences[i])) 
+                        #print(self.args.c_strength)
+                        #print(total_omega)
+                        print(self.train_params[i])
+                        k_loss += self.args.c_strength *torch.sum(total_omega[i] * torch.square(self.train_params[i]-prev_task_params[i])) 
                         
 
         
@@ -450,17 +454,18 @@ class Trainer:
             return trial_loss, etc
         return trial_loss
 
-    def train_iteration(self, x, y, trial, ix_callback=None, gate_layers=None, train_idx =None, damp_c=None, c_strength=None, total_omega=None) :
+    def train_iteration(self, x, y, trial, ix_callback=None, gate_layers=None, train_idx =None, damp_c=None, c_strength=None, total_omega=None, prev_task_params=None) :
         self.optimizer.zero_grad()#put back to zero the gradients bc we want to use the new ones for the trial
 
         #if self.args.sequential and self.args.ss and self.args.xdg:
             #and then elif for the statement below
 
         if self.args.sequential and self.args.xdg and self.args.ss:
-            trial_loss, etc = self.run_trial(x, y, trial, extras=True, gate_layers=self.args.gate_layers, train_idx= self.train_idx, damp_c=None, c_strength=None, total_omega=None)
+            trial_loss, etc = self.run_trial(x, y, trial, extras=True, gate_layers=self.args.gate_layers, train_idx= self.train_idx, damp_c=self.args.C, c_strength=self.args.c_strength, total_omega=total_omega, prev_task_params=prev_task_params)
 
-        elif args.sequential and self.args.ss:
-            trial_loss, etc = self.run_trial(x, y, trial, extras=True, train_idx= self.train_idx, damp_c=None, c_strength=None, total_omega=None)
+
+        elif self.args.sequential and self.args.ss:
+            trial_loss, etc = self.run_trial(x, y, trial, extras=True, train_idx= self.train_idx, damp_c=self.args.C, c_strength=self.args.c_strength, total_omega=total_omega, prev_task_params=prev_task_params)
 
 
 
@@ -478,7 +483,12 @@ class Trainer:
 
         if ix_callback is not None:
             ix_callback(trial_loss, etc)
+        
+        
         self.optimizer.step() #updates the parameters using the gradients that we computed using self.run_trial directly above
+        
+
+       
 
         etc = {
             'ins': x,
@@ -489,7 +499,7 @@ class Trainer:
         }
         return trial_loss, etc
 
-    def test(self, gate_layers= None, train_idx = None, c_strength=None, big_omega_M_u_weights = None, big_omega_M_ro_weights=None, big_omega_M_u_biases=None, big_omega_M_ro_biases= None, M_u_weights_prev=None, M_ro_weights_prev=None, M_u_biases_prev =None, M_ro_biases_prev=None):
+    def test(self, gate_layers= None, train_idx = None):
         with torch.no_grad():
             #note since we're in a no_grad, make sure that you're not running code in the environment that's going to try to compute gradients here bc no gradients are being 'recorded'
             x, y, trials = next(iter(self.test_loader))
@@ -596,14 +606,19 @@ class Trainer:
             #cumulative task importances
             total_omega = []
             for p in self.train_params:
-                with torch.no_grad:
-                    total_diff.append(torch.zeros_like(p))
+                    tensor_diff = torch.zeros_like(p)
+                    total_diff.append(tensor_diff)
                     total_omega.append(torch.zeros_like(p))
 
             c_strength = self.args.c_strength
 
+            ws=[]
+            for p in self.train_params:
+                ws.append(torch.zeros_like(p))
+            prev_task_params=[]
+            for p in self.train_params:
+                prev_task_params.append(torch.zeros_like(p))
 
-           
             
             
 
@@ -704,14 +719,87 @@ class Trainer:
                 #synaptic stabilization
                 if self.args.sequential and self.args.ss:
                     #small omegas
-                    ws=[]
+                    
+                   
+
+
+                    grads = []
+                    #params before training iteration
                     param_prev = []
                     param_curr = []
-                    for p in self.train_params:
-                        with torch.no_grad:
-                            ws.append(torch.zeros_like(p))
                     
-                    iter_loss, etc = self.train_iteration(x, y, info, ix_callback=ix_callback, gate_layers= self.args.gate_layers, total_omega =total_omega, c_strength = c_strength)
+                    #to get the different parameter value before and after train_iteration, when we access the params before and after the train iteration we need to convert them from parameter values to regular tensors so that they're not the same value.
+                    #essentially parameters are dynamic variables so even if we store them in param_prev before the train iteration, their values will update after the train_iteration and be equal to param_curr! This is because they're parameters in pytorch. So we convert them to tensors
+                    for name, param in self.net.named_parameters():
+                        for part in self.n_params.keys():
+                            if part in name:
+                                param_prev.append(torch.tensor(param))
+                    
+                    
+                    
+                    # for p in self.train_params: 
+                    #     #params before training iteration
+                    #     param_prev.append(p.data)
+
+                    # print(f'param_prev{param_prev[0]}')
+                    
+                    #debug
+                    #print(f' this is param_prev before train_iteration{param_prev}')
+
+                    #print(total_omega)
+                    iter_loss, etc = self.train_iteration(x, y, info, ix_callback=ix_callback, gate_layers= self.args.gate_layers, total_omega =total_omega, c_strength = self.args.c_strength, prev_task_params=prev_task_params) #calculate gradients
+                    
+                    #params after training iteration
+                    #print(f'these are named params{self.n_params.keys()}')
+                    for name, param in self.net.named_parameters():
+                        for part in self.n_params.keys():
+                            if part in name:
+                                
+                                param_curr.append(torch.tensor(param))
+
+                    #print(f'this is param_prev after train_iteration{param_prev}')
+                            
+
+                    # for p in self.train_params:
+                    #     param_curr.append(p.data)
+                    
+                    
+                    #print(f'are they the same:{param_curr[0] == param_prev[0]} and compare param_curr:{param_curr[0]} \n param_prev:{param_prev}')
+                    
+
+                    #param changes
+                    differences = list()
+                    for i in range(len(self.train_params)):
+                        difference = param_curr[i] - param_prev[i]
+                        differences.append(difference)
+                        #print(self.train_params[i])
+                        with torch.no_grad():
+                            grads.append(self.train_params[i].grad.detach().numpy())
+                        
+                        # print(f'this is grads {grads}')
+
+                        # #grads is non-zero what about the differences so the differences are zero why--> check param_prev and param_curr: these are non_zero but their difference.
+                        # # the problem is that self.train_params is unchanged after train_iteration 
+
+
+
+                        # print(f'param_curr:{param_curr} \n param_prev:{param_prev} \n parm_curr = param_prev: {param_curr[i] == param_prev[i]}' ), 
+
+                        # print(f'these are the differences: {differences}')
+
+                        ws[i] -= differences[i]* grads[i]
+
+
+                        total_diff[i] += differences[i]
+
+                    # print(f'these are the ws {ws}')
+
+                    
+
+                    
+
+
+                    
 
                     
                     
@@ -864,6 +952,39 @@ class Trainer:
 
                         #synaptic stabilization:
                         if self.args.ss:
+                            #update (omegas for the next) quadratic penalty
+                            #normalise little omegas
+                            omegas = []
+                            for i in range(len(self.train_params)):
+                                #normalise ws
+                                print(f'{ws}')
+                                omega = torch.maximum(torch.zeros_like(self.train_params[i].data), ws[i]/(torch.square(total_diff[i])+ self.args.C))
+                                print(f'this is {omega}')
+                                omegas.append(omega)
+
+                                total_omega[i] += omegas[i]
+
+                            
+                            #reset total_diff, ws:
+                            ws=[]
+                            for p in self.train_params:
+                                ws.append(torch.zeros_like(p))
+                            total_diff= []
+                            #cumulative task importances
+                            for p in self.train_params:
+                                total_diff.append(torch.zeros_like(p))
+                      
+                            #retrieve the previous task parameters for regularization term 
+                            prev_task_params=[]
+                            for p in self.train_params:
+                                prev_task_params.append(p.data)
+
+                            print(f'this is total omega{total_omega}')
+                            
+                            #check that total omega is not a zero vector
+                            
+                            
+
 
 
 
@@ -877,8 +998,8 @@ class Trainer:
                         
 
                         #if doing ss, update loss new loss function for new tasks
-                        if self.args.ss:
-                            if self.args.ss_type == 'SI' :
+                        # if self.args.ss:
+                        #     if self.args.ss_type == 'SI' :
                                 # Omegas (importances) for the task we just finished training on:
                             
 
