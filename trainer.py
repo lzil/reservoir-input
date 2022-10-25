@@ -99,7 +99,9 @@ class Trainer:
             logging.info(f'Sequential training. Starting with task {self.train_idx}')
             
         # self.net = BasicNetwork(self.args)
-        self.net = M2Net(self.args)
+        
+        self.net = M2Net(args=self.args, train_idx= self.train_idx)
+        
         #the model with the input representation layer, reservoir etc
         # add hopfield net patterns
         if hasattr(self.args, 'fixed_pts') and self.args.fixed_pts > 0:
@@ -295,7 +297,7 @@ class Trainer:
             #the input at time j
             #print(f'what is net_in ? {net_in}')
             if self.args.sequential and self.args.xdg:
-                net_out, etc = self.net(net_in, train_idx = self.train_idx, extras = True, gate_layers=self.args.gate_layers) 
+                net_out, etc = self.net(net_in, extras=True)
                 
 
 
@@ -393,7 +395,7 @@ class Trainer:
                         
                         
 
-                        k_loss = k_loss + self.args.c_strength * torch.sum(total_omega[i] * torch.square(self.train_params[i]-prev_task_params[i])) 
+                        k_loss = k_loss + self.args.c_strength * torch.sum(total_omega[i] * torch.square(self.train_params[i]-prev_task_params[i]))
 
         
                             #loss function for either SI or EWC
@@ -522,6 +524,7 @@ class Trainer:
             
 
             if self.args.sequential and self.args.xdg:
+                
                 loss, etc = self.run_trial(x, y, trials, training=False, gate_layers= self.args.gate_layers, train_idx = self.train_idx ,extras=True)
 
             else:
@@ -901,6 +904,7 @@ class Trainer:
 
                     if self.args.sequential and self.args.xdg:
                         test_loss, test_etc = self.test(gate_layers= self.args.gate_layers, train_idx = self.train_idx)
+                        print(f'this is test_etc {test_etc}')
 
                         
                         
