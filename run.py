@@ -129,11 +129,11 @@ def adjust_args(args):
 
     # setting seeds
     if args.res_seed is None:
-        args.res_seed = ''.join(random.choices(string.digits, k=6))
+        args.res_seed = int(''.join(random.choices(string.digits, k=6)))
     if args.seed is None:
-        args.seed = ''.join(random.choices(string.digits, k=6))
+        args.seed = int(''.join(random.choices(string.digits, k=6)))
     if args.network_seed is None:
-        args.network_seed = ''.join(random.choices(string.digits, k=6))
+        args.network_seed = int(''.join(random.choices(string.digits, k=6)))
 
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
