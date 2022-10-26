@@ -97,10 +97,10 @@ class Trainer:
 
         if self.args.sequential:
             logging.info(f'Sequential training. Starting with task {self.train_idx}')
-            
-        # self.net = BasicNetwork(self.args)
-        
-        self.net = M2Net(args=self.args, train_idx= self.train_idx)
+            # self.net = BasicNetwork(self.args)
+            self.net = M2Net(args=self.args, train_idx= self.train_idx)
+        else:
+            self.net = M2Net(args=self.args)
         
         #the model with the input representation layer, reservoir etc
         # add hopfield net patterns
@@ -396,7 +396,9 @@ class Trainer:
                         
 
                         k_loss = k_loss + self.args.c_strength * torch.sum(total_omega[i] * torch.square(self.train_params[i]-prev_task_params[i]))
+                        
 
+                        torch.sum(total_omega[i])
         
                             #loss function for either SI or EWC
                         #   note we use the ss and xdg loss for training but not testing 
@@ -618,6 +620,10 @@ class Trainer:
                         total_omega.append(torch.zeros_like(p))
 
                 c_strength = self.args.c_strength
+
+
+               # for name, param in self.net.named_parameters:
+                   
            
 
                 ws=[]
