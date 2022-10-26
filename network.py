@@ -102,7 +102,12 @@ class M2Net(nn.Module):
         if self.args.xdg:
             with torch.no_grad():
                 gate_pool_loading_bay=[]
-                self.args.gate_layers = ['u', 'v', 'x'] if self.args.train_parts == 'all' else self.args.gate_layers 
+                
+                if self.args.train_parts == ['']: #i.e. if training all parts
+                    self.args.gate_layers = ['u', 'v', 'x'] 
+        
+
+                print(self.args.gate_layers)
                 
                 if 'x' in self.args.gate_layers:
                     self.gate_x = True
@@ -169,8 +174,8 @@ class M2Net(nn.Module):
                     elif layer == 'x':
                         x_gate_idxs.append(idx)
                 
-                print(f'these are the u_gate_idx{u_gate_idxs}')
-                print(torch.ones(1,D1))
+                # print(f'these are the u_gate_idx{u_gate_idxs}')
+                # print(torch.ones(1,D1))
                 
                 #print(f'these are the v_gate_idx{v_gate_idxs}')
                 # print(f'these are the x_gate_idx{x_gate_idxs}')
@@ -189,7 +194,7 @@ class M2Net(nn.Module):
                             self.v_gater[0][idx[1]]*=0
 
                     elif layer == 'x':
-                        self.x_gater = torch.ones((1,N))
+                        self.x_gater = torch.ones((1,self.args.N))
                         for idx in x_gate_idxs:
                             self.x_gater[0][idx[1]]*=0
 
@@ -267,18 +272,21 @@ class M2Net(nn.Module):
 
                 u = self.m1_act(self.M_u(o))
                 u = u * self.u_gater
+                # print(f'this is u{u}')
 
                 if extras:
                         v, etc = self.reservoir(u, extras=True, gating=self.gate_x)
                         v = v * self.v_gater
+                        # print(f'this is v{v}')
                 else:
                         v = self.reservoir(u, extras=False, gating=self.gate_x)
                         v = v * self.v_gater
+                        # print(f'this is v{v}')
 
 
             else:
                 u = self.m1_act(self.M_u(o))
-                print(f'this is uuuuu{u.size()}')
+                # print(f'this is uuuuu{u.size()}')
                 if extras:
                         v, etc = self.reservoir(u, extras=True)
                 else:
@@ -299,6 +307,116 @@ class M2Net(nn.Module):
         self.z = torch.zeros((1, self.args.Z))
         if self.args.use_reservoir:
             self.reservoir.reset(res_state=res_state, device=device)
+
+    def update_gates(self):
+        with torch.no_grad():
+                gate_pool_loading_bay=[]
+                self.args.gate_layers = ['u', 'v', 'x'] if self.args.train_parts == 'all' else self.args.gate_layers 
+                
+                if 'x' in self.args.gate_layers:
+                    self.gate_x = True
+
+                else: 
+                    self.gate_x= False
+
+                for layer in self.args.gate_layers: 
+                    #i.e. (for i in ['u','v'])
+                    # #we want a list of all of us indices [ ('u', [0,0]),..., ('u', [0,D1-1] ) (D1-1 bc zero-indexing) and a list of all of vs in indices#[('v',[0,0]),..., ('v', [0, D2-1])]
+                    if layer == 'u':
+                        u_idxs = [ (layer, [0,i])  for i in range(self.args.D1)]
+                        gate_pool_loading_bay.append(u_idxs)
+                    elif layer =='v':
+                        v_idxs = [ (layer, [0,i]) for i in range(self.args.D2)]
+                        gate_pool_loading_bay.append(v_idxs)
+                    elif layer == 'x':
+                        x_idxs = [ (layer, [0,i]) for i in range(self.args.N)]
+                        gate_pool_loading_bay.append(x_idxs)
+                
+                gate_pool = [layer_idx for layer_idx_list in gate_pool_loading_bay for layer_idx in layer_idx_list]
+
+                    #print(f'this is the loading bay:{gate_pool_loading_bay}')
+                    # #then concatenate lists, result is our gating pool so assign to variable called gate_pool
+                    #https://stackoverflow.com/questions/952914/how-to-make-a-flat-list-out-of-a-list-of-lists
+
+                    
+                    #then calculate m using args.X
+                    # m = len(gate_pool)*X/100 
+                    # note m isn't necessarily going to be an integer so need to convert it
+                m= len(gate_pool)*self.args.X/100
+                
+                    #m is the number of units to select (from all units in network that are in gate layers) and gate so that X% of network is gated for any one task 
+                    #note 
+
+
+                    #then choose m things randomly from gate pool for each task: 
+                    #note to self for one task we want to choose randomly the same m units each time. 
+                
+
+
+                    #we want the random sample to be the same each time until train_idx changes (so that for a particular train_idx the gated units are the same every time we call the net) so need to set the same seed and have it change only when we move to the next task
+
+                random.seed(self.train_idx)
+                    #print(f'train_idx is {train_idx}')
+                gated_units = random.sample(gate_pool, k=round(m))
+                    # .sample bc we want to sample without replacement as opposed .choice
+                    #print(f'these are my gated units {gated_units}')
+                    #from these m units the ones with 'u' labels to index the us for gating
+                    #and the ones with 'v' labels to select the vs for gating: 
+                    #note u is a tensor with shape [1,D1], v is a tensor with shape [1,D2]
+
+                u_gate_idxs = []
+                v_gate_idxs = []
+                x_gate_idxs = []
+
+                for layer, idx in gated_units:
+                    #print(f'{layer,idx}')
+
+                    if layer == 'u': 
+                        u_gate_idxs.append(idx)
+                    elif layer == 'v':
+                        v_gate_idxs.append(idx)
+                    elif layer == 'x':
+                        x_gate_idxs.append(idx)
+                
+                # print(f'these are the u_gate_idx{u_gate_idxs}')
+                # print(torch.ones(1,D1))
+                
+                #print(f'these are the v_gate_idx{v_gate_idxs}')
+                # print(f'these are the x_gate_idx{x_gate_idxs}')
+
+                #create masks for gating:
+                    
+                for layer in self.args.gate_layers:
+                    if layer == 'u':
+                        self.u_gater = torch.ones((1,self.args.D1))
+                        for idx in u_gate_idxs:
+                            self.u_gater[0][idx[1]]*=0
+
+                    elif layer == 'v':
+                        self.v_gater = torch.ones((1,self.args.D2))
+                        for idx in v_gate_idxs:
+                            self.v_gater[0][idx[1]]*=0
+
+                    elif layer == 'x':
+                        self.x_gater = torch.ones((1,self.args.N))
+                        for idx in x_gate_idxs:
+                            self.x_gater[0][idx[1]]*=0
+
+                
+
+                
+                    
+
+
+                    
+
+
+
+
+        
+
+
+
 
 class M2Reservoir(nn.Module):
     def __init__(self, args=DEFAULT_ARGS):
