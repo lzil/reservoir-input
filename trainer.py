@@ -923,7 +923,7 @@ class Trainer:
 
                     else:
                         test_loss, test_etc = self.test()
-                        print(test_etc['ins'][0,0,:].size())
+                        # print(test_etc['ins'][0,0,:].size())
                         
 
 
