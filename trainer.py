@@ -247,7 +247,7 @@ class Trainer:
                 #open the file and dump the samples in 
 
     # runs an iteration where we want to match a certain trajectory
-    def run_trial(self, x, y, trial, training=True, extras=False, gate_layers= None, train_idx=None,c_strength=None, damp_c=None, total_omega=None,prev_task_params=None):
+    def run_trial(self, x, y, trial, training=True, extras=False, train_idx=None,c_strength=None, damp_c=None, total_omega=None,prev_task_params=None):
         #this is for a single trial(a single task object i.e. a single training case) which we input in line above
         #trial a.k.a info is the task object a particular instantiation from the class definitions in tasks.py
         #it tells us which task we're doing which is NB because it tells us what the x and y present 
@@ -471,7 +471,7 @@ class Trainer:
             #and then elif for the statement below
 
         if self.args.sequential and self.args.xdg and self.args.ss:
-            trial_loss, etc = self.run_trial(x, y, trial, extras=True, gate_layers=self.args.gate_layers, train_idx= self.train_idx, damp_c=self.args.C, c_strength=self.args.c_strength, total_omega=total_omega, prev_task_params=prev_task_params)
+            trial_loss, etc = self.run_trial(x, y, trial, extras=True, train_idx= self.train_idx, damp_c=self.args.C, c_strength=self.args.c_strength, total_omega=total_omega, prev_task_params=prev_task_params)
 
 
         elif self.args.sequential and self.args.ss:
@@ -481,7 +481,7 @@ class Trainer:
 
         elif self.args.sequential and self.args.xdg:
 
-            trial_loss, etc = self.run_trial(x, y, trial, extras=True, gate_layers=self.args.gate_layers, train_idx= self.train_idx)
+            trial_loss, etc = self.run_trial(x, y, trial, extras=True, train_idx= self.train_idx)
 
         
 
@@ -525,7 +525,7 @@ class Trainer:
 
             if self.args.sequential and self.args.xdg:
                 
-                loss, etc = self.run_trial(x, y, trials, training=False, gate_layers= self.args.gate_layers, train_idx = self.train_idx ,extras=True)
+                loss, etc = self.run_trial(x, y, trials, training=False, train_idx = self.train_idx ,extras=True)
 
             else:
                 loss, etc = self.run_trial(x, y, trials, training=False, extras=True) 
@@ -552,13 +552,8 @@ class Trainer:
         for i in ids:
             self.test_loader = self.test_loaders[self.args.train_order[i]]
 
-            #if self.args.sequential and self.args.ss and self.args.xdg:
-            #and then elif for the statement below
-
-            if self.args.sequential and self.args.xdg:
-                loss, _ = self.test(gate_layers=self.args.gate_layers, train_idx= self.args.train_idx)
-            else:
-                loss, _ = self.test()
+            
+            loss, _ = self.test()
             losses.append((i, loss))
         self.test_loader = self.test_loaders[self.train_idx]
         return losses
@@ -876,7 +871,7 @@ class Trainer:
 
 
                 else:
-                    iter_loss, etc = self.train_iteration(x, y, info, ix_callback=ix_callback, gate_layers= self.args.gate_layers)
+                    iter_loss, etc = self.train_iteration(x, y, info, ix_callback=ix_callback)
                 #print(self.net.M_u.weight-10*torch.ones(50,2)) 
                 #great can treat these .weight objects like matrices
                 #for synaptic intelligence need the differences in M_u and M_v  before and after each train iteration [so we're going to want to get the parameter values before the self.train_iteration above]
@@ -903,8 +898,8 @@ class Trainer:
                             #test_loss, test_etc = self.test(gate_layers= self.args.gate_layers, c_strength=c_strength,big_omega_M_u_weights = big_omega_M_u_weights, big_omega_M_ro_weights=big_omega_M_ro_weights,M_u_weights_prev=M_u_weights_prev, M_ro_weights_prev=M_ro_weights_prev)
 
                     if self.args.sequential and self.args.xdg:
-                        test_loss, test_etc = self.test(gate_layers= self.args.gate_layers, train_idx = self.train_idx)
-                        print(f'this is test_etc {test_etc}')
+                        test_loss, test_etc = self.test(train_idx = self.train_idx)
+                        
 
                         
                         
@@ -968,6 +963,9 @@ class Trainer:
                             self.P_z, S_z = self.update_P(S_z, test_etc['outs'])
                             logging.info(f'...updated projection matrices for OWM')
 
+
+                        
+
                         #synaptic stabilization:
                         if self.args.ss:
                             #update (omegas for the next) quadratic penalty
@@ -1021,6 +1019,12 @@ class Trainer:
                         
                         # done processing prior task, move on to the next one or quit
                         self.train_idx += 1 #this is us moving onto the next task
+
+
+                        if self.args.xdg:
+                            self.net.train_idx = self.train_idx 
+                            print(f'this is self.net.train_idx:\n{self.net.train_idx}')
+                            self.net.update_gates()
 
                         
 
