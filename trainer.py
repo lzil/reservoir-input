@@ -383,6 +383,10 @@ class Trainer:
                     #this will give us the mse and we want t_ix, the truncate index here to be zero bc we've already truncated and we want the mse between each k_outs, k targets
                 
                 if training and self.args.ss and self.train_idx >0:
+                    
+
+                    c_const = torch.tensor(c_strength)
+                    print(f'this is c_const {c_const}')
 
                     for i in range(len(self.train_params)):
                         
@@ -394,11 +398,10 @@ class Trainer:
 
                         
                         
+                        #print(self.train_params[i])
+                
 
-                        k_loss = k_loss + self.args.c_strength * torch.sum(total_omega[i] * torch.square(self.train_params[i]-prev_task_params[i]))
-                        
-
-                        torch.sum(total_omega[i])
+                        k_loss += c_const * torch.sum(total_omega[i] * torch.square(torch.sub(self.train_params[i],prev_task_params[i])))
         
                             #loss function for either SI or EWC
                         #   note we use the ss and xdg loss for training but not testing 
@@ -615,25 +618,17 @@ class Trainer:
                 #cumulative task importances
                 total_omega = []
                 for p in self.train_params:
-                        tensor_diff = torch.zeros_like(p)
-                        total_diff.append(tensor_diff)
+                        
+                        total_diff.append(torch.zeros_like(p))
                         total_omega.append(torch.zeros_like(p))
 
                 c_strength = self.args.c_strength
-
-
-               # for name, param in self.net.named_parameters:
-                   
-           
 
                 ws=[]
                 for p in self.train_params:
                     ws.append(torch.zeros_like(p))
                 prev_task_params=[]
-                for p in self.train_params:
-                    prev_task_params.append(torch.zeros_like(p))
-
-            
+                
             
 
 
@@ -789,13 +784,16 @@ class Trainer:
                         differences = []
                         for i in range(len(self.train_params)):
                             difference = param_curr[i] - param_prev[i]
-                            differences.append(difference)
-                            #print(self.train_params[i])
+                            # print(self.train_params[i].grad)
                             
-                            grads.append(self.train_params[i].grad.detach().numpy())
+                            ws[i]-= difference*(self.train_params[i].grad)
+                            
+                            total_diff[i]+=difference
+                            
+                            # grads.append(self.train_params[i].grad.detach())
                         
                         # print(f'this is grads {grads}')
-
+ 
                         # #grads is non-zero what about the differences so the differences are zero why--> check param_prev and param_curr: these are non_zero but their difference.
                         # # the problem is that self.train_params is unchanged after train_iteration 
 
@@ -805,10 +803,10 @@ class Trainer:
 
                         # print(f'these are the differences: {differences}')
 
-                            ws[i] = ws[i] - differences[i]* grads[i]
+                            # ws[i] = ws[i] - (differences[i]* grads[i])
 
 
-                            total_diff[i]= total_diff[i]+differences[i]
+                            # total_diff[i]= total_diff[i]+differences[i]
 
                     # print(f'these are the ws {ws}')
 
@@ -976,43 +974,50 @@ class Trainer:
                         if self.args.ss:
                             #update (omegas for the next) quadratic penalty
                             #normalise little omegas
-                            omegas = []
+                            #omegas = []
                             with torch.no_grad():
                                 for i in range(len(self.train_params)):
                                 #normalise ws
                                     #print(f'{ws}')
-                                
-                                    omega = torch.maximum(torch.zeros_like(self.train_params[i].data), ws[i]/(torch.square(total_diff[i])+ self.args.C))
+                                    numer=ws[i]
+                                    denom= torch.add(torch.square(total_diff[i]),self.args.C)
+                                    omega = torch.maximum(torch.zeros_like(self.train_params
+                                    [i].data), torch.div(numer, denom))
 
 
 
-                                    #print(f'this is {omega}')
-                                    omegas.append(omega)
+                                    
 
-                                    total_omega[i] = total_omega[i] + omegas[i]
+                                    total_omega[i] += omega
 
                             
                                     #reset total_diff, ws:
                             
                                 ws=[]
-                                for p in self.train_params:
-                                            ws.append(torch.zeros_like(p))
-                                        
                                 total_diff= []
+                                
+                                for p in self.train_params:
+                                    ws.append(torch.zeros_like(p))
+                                        
+                                
                                         
                                     #cumulative task importances
-                                for p in self.train_params:
+                                
 
                                     total_diff.append(torch.zeros_like(p))
                                 
                                     #retrieve the previous task parameters for regularization term 
-                                    prev_task_params=[]
-                                    for p in self.train_params:
-                                        prev_task_params.append(p.clone().detach())
+                                
+                                
+                                    prev_task_params.append(p.clone().detach())
 
-                                        #print(f'this is total omega{total_omega}')
+
+                                pdb.set_trace()
+                                print(f'this is total omega{total_omega}')
                                         
                                         #check that total omega is not a zero vector
+
+                                print(f'prev_task_params{prev_task_params}')
                             
                             
 

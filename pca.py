@@ -19,21 +19,26 @@ from tasks import *
 cspaces = [cm.spring, cm.summer, cm.autumn, cm.winter]
 
 def main(args):
+
+
     config = get_config(args.model, to_bunch=True)
     net = load_model_path(args.model, config)
+    
 
     if len(args.dataset) == 0:
         args.dataset = config.dataset
 
-    n_reps = 1000
+    n_reps = 30
     # don't show these contexts
     context_filter = []
 
     _, loader = create_loaders(args.dataset, config, split_test=False, test_size=n_reps, context_filter=context_filter)
-    x, y, trials = next(iter(loader))
+    x, y, trials = next(iter(loader)) #how to get an x,y pair from the dataloader plus (see below) how to get details of the trial (e.g.) task
     A = get_states(net, x)
+    print(A.size())
 
-    t_type = type(trials[0])
+
+    t_type = type(trials[0]) #tells you the task type e.g. class <'tasks.RSG'>
     if t_type == RSG:
         pca_rsg(args, A, trials, n_reps)
     elif t_type in [DelayProAnti, MemoryProAnti]:
@@ -181,7 +186,8 @@ def pca(As, rank):
 
     N = len(As)
     # mix up the samples and timesteps, but keep the dimensions
-    A = torch.cat(As)
+    A = torch.cat(As) 
+    #pca.low_rank want the samples in the rows 
 
     u, s, v = torch.pca_lowrank(A)
 
@@ -189,6 +195,8 @@ def pca(As, rank):
     for ix in range(N):
         traj = As[ix]
         traj_proj = traj @ v[:, :rank]
+        #columns of V are the first 'rank' (rank=3 for us) principal directions.
+        #project trajectory onto these principal directions 
         projs.append(traj_proj)
 
     return projs

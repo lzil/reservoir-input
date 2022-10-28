@@ -47,8 +47,8 @@ def parse_args():
     
     # network arguments
     # parser.add_argument('--res_init_type', type=str, default='gaussian', help='')
-    parser.add_argument('--res_init_g', type=float, default=1.5)
-    parser.add_argument('--res_noise', type=float, default=0)
+    parser.add_argument('--res_init_g', type=float, default=1.5) #g that determines variance from which we draw the weights
+    parser.add_argument('--res_noise', type=float, default=0) 
     parser.add_argument('--fixed_pts', type=int, default=0, help='number of fixed pts to include as hopfield')
     parser.add_argument('--fixed_beta', type=float, default=1.5, help='beta to make patterns stronger')
     parser.add_argument('--x_noise', type=float, default=0)
@@ -90,9 +90,9 @@ def parse_args():
     parser.add_argument('--ss', action='store_true', help='use synaptic stabilization')
     #we're only doing ss for units in u layer for now but we'll extend it to the v units and x units later as we did for xdg
     parser.add_argument('--stabilize_layers', type=str, default='u', help='the hidden layers of the net in which to apply the synaptic stabilization') #later make default ['u', 'v']
-    parser.add_argument('--c_strength', type=float, default=0.5, help= 'stabilization strength')
+    parser.add_argument('--c_strength', type=float, default=1.2, help= 'stabilization strength')
     parser.add_argument('--ss_type', type=str, default='SI', choices=['SI', 'EWC'], help= 'choices for synaptic stabilization; default is synaptic intelligence')
-    parser.add_argument('-C', type=float, default=0.0055,  help='damping term for synaptic intelligence')
+    parser.add_argument('-C', type=float, default=0.01,  help='damping term for synaptic intelligence')
     #after we experiment with different c (C) values, make the optimal-for-default-net-arguments c (C) the default,
 
     #to run ss and xdg together simply go: --ss --xdg
@@ -103,7 +103,7 @@ def parse_args():
 
     parser.add_argument('--cs_bias', action='store_true', help='bias in context signal part of the network, with M_u_cs, M_x_cs, M_v_cs')
     
-    parser.add_argument('--X', type=float, default=50, help= "gating the activity of X percent of hidden units for each task, chosen randomly")
+    parser.add_argument('-X', type=float, default=50, help= "gating the activity of X percent of hidden units for each task, chosen randomly")
     #context signal is implemented in network.py just as net_fb is 
     parser.add_argument('--gate_layers', type=str, default=['u','v'], help='the hidden layers of the net in which to apply the gating')
     
