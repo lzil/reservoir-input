@@ -1,5 +1,5 @@
 # reservoir-input
-This is a project about how you can optimize the inputs of a recurrent reservoir to perform a diverse array of tasks.
+This is a project about how you can optimize the inputs of a recurrent reservoir to perform a diverse array of tasks. We're now implementing many tasks.
 
 
 ## quick file guide
