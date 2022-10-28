@@ -26,7 +26,10 @@ from utils import get_config
 
 # csv_data = pd.concat([csv_data1, csv_data2])
 
-run_id = '3537318'
+#run_id = '3537318'
+#run_id = '6406203'
+run_id ='hworkdelayprotest/losses_6406203'
+
 csv_path = f'../logs/{run_id}.csv'
 csv_data = pd.read_csv(csv_path)
 

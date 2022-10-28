@@ -599,6 +599,7 @@ if __name__ == '__main__':
     # delay memory pro anti preset angles
     parser.add_argument('--angles', nargs='*', type=float, default=None, help='angles in degrees for dmpa tasks')
     
+    
 
     args = parser.parse_args()
     if args.config is not None:
@@ -664,12 +665,13 @@ if __name__ == '__main__':
 
             trial = samples[i]
             trial_x = trial.get_x()
-            
+
             
             trial_y = trial.get_y()
 
             if t_type in [RSG, CSG]:
                 trial_x = np.sum(trial_x, axis=0)
+
                 trial_y = trial_y[0]
                 ml, sl, bl = ax.stem(xr, trial_x, use_line_collection=True, linefmt='coral', label='ready/set')
                 ml.set_markerfacecolor('coral')

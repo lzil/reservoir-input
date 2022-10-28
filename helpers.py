@@ -148,6 +148,7 @@ def create_loaders(datasets, args, split_test=True, test_size=1, context_filter=
             for i in range(len(datasets)):
                 if i == 0:
                     subset = Subset(dset, range(max_idxs[0]))
+                    #Subset retreives the subset of the input data set at the indices specified by the sequence we input
                 else:
                     subset = Subset(dset, range(max_idxs[i-1], max_idxs[i]))
                 loader = DataLoader(subset, batch_size=batch_size, shuffle=True, collate_fn=collater, drop_last=drop_last)
@@ -188,6 +189,9 @@ def create_loaders(datasets, args, split_test=True, test_size=1, context_filter=
         test_loader = DataLoader(test_set, batch_size=test_size, shuffle=True, collate_fn=collater, drop_last=False)
         if split_test:
             train_loader = DataLoader(train_set, batch_size=args.batch_size, shuffle=True, collate_fn=collater, drop_last=True)
+            #the shuffling (bc we said Shuffle) of the training cases happens wehn the iterator train_loader is created 
+            #therefore if we loaded two datasets and didn't specify sequential, then the examples from the different datasets will be interleaved and put in data loader
+            #this confirms that we are training simultaneously if we don't specify sequential
             return (train_set, train_loader), (test_set, test_loader)
         return (test_set, test_loader)
         
