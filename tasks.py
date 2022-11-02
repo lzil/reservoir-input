@@ -375,18 +375,19 @@ class DMProAnti(Task):
         self.Z = 3
     
     def get_x(self,args=None):
-        x=np.zeros((5,self.t_len))
+        x=np.zeros((7,self.t_len))
         
         x[0,:self.stim]=1
-        
         #stimulus 1
-        x[1, self.fix:]=self.g1*self.stimulus_1[0]
-        x[2,self.fix:] = self.g1*self.stimulus_1[1]
-        
+        x[1, self.fix:]=self.stimulus_1[0]
+        x[2,self.fix:] = self.stimulus_1[1]
+        x[3, self.fix:] =self.g1
         #stimulus 2
-        x[3, self.fix:]=self.g2*self.stimulus_2[0]
-        x[4,self.fix:] = self.g2*self.stimulus_2[1]
-
+        x[4, self.fix:]=self.stimulus_2[0]
+        x[5,self.fix:] =self.stimulus_2[1]
+        x[6, self.fix:] =self.g2
+        
+        #I think  I have a way to update the matrices if a new task modality added that keeps the old weights and keeps them in the right position and still keeps the dimension D1 the same
 
         return x 
 
@@ -398,12 +399,12 @@ class DMProAnti(Task):
         #fixate until stim period ends (i.e until when go period begins)
 
         if self.g1 > self.g2:
-            y[1,self.stim:] = self.stimulus_1[0]
-            y[2,self.stim:] =self.stimulus_1[1]
+            y[1,self.stim:] = self.g1*self.stimulus_1[0]
+            y[2,self.stim:] = self.g1*self.stimulus_1[1]
         
         elif self.g1 < self.g2:
-            y[1,self.stim:] = self.stimulus_2[0]
-            y[2,self.stim:] =self.stimulus_2[1]
+            y[1,self.stim:] = self.g2*self.stimulus_2[0]
+            y[2,self.stim:] =self.g2*self.stimulus_2[1]
 
 
 
@@ -479,9 +480,11 @@ def create_dataset(args, multimodal=False):
 
     if multimodal:
         #create a multimodal dataset from list of already of already created datasets
-        #if two datasets from the same task family, we want them to use the same set of input channels e.g. d_pro
+        #if two datasets from the same task family, we want them to use the same set of input channels e.g. d_pro and d_anti 
 
-        return 5,4
+        #question: can be get task type from pkl?
+        pass
+        
 
         
     else:
@@ -665,7 +668,6 @@ if __name__ == '__main__':
         # create and save a dataset
             #if args.mm, create multimodal dataset
             #if not proceed as usual
-            
             dset, config = create_dataset(args, multimodal=args.mm)
             save_dataset(dset, args.name, config=config)
     elif args.mode == 'load':
@@ -734,8 +736,8 @@ if __name__ == '__main__':
                 ax.plot(xr, trial_x[2], color='dodgerblue', lw=1*trial.g1, ls='--', alpha=.6)
                 
                 #stimulus 2
-                ax.plot(xr, trial_x[3], color='magenta', lw=1*trial.g2, ls='--', alpha=.6)
-                ax.plot(xr, trial_x[4], color='lime', lw=1*trial.g2, ls='--', alpha=.6)
+                ax.plot(xr, trial_x[4], color='magenta', lw=1*trial.g2, ls='--', alpha=.6)
+                ax.plot(xr, trial_x[5], color='lime', lw=1*trial.g2, ls='--', alpha=.6)
 
                 if trial.g1>trial.g2:
                     ax.plot(xr, trial_y[0], color='grey', lw=1.5)
