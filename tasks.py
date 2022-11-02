@@ -146,7 +146,10 @@ class DelayProAnti(Task):
         assert self.t_type in ['delay-pro', 'delay-anti']
         self.stimulus = stimulus
         self.fix = args.fix_t
+        
         self.stim = self.fix + args.stim_t
+        #stim_t is duration of stimulus period after fixation period
+         #when the stimulus period ends and fixation drops to zero and go period begins
 
         self.L = 3
         self.Z = 3
@@ -155,17 +158,22 @@ class DelayProAnti(Task):
         x = np.zeros((3, self.t_len))
         # 0 is fixation, the remainder are stimulus
         x[0,:self.stim] = 1
+        #up to but not including self.stim, fixate
         x[1,self.fix:] = self.stimulus[0]
+        #from and including self.fix time show stimulus until end
         x[2,self.fix:] = self.stimulus[1]
+        #from
         return x
 
     def get_y(self, args=None):
         y = np.zeros((3, self.t_len))
         y[0,:self.stim] = 1
+        #when stimulus period ends (at t=self.stim), input stimulus on the output channels
         y[1,self.stim:] = self.stimulus[0]
         y[2,self.stim:] = self.stimulus[1]
         if self.t_type.endswith('anti'):
-            y[1:,] = -y[1:,]
+            y[1:,] = -y[1:,] 
+            
         return y
 
 class MemoryProAnti(Task):
@@ -322,29 +330,134 @@ class DurationDisc(Task):
         return y
 
 
-class DM(Task):
+class DMProAnti(Task):
     def __init__(self, args, dset_id=None, n=None):
         super().__init__(args.t_len, dset_id, n)
+        #stimulus_1
+        if args.angles is None:
+            theta_1=np.random.random()*2*np.pi
+        else:
+            theta_1 = np.random.choice(args.angles)*np.pi/180
+            #randomly sammple a value from 0 to arg.angles and convert from degrees to radians
+        
+        self.stimulus_1=[np.cos(theta_1),np.sin(theta_1)]
+
+        #stimulus 2
+        theta_2= np.random.uniform(low=theta_1 + np.pi * 0.5,high= theta_1 + np.pi*1.5)
+        self.stimulus_2= [np.cos(theta_2),np.sin(theta_2)]
+        #check 1(delete once checked): angles are what they're supposed to be
 
         self.t_type = args.t_type
-        assert self.t_type in ['dm1', 'dm2', 'dm1-ctx', 'dm2-ctx', 'dm-multi']
+        assert self.t_type in ['dm-pro', 'dm-anti']
 
-        # hexagonal ring for dm
-        c1s1, c2s1 = np.random.randint(0, 6, 2)
-        d_c1s2, d_c2s2 = np.random.randint(1, 6, 2)
-        c1s2, c2s2 = (c1s1 + d_c1s2) % 6, (c2s1 + d_c2s2) % 6
+
         gamma_mean = np.random.uniform(.8, 1.2)
-        c = np.random.choice([-.08, -.04, -.02, -.01, .01, .02, .04, .08])
+        coherence_arr= [-0.08, -0.04, -0.02, -0.01, 0.01, 0.02, 0.04, 0.08]
+        
+        coherence=np.random.choice(coherence_arr)
+        coherence=np.random.choice(coherence_arr)
+        
+        self.g1 = gamma_mean + coherence
+        self.g2 = gamma_mean - coherence
 
-        self.L = 12
-        self.Z = 6
+        #duration of stimulus 1
+        self.fix = args.fix_t # fixaton duration and self.fix can also be point when self.fix ends
+    
+        stim_t= random.choice([400, 800, 1600])
+        self.stim = self.fix + stim_t
+        #point where
 
-    def get_x(self, args=None):
-        x = np.zeros((12, self.t_len))
-        x[c1s1, :] = gamma_mean + c
-        x[c1s2, :] = gamma_mean - c
-        x[6 + c2s1, :] = gamma_mean + c
-        x[6 + c2s2, :] = gamma_mean - c
+        self.t_len= self.stim+ 400
+
+
+
+        self.L = 5
+        self.Z = 3
+    
+    def get_x(self,args=None):
+        x=np.zeros((5,self.t_len))
+        
+        x[0,:self.stim]=1
+        
+        #stimulus 1
+        x[1, self.fix:]=self.g1*self.stimulus_1[0]
+        x[2,self.fix:] = self.g1*self.stimulus_1[1]
+        
+        #stimulus 2
+        x[3, self.fix:]=self.g2*self.stimulus_2[0]
+        x[4,self.fix:] = self.g2*self.stimulus_2[1]
+
+
+        return x 
+
+
+    def get_y(self,args=None):
+        y=np.zeros((3,self.t_len))
+        
+        y[0,:self.stim]= 1
+        #fixate until stim period ends (i.e until when go period begins)
+
+        if self.g1 > self.g2:
+            y[1,self.stim:] = self.stimulus_1[0]
+            y[2,self.stim:] =self.stimulus_1[1]
+        
+        elif self.g1 < self.g2:
+            y[1,self.stim:] = self.stimulus_2[0]
+            y[2,self.stim:] =self.stimulus_2[1]
+
+
+
+        
+        if self.t_type.endswith('anti'):
+            y[1:,] = -y[1:,] 
+            
+        return y
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    #commented out as this is the old version of dm
+    # def __init__(self, args, dset_id=None, n=None):
+    #     super().__init__(args.t_len, dset_id, n)
+
+    #     self.t_type = args.t_type
+    #     assert self.t_type in ['dm1', 'dm2', 'dm1-ctx', 'dm2-ctx', 'dm-multi']
+
+    #     # hexagonal ring for dm
+    #     c1s1, c2s1 = np.random.randint(0, 6, 2)
+    #     d_c1s2, d_c2s2 = np.random.randint(1, 6, 2)
+    #     c1s2, c2s2 = (c1s1 + d_c1s2) % 6, (c2s1 + d_c2s2) % 6
+    #     gamma_mean = np.random.uniform(.8, 1.2)
+    #     c = np.random.choice([-.08, -.04, -.02, -.01, .01, .02, .04, .08])
+
+    #     self.L = 12
+    #     self.Z = 6
+
+    # def get_x(self, args=None):
+    #     x = np.zeros((12, self.t_len))
+    #     x[c1s1, :] = gamma_mean + c
+    #     x[c1s2, :] = gamma_mean - c
+    #     x[6 + c2s1, :] = gamma_mean + c
+    #     x[6 + c2s2, :] = gamma_mean - c
 
 
 
@@ -362,40 +475,54 @@ def shift_x(x, m_noise, t_p):
     x = np.roll(x, disp)
     return x
 
-def create_dataset(args):
-    t_type = args.t_type
-    n_trials = args.n_trials
+def create_dataset(args, multimodal=False):
 
-    if t_type.startswith('rsg'):
-        assert args.max_ready + args.max_t + int(args.max_t * args.gain) < args.t_len
-        TaskObj = RSG
-    elif t_type.startswith('csg'):
-        TaskObj = CSG
-    elif t_type == 'delay-copy':
-        TaskObj = DelayCopy
-    elif t_type == 'flip-flop':
-        TaskObj = FlipFlop
-    elif t_type == 'delay-pro' or t_type == 'delay-anti':
-        assert args.fix_t + args.stim_t < args.t_len
-        TaskObj = DelayProAnti
-    elif t_type == 'memory-pro' or t_type == 'memory-anti':
-        assert args.fix_t + args.stim_t + args.memory_t < args.t_len
-        TaskObj = MemoryProAnti
-    elif t_type == 'dur-disc':
-        assert args.tau + args.max_d <= args.sep_t
-        assert args.sep_t + args.tau + args.max_d <= args.cue_t
-        TaskObj = DurationDisc
+    if multimodal:
+        #create a multimodal dataset from list of already of already created datasets
+        #if two datasets from the same task family, we want them to use the same set of input channels e.g. d_pro
+
+        return 5,4
+
+        
     else:
-        raise NotImplementedError
+        t_type = args.t_type
+        n_trials = args.n_trials
 
-    trials = []
-    for n in range(n_trials):
-        trial = TaskObj(args, dset_id=args.name, n=n)
-        args.L = trial.L
-        args.Z = trial.Z
-        trials.append(trial)
+        if t_type.startswith('rsg'):
+            assert args.max_ready + args.max_t + int(args.max_t * args.gain) < args.t_len
+            TaskObj = RSG
+        elif t_type.startswith('csg'):
+            TaskObj = CSG
+        elif t_type == 'delay-copy':
+            TaskObj = DelayCopy
+        elif t_type == 'flip-flop':
+            TaskObj = FlipFlop
+        elif t_type == 'delay-pro' or t_type == 'delay-anti':
+            assert args.fix_t + args.stim_t < args.t_len
+            TaskObj = DelayProAnti
+        elif t_type == 'memory-pro' or t_type == 'memory-anti':
+            assert args.fix_t + args.stim_t + args.memory_t < args.t_len
+            TaskObj = MemoryProAnti
+        elif t_type == 'dm-pro' or t_type == 'dm-anti':
+            assert args.fix_t + args.stim_t < args.t_len
+            #make sure stim period ends before t_len so there's time for go period
+            TaskObj = DMProAnti
 
-    return trials, args
+        elif t_type == 'dur-disc':
+            assert args.tau + args.max_d <= args.sep_t
+            assert args.sep_t + args.tau + args.max_d <= args.cue_t
+            TaskObj = DurationDisc
+        else:
+            raise NotImplementedError
+
+        trials = []
+        for n in range(n_trials):
+            trial = TaskObj(args, dset_id=args.name, n=n)
+            args.L = trial.L
+            args.Z = trial.Z
+            trials.append(trial)
+
+        return trials, args
 
 # turn task_args argument into usable argument variables
 # lots of defaults are written down here
@@ -446,6 +573,17 @@ def get_task_args(args):
         targs.fix_t = get_tval(tarr, 'fix', 50, int)
         targs.stim_t = get_tval(tarr, 'stim', 100, int)
         targs.memory_t = get_tval(tarr, 'memory', 50, int)
+
+    elif args.t_type == 'dm-pro' or args.t_type == 'dm-anti':
+        targs.t_len = get_tval(tarr, 'l', 300, int)
+        #default value of t_len is 300 according to this but doesn't do anything atm
+        #bc for now t_len in dm is determined by stimulus duration
+        targs.fix_t = get_tval(tarr, 'fix', 50, int)
+        targs.stim_t = get_tval(tarr, 'stim', 150, int)
+
+
+
+    
 
     elif args.t_type == 'dur-disc':
         targs.t_len = get_tval(tarr, 'l', 600, int)
@@ -501,6 +639,12 @@ if __name__ == '__main__':
     parser.add_argument('-i', '--intervals', nargs='*', type=int, default=None, help='select from rsg intervals')
     # delay memory pro anti preset angles
     parser.add_argument('--angles', nargs='*', type=float, default=None, help='angles in degrees for dmpa tasks')
+
+    #multi-modal argument to create a multimodal data set
+    parser.add_argument('--mm', action='store_true', help='multimodal setting where learning multiple tasks simultaneously with fixed net architecture')
+
+    parser.add_argument('-d', '--dataset', type=str, default=['datasets/rsg-100-150.pkl','datasets/dpro_1.pkl'], nargs='+', help='dataset(s) to use for multimodal')
+
     
 
     args = parser.parse_args()
@@ -519,13 +663,17 @@ if __name__ == '__main__':
 
     if args.mode == 'create':
         # create and save a dataset
-        dset, config = create_dataset(args)
-        save_dataset(dset, args.name, config=config)
+            #if args.mm, create multimodal dataset
+            #if not proceed as usual
+            
+            dset, config = create_dataset(args, multimodal=args.mm)
+            save_dataset(dset, args.name, config=config)
     elif args.mode == 'load':
         # visualize a dataset
         dset = load_rb(args.name)
         t_type = type(dset[0])
         xr = np.arange(dset[0].t_len)
+        
 
         samples = random.sample(dset, 12)
         fig, ax = plt.subplots(3,4,sharex=True, sharey=True, figsize=(10,6))
@@ -576,6 +724,35 @@ if __name__ == '__main__':
                 ax.plot(xr, trial_y[0], color='grey', lw=1.5)
                 ax.plot(xr, trial_y[1], color='salmon', lw=1.5)
                 ax.plot(xr, trial_y[2], color='dodgerblue', lw=1.5)
+
+            elif t_type is DMProAnti:
+                xr=np.arange(trial.t_len)
+                ax.plot(xr, trial_x[0], color='grey', lw=1, ls='--', alpha=.6)
+                #stimulus 1
+
+                ax.plot(xr, trial_x[1], color='salmon', lw=1*trial.g1, ls='--', alpha=.6)
+                ax.plot(xr, trial_x[2], color='dodgerblue', lw=1*trial.g1, ls='--', alpha=.6)
+                
+                #stimulus 2
+                ax.plot(xr, trial_x[3], color='magenta', lw=1*trial.g2, ls='--', alpha=.6)
+                ax.plot(xr, trial_x[4], color='lime', lw=1*trial.g2, ls='--', alpha=.6)
+
+                if trial.g1>trial.g2:
+                    ax.plot(xr, trial_y[0], color='grey', lw=1.5)
+                    ax.plot(xr, trial_y[1], color='salmon', lw=1.5)
+                    ax.plot(xr, trial_y[2], color='dodgerblue', lw=1.5)
+
+                elif trial.g1 < trial.g2:
+                    ax.plot(xr, trial_y[0], color='grey', lw=1.5)
+                    ax.plot(xr, trial_y[1], color='magenta', lw=1.5)
+                    ax.plot(xr, trial_y[2], color='lime', lw=1.5)
+
+
+            
+
+                
+
+
 
             elif t_type is DurationDisc:
                 ax.plot(xr, trial_x[0], color='grey', lw=1, ls='--')
