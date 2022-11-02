@@ -387,8 +387,7 @@ class DMProAnti(Task):
         x[5,self.fix:] =self.stimulus_2[1]
         x[6, self.fix:] =self.g2
         
-        #I think  I have a way to update the matrices if a new task modality added that keeps the old weights and keeps them in the right position and still keeps the dimension D1 the same
-
+        #I think  I have a way to update the matrices if a new task modality added that keeps the old weights and keeps them in the right position and still keeps the dimension D1 the same.
         return x 
 
 
