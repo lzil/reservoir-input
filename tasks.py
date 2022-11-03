@@ -375,7 +375,7 @@ class DMProAnti(Task):
         
         #point where
 
-        self.t_len= self.stim+ 400
+        
 
 
 
@@ -444,9 +444,8 @@ class DelayDMProAnti(Task):
 
 
         gamma_mean = np.random.uniform(.8, 1.2)
-        coherence_arr= [-0.08, -0.04, -0.02, -0.01, 0.01, 0.02, 0.04, 0.08]
+        coherence_arr= [-0.32, -0.16, -0.08, 0.08, 0.16, 0.32]
         
-        coherence=np.random.choice(coherence_arr)
         coherence=np.random.choice(coherence_arr)
         
         self.g1 = gamma_mean + coherence
@@ -470,7 +469,7 @@ class DelayDMProAnti(Task):
         
         #point where
 
-        self.t_len= self.stim+ 400
+        
 
 
 
@@ -500,24 +499,140 @@ class DelayDMProAnti(Task):
         y[0,:self.stim]= 1
         #fixate until stim period ends (i.e until when go period begins)
 
-        if self.g1 > self.g2:
-            y[1,self.stim:] = self.stimulus_1[0]
-            y[2,self.stim:] = self.stimulus_1[1]
-        
-        elif self.g1 < self.g2:
-            y[1,self.stim:] = self.stimulus_2[0]
-            y[2,self.stim:] =self.stimulus_2[1]
+
+        if self.t_type.endswith('pro'):
+            if self.g1 > self.g2:
+                y[1,self.stim:] = self.stimulus_1[0]
+                y[2,self.stim:] = self.stimulus_1[1]
+            
+            elif self.g1 < self.g2:
+                y[1,self.stim:] = self.stimulus_2[0]
+                y[2,self.stim:] =self.stimulus_2[1]
 
 
 
         
         if self.t_type.endswith('anti'):
-            y[1:,] = -y[1:,] 
+            if self.g1 <self.g2:
+                y[1,self.stim:] = self.stimulus_1[0]
+                y[2,self.stim:] = self.stimulus_1[1]
+            
+            elif self.g1 > self.g2:
+                y[1,self.stim:] = self.stimulus_2[0]
+                y[2,self.stim:] =self.stimulus_2[1] 
             
         return y
 
 
+#DMC stands for delay match to category , DMS delay match to stimuli (bc same direction) N stands for not - we'll use pro for match and anti for not match 
 
+
+
+
+class DMCProAnti(Task):
+    def __init__(self, args, dset_id=None, n=None):
+        super().__init__(args.t_len, dset_id, n)
+        #stimulus_1
+        
+        angles_arr = [18,54,90,126,162,198,234,270,306,342]
+        self.theta_1=np.random.choice(angles_arr)
+        self.theta_1*=np.pi/180
+        self.stimulus_1=[np.cos(self.theta_1),np.sin(self.theta_1)]
+
+        #stimulus 2
+        self.theta_2=np.random.choice(angles_arr)
+        
+        self.theta_2*=np.pi/180
+
+        self.stimulus_2= [np.cos(self.theta_2),np.sin(self.theta_2)]
+
+        
+        
+        #check 1(delete once checked): angles are what they're supposed to be
+
+        self.t_type = args.t_type
+        assert self.t_type in ['dmc-pro', 'dmc-anti']
+
+        
+        
+
+        #duration of stimulus 1
+        self.fix = args.fix_t # fixaton duration and self.fix can also be point when self.fix ends
+    
+        
+        
+
+        self.stim1=self.fix+args.stim_t1 #we'll define args.stim_t1
+        #we show stimulus 1 up until this point self.stim_1
+        self.delay1=self.stim1+args.delay_t1
+        self.stim_2=self.delay1+args.stim_t2 
+        #note:delay_t1 is the length of the delay self.delay1 is when the first delay ends in the trial
+
+        self.stim=self.stim_2 
+        
+        
+
+
+
+
+        self.L = 5
+        self.Z = 3
+    
+    def get_x(self,args=None):
+        x=np.zeros((5,self.t_len))
+        
+        x[0,:self.stim]=1
+        #stimulus 1
+        x[1, self.fix:self.stim1]=self.stimulus_1[0]
+        x[2,self.fix:self.stim1] = self.stimulus_1[1]
+        
+        #stimulus 2
+        x[3, self.delay1:self.stim_2]=self.stimulus_2[0]
+        x[4,self.delay1:self.stim_2] =self.stimulus_2[1]
+        
+        
+        #I think  I have a way to update the matrices if a new task modality added that keeps the old weights and keeps them in the right position and still keeps the dimension D1 the same.
+        
+       
+
+        return x 
+
+
+    def get_y(self,args=None):
+        y=np.zeros((3,self.t_len))
+        
+        if self.t_type.endswith('pro'):
+            if ((0<=self.theta_1 <= np.pi) and (0<=self.theta_2<=np.pi) ) or ((np.pi <self.theta_1 <= 2*np.pi) and (np.pi<self.theta_2<= 2*np.pi)):
+                y[0,:self.stim]= 1
+                y[1,self.stim:] = self.stimulus_2[0]
+                y[2,self.stim:] =self.stimulus_2[1]
+        #stop fixating and responsd after self.stim if in same category otherwise hold fixation
+        
+            else:
+                y[0]=1
+            
+
+
+        
+
+
+
+        
+        elif self.t_type.endswith('anti'):
+            #if they don't match
+            if not ((0<=self.theta_1 <= np.pi) and (0<=self.theta_2<=np.pi) ) or ((np.pi <self.theta_1 <= 2*np.pi) and (np.pi<self.theta_2<= 2*np.pi)):
+                y[0,:self.stim]= 1
+                y[1,self.stim:] = self.stimulus_2[0]
+                y[2,self.stim:] =self.stimulus_2[1]
+            
+        #stop fixating after self.stim if in same category otherwise hold fixation
+        
+            else:
+                y[0]=1
+                
+
+            
+        return y
 
 
 
@@ -614,6 +729,11 @@ def create_dataset(args, multimodal=False):
             assert args.fix_t + args.stim_t1+args.delay_t1+args.stim_t2+args.delay_t2 < args.t_len
             #make sure stim period ends before t_len so there's time for go period
             TaskObj = DelayDMProAnti
+        
+        elif t_type == 'dmc-pro' or t_type == 'dmc-anti':
+            assert args.fix_t + args.stim_t1+args.delay_t1+args.stim_t2< args.t_len
+            #make sure stim period ends before t_len so there's time for go period
+            TaskObj = DMCProAnti
 
 
         elif t_type == 'dur-disc':
@@ -690,14 +810,24 @@ def get_task_args(args):
         targs.stim_t = get_tval(tarr, 'stim', 300, int)
 
     elif args.t_type == 'delay-dm-pro' or args.t_type == 'delay-dm-anti':
-        targs.t_len = get_tval(tarr, 'l', 800, int)
+        targs.t_len = get_tval(tarr, 'l', 450, int)
         #default value of t_len is 300 according to this but doesn't do anything atm
         #bc for now t_len in dm is determined by stimulus duration
         targs.fix_t = get_tval(tarr, 'fix', 50, int)
-        targs.stim_t1 = get_tval(tarr, 'stimt1', 300, int)
+        targs.stim_t1 = get_tval(tarr, 'stimt1', 100, int)
         targs.delay_t1=get_tval(tarr,'delayl1',50, int)
-        targs.stim_t2 = get_tval(tarr, 'stimt2', 300, int)
+        targs.stim_t2 = get_tval(tarr, 'stimt2', 100, int)
         targs.delay_t2=get_tval(tarr,'delayl1', 50, int)
+
+    elif args.t_type == 'dmc-pro' or args.t_type == 'dmc-anti':
+        targs.t_len = get_tval(tarr, 'l', 450, int)
+        #default value of t_len is 300 according to this but doesn't do anything atm
+        #bc for now t_len in dm is determined by stimulus duration
+        targs.fix_t = get_tval(tarr, 'fix', 50, int)
+        targs.stim_t1 = get_tval(tarr, 'stimt1', 100, int)
+        targs.delay_t1=get_tval(tarr,'delayl1',50, int)
+        targs.stim_t2 = get_tval(tarr, 'stimt2', 100, int)
+        
 
 
 
@@ -862,17 +992,37 @@ if __name__ == '__main__':
                     ax.plot(xr, trial_x[5], color='lime', lw=1*trial.g2, ls='--', alpha=.6)
 
 
+            elif t_type is DMCProAnti:
+                xr=np.arange(trial.t_len)
+                ax.plot(xr, trial_x[0], color='grey', lw=1, ls='--', alpha=.6)
+                #stimulus 1
                 
+                    
+                if ((0<=trial.theta_1 <= np.pi) and (0<=trial.theta_2<=np.pi) ) or ((np.pi <trial.theta_1 <= 2*np.pi) and (np.pi<trial.theta_2<= 2*np.pi)):
+                    #if match both solid
+                    ax.plot(xr, trial_x[1], color='salmon', lw=1, ls='solid', alpha=.6)
+                    ax.plot(xr, trial_x[2], color='dodgerblue', lw=1, ls='solid', alpha=.6)
+                    #stimulus 2
+                    ax.plot(xr, trial_x[3], color='magenta', lw=1, ls='solid', alpha=.6)
+                    ax.plot(xr, trial_x[4], color='lime', lw=1, ls='solid', alpha=.6)
 
-                if trial.g1>trial.g2:
-                    ax.plot(xr, trial_y[0], color='grey', lw=1.5)
-                    ax.plot(xr, trial_y[1], color='salmon', lw=1.5)
-                    ax.plot(xr, trial_y[2], color='dodgerblue', lw=1.5)
-
-                elif trial.g1 < trial.g2:
                     ax.plot(xr, trial_y[0], color='grey', lw=1.5)
                     ax.plot(xr, trial_y[1], color='magenta', lw=1.5)
                     ax.plot(xr, trial_y[2], color='lime', lw=1.5)
+
+                else:
+                    #if they don't match
+                    ax.plot(xr, trial_x[1], color='salmon', lw=1, ls='--', alpha=.6)
+                    ax.plot(xr, trial_x[2], color='dodgerblue', lw=1, ls='--', alpha=.6)
+                    #stimulus 2
+                    ax.plot(xr, trial_x[3], color='magenta', lw=1, ls='dotted', alpha=.6)
+                    ax.plot(xr, trial_x[4], color='lime', lw=1, ls='dotted', alpha=.6)
+
+                    ax.plot(xr, trial_y[0], color='grey', lw=1.5)
+                
+
+                    
+
 
             elif t_type is DelayDMProAnti:
                 xr=np.arange(trial.t_len)
