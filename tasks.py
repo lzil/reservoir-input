@@ -371,13 +371,7 @@ class DMProAnti(Task):
         #used fixed stim_t
         self.stim = self.fix + args.stim_t
 
-        self.stim1=self.fix+args.stim_t1 #we'll define args.stim_t1
-        #we show stimulus 1 up until this point self.stim_1
-        self.delay1=self.stim1+args.delay_t1
-        self.stim_2=self.delay+arg.stim_t2 
-
         
-        #point where
 
         
 
@@ -900,11 +894,23 @@ class MultimodalDataset:
            
 
             if t_type == RSG :
-               
                 TaskObj = RSG
             
             elif t_type ==  DMCProAnti:
                 TaskObj = DMCProAnti
+
+            elif t_type == DelayProAnti:
+                TaskObj = DelayProAnti
+            
+            elif t_type == MemoryProAnti:
+                TaskObj = MemoryProAnti
+            
+            elif t_type == DelayDMProAnti:
+               TaskObj = DelayDMProAnti
+
+            elif t_type == DMProAnti:
+                TaskObj = DMProAnti
+
 
 
             else:
@@ -1210,9 +1216,9 @@ if __name__ == '__main__':
                 multimodal_creator= MultimodalDataset(args)
                 dset, config = multimodal_creator.retrieve_multimodal_dataset(args)
 
-                for i in [0, 2000]:
-                    x,y, t  = dset[i].get_x(), dset[i].get_y(),dset[i].t_type
-                    print(x, y, t)
+                # for i in [0, 2000]:
+                #     x,y, t  = dset[i].get_x(), dset[i].get_y(),dset[i].t_type
+                #     print(x, y, t)
 
             
             else:

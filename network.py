@@ -65,6 +65,10 @@ class M2Net(nn.Module):
         self._init_vars()
         self.reset()
 
+        if self.args.multimodal:
+            self.args.T =0
+
+
     def _init_vars(self):
         with TorchSeed(self.args.network_seed):
             D1 = self.args.D1 if self.args.D1 != 0 else self.args.N
