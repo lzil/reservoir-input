@@ -20,6 +20,11 @@
     300.0,
     330.0
   ],
+  "mm": false,
+  "datasets": [
+    "datasets/rsg-100-150.pkl",
+    "datasets/dpro_1.pkl"
+  ],
   "t_len": 300,
   "fix_t": 50,
   "stim_t": 150,

@@ -406,7 +406,7 @@ def get_task_args(args):
         targs.t_len = get_tval(tarr, 'l', 600, int)
         targs.p_len = get_tval(tarr, 'pl', 5, int)
         targs.gain = get_tval(tarr, 'gain', 1, float)
-        targs.max_ready = get_tval(tarr, 'max_ready', 80, int)
+        targs.max_ready = get_tval(tarr, 'max_ready', 70, int)
         if args.intervals is None:
             targs.min_t = get_tval(tarr, 'gt', targs.p_len * 4, int)
             targs.max_t = get_tval(tarr, 'lt', targs.t_len // 2 - targs.p_len * 4 - targs.max_ready, int)

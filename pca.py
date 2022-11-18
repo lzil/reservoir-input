@@ -25,7 +25,7 @@ def main(args):
     if len(args.dataset) == 0:
         args.dataset = config.dataset
 
-    n_reps = 100
+    n_reps = 2000
     # don't show these contexts
     context_filter = []
 
@@ -102,11 +102,14 @@ def pca_rsg(args, A_uncut, trials, n_reps):
 
 def pca_dmpa(args, A_uncut, trials, n_reps):
 
-    setting = 'nofix'
+    setting = 'movement'
+    dmpa_set = ['delay-pro', 'delay-anti']
 
     As = []
     for idx in range(n_reps):
         t_type = type(trials[idx])
+        if trials[idx].t_type not in dmpa_set:
+            continue
         fix = trials[idx].fix
         stim = trials[idx].stim    
         if t_type is MemoryProAnti:
@@ -126,47 +129,84 @@ def pca_dmpa(args, A_uncut, trials, n_reps):
             else:
                 As.append(A_uncut[idx,memory:])
 
-    A_proj = pca(As, 3)
+    A_proj = pca(As, args.rank)
 
     n_contexts = len(args.dataset)
     stimuli_groups = [{} for i in range(n_contexts)]
+
+    idx2 = 0
     for idx in range(n_reps):
+    # for idx in range(len(As)):
+        if trials[idx].t_type not in dmpa_set:
+            continue
         stimulus = tuple(trials[idx].stimulus)
         context = trials[idx].context
         if stimulus in stimuli_groups[context]:
-            stimuli_groups[context][stimulus].append(A_proj[idx])
+            stimuli_groups[context][stimulus].append(A_proj[idx2])
         else:
-            stimuli_groups[context][stimulus] = [A_proj[idx]]
+            stimuli_groups[context][stimulus] = [A_proj[idx2]]
+        idx2 += 1
 
     context_colors = [
         iter(cspaces[i](np.linspace(0, 1, len(stimuli_groups[i])))) for i in range(n_contexts)
     ]
+    print([len(k.values()) for k in stimuli_groups])
 
-    fig = plt.figure()
-    ax = fig.add_subplot(111, projection='3d')
-    ax.grid(False)
-    plt.axis('off')
+    if args.rank == 3:
+        fig = plt.figure()
+        ax = fig.add_subplot(111, projection='3d')
+        ax.grid(False)
+        plt.axis('off')
 
-    for context, groups in enumerate(stimuli_groups):
-        sorted_stimuli = sorted(groups.keys())
-        for stimulus in sorted_stimuli:
-            v = groups[stimulus]
-            proj = sum(v) / len(v)
-            c = next(context_colors[context])
+        for context, groups in enumerate(stimuli_groups):
+            sorted_stimuli = sorted(groups.keys())
+            for stimulus in sorted_stimuli:
+                v = groups[stimulus]
+                proj = sum(v) / len(v)
+                c = next(context_colors[context])
 
-            t = proj.T
+                t = proj.T
 
-            ax.plot(t[0], t[1], t[2], color=c, lw=1)
-            if setting == 'preparation':
-                marker_a = '^'
-                marker_b = 'o'
-            else:
-                marker_a = 'o'
-                marker_b = 's'
-            ax.scatter(t[0][0], t[1][0], t[2][0], s=40, color=c, marker=marker_a)
-            ax.scatter(t[0][-1], t[1][-1], t[2][-1], s=30, color=c, marker=marker_b)
+                ax.plot(t[0], t[1], t[2], color=c, lw=1)
+                if setting == 'preparation':
+                    marker_a = '^'
+                    marker_b = 'o'
+                else:
+                    marker_a = 'o'
+                    marker_b = 's'
+                ax.scatter(t[0][0], t[1][0], t[2][0], s=40, color=c, marker=marker_a)
+                ax.scatter(t[0][-1], t[1][-1], t[2][-1], s=30, color=c, marker=marker_b)
 
-    plt.show()
+        plt.show()
+
+    if args.rank == 2:
+
+        fig = plt.figure()
+        ax = fig.gca()
+        ax.grid(False)
+        plt.axis('off')
+
+        for context, groups in enumerate(stimuli_groups):
+            sorted_stimuli = sorted(groups.keys())
+            for stimulus in sorted_stimuli:
+                v = groups[stimulus]
+                proj = sum(v) / len(v)
+                c = next(context_colors[context])
+
+                t = proj.T
+
+                ax.plot(t[0], t[1], color=c, lw=1)
+                if setting == 'preparation':
+                    marker_a = '^'
+                    marker_b = 'o'
+                else:
+                    marker_a = 'o'
+                    marker_b = 's'
+                ax.scatter(t[0][0], t[1][0], s=40, color=c, marker=marker_a)
+                ax.scatter(t[0][-1], t[1][-1], s=30, color=c, marker=marker_b)
+
+        plt.show()
+
 
 
 # As should be either [T, D] or [[T, D], ...] shaped where
@@ -196,6 +236,7 @@ def pca(As, rank):
 if __name__ == '__main__':
     ap = argparse.ArgumentParser()
     ap.add_argument('model', type=str)
+    ap.add_argument('--rank', type=int, default=3)
     ap.add_argument('-d', '--dataset', type=str, nargs='+', default=[])
     args = ap.parse_args()
 
