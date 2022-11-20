@@ -24,6 +24,6 @@
   "fix_t": 50,
   "stim_t": 150,
   "argv": "tasks.py create delayanti-30 -t delay-anti --angles 0 30 60 90 120 150 180 210 240 270 300 330",
-  "L": 3,
-  "Z": 3
+  "L": 4,
+  "Z": 4
 }

@@ -25,11 +25,12 @@ class TorchSeed:
 
 
 DEFAULT_ARGS = {
-    'L': 2,
+    'L': 4,
+    'Z': 4,
+    
     'D1': 5,
-    'D2': 5,
+    'D2': 0,
     'N': 50,
-    'Z': 2,
 
     'use_reservoir': True,
     'res_init_g': 1.5,

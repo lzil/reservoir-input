@@ -29,11 +29,11 @@ from trainer import Trainer
 
 def parse_args():
     parser = argparse.ArgumentParser(description='')
-    # parser.add_argument('-L', type=int, default=5, help='latent input dimension')
+    parser.add_argument('-L', type=int, default=4, help='latent input dimension')
     parser.add_argument('--D1', type=int, default=50, help='u dimension')
-    parser.add_argument('--D2', type=int, default=50, help='v dimension')
+    parser.add_argument('--D2', type=int, default=0, help='v dimension')
     parser.add_argument('-N', type=int, default=300, help='number of neurons in reservoir')
-    # parser.add_argument('-Z', type=int, default=5, help='output dimension')
+    parser.add_argument('-Z', type=int, default=4, help='output dimension')
 
     parser.add_argument('--net', type=str, default='M2', choices=['basic', 'M2'])
     parser.add_argument('--train_parts', type=str, nargs='+', default=['M_u', 'M_ro'])
@@ -49,8 +49,6 @@ def parse_args():
     # parser.add_argument('--res_init_type', type=str, default='gaussian', help='')
     parser.add_argument('--res_init_g', type=float, default=1.5)
     parser.add_argument('--res_noise', type=float, default=0)
-    parser.add_argument('--fixed_pts', type=int, default=0, help='number of fixed pts to include as hopfield')
-    parser.add_argument('--fixed_beta', type=float, default=1.5, help='beta to make patterns stronger')
     parser.add_argument('--x_noise', type=float, default=0)
     parser.add_argument('--m_noise', type=float, default=0)
     parser.add_argument('--res_bias', action='store_true', help='bias term as part of recurrent connections, with J')
@@ -61,12 +59,7 @@ def parse_args():
     parser.add_argument('--net_fb', action='store_true', help='feedback from network output to input')
 
     # dataset arguments
-    parser.add_argument('-d', '--dataset', type=str, default=['datasets/rsg-100-150.pkl'], nargs='+', help='dataset(s) to use. >1 means different contexts')
-    # parser.add_argument('-a', '--add_tasks', type=str, nargs='+', help='add tasks to previously trained reservoir')
-    parser.add_argument('-s', '--sequential', action='store_true', help='sequential training')
-    parser.add_argument('--owm', action='store_true', help='use orthogonal weight modification')
-    # parser.add_argument('-o', '--train_order', type=int, nargs='+', default=[], help='ids of tasks to train on, in order if sequential flag is enabled. empty for all')
-    # parser.add_argument('--seq_threshold', type=float, default=5, help='threshold for having solved a task before moving on to next one')
+    parser.add_argument('-d', '--dataset', type=str, default=['datasets/delaypro.pkl'], nargs='+', help='dataset(s) to use. >1 means different contexts')
     parser.add_argument('--same_test', action='store_true', help='use entire dataset for both training and testing')
     
     # training arguments
@@ -155,10 +148,6 @@ def adjust_args(args):
     # shortcut for specifying train everything including reservoir
     if args.train_parts == ['all']:
         args.train_parts = ['']
-
-    # shortcut for training in designated order
-    if args.sequential and len(args.train_order) == 0:
-        args.train_order = list(range(len(args.dataset)))
 
     # TODO
     if 'rsg' in args.dataset[0]:

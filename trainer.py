@@ -31,21 +31,11 @@ class Trainer:
 
         trains, tests = create_loaders(self.args.dataset, self.args, split_test=True, test_size=50)
 
-        if self.args.sequential:
-            self.train_set, self.train_loaders = trains
-            self.test_set, self.test_loaders = tests
-            self.train_idx = 0
-            self.train_loader = self.train_loaders[self.args.train_order[self.train_idx]]
-            self.test_loader = self.test_loaders[self.args.train_order[self.train_idx]]
-        else:
-            self.train_set, self.train_loader = trains
-            self.test_set, self.test_loader = tests
+        self.train_set, self.train_loader = trains
+        self.test_set, self.test_loader = tests
         logging.info(f'Created data loaders using datasets:')
         for ds in self.args.dataset:
             logging.info(f'  {ds}')
-
-        if self.args.sequential:
-            logging.info(f'Sequential training. Starting with task {self.train_idx}')
 
         # self.net = BasicNetwork(self.args)
         self.net = M2Net(self.args)
@@ -153,22 +143,6 @@ class Trainer:
                 trial_loss += k_loss.detach().item()
                 if training:
                     k_loss.backward()
-                    # strategies for continual learning that involve modifying gradients
-                    if self.args.sequential and self.train_idx > 0:
-                        if self.args.owm:
-                            # orthogonal weight modification
-                            self.net.M_u.weight.grad = self.P_u @ self.net.M_u.weight.grad @ self.P_s
-                            self.net.M_ro.weight.grad = self.P_z @ self.net.M_ro.weight.grad @ self.P_v
-                            if self.args.ff_bias:
-                                self.net.M_u.bias.grad = self.P_u @ self.net.M_u.bias.grad
-                                self.net.M_ro.bias.grad = self.P_z @ self.net.M_ro.bias.grad
-                        elif self.args.swt:
-                            # keeping sensory and output weights constant after learning first task
-                            self.net.M_u.weight.grad[:,:self.args.L] = 0
-                            self.net.M_ro.weight.grad[:] = 0
-                            if self.args.ff_bias:
-                                self.net.M_u.bias.grad[:] = 0
-                                self.net.M_ro.bias.grad[:] = 0
                             
                 k_loss = 0.
                 self.net.reservoir.x = self.net.reservoir.x.detach()
@@ -246,13 +220,6 @@ class Trainer:
         running_loss = 0.0
         ending = False
 
-        # for OWM
-        if self.args.owm:
-            S_s = 0
-            S_u = 0
-            S_v = 0
-            S_z = 0
-
         for e in range(self.args.n_epochs):
             for epoch_idx, (x, y, info) in enumerate(self.train_loader):
                 ix += 1
@@ -276,48 +243,12 @@ class Trainer:
                         f'train {train_loss:.3f}',
                         f'test {test_loss:.3f}'
                     ]
-                    if self.args.sequential:
-                        losses = self.test_tasks(ids=range(self.train_idx))
-                        for i, loss in losses:
-                            log_arr.append(f't{i}: {loss:.3f}')
                     log_str = '\t| '.join(log_arr)
                     logging.info(log_str)
 
                     if not self.args.no_log:
                         self.log_checkpoint(ix, etc['ins'].cpu().numpy(), etc['goals'].cpu().numpy(), z, train_loss, test_loss)
                     running_loss = 0.0
-
-                    # if training sequentially, move on to the next task
-                    # if doing OWM-like updates, do them here
-                    if self.args.sequential and test_loss < self.args.seq_threshold:
-                        logging.info(f'Successfully trained task {self.train_idx}...')
-                        
-                        losses = self.test_tasks(ids=range(self.train_idx + 1))
-                        for i, loss in losses:
-                            logging.info(f'...loss on task {i}: {loss:.3f}')
-
-                        # orthogonal weight modification of M_u and M_ro
-                        if self.args.owm:
-                            # 0th dimension is test batch size, 2nd dimension is number of timesteps
-                            # 1st dimension is the actual vector representation
-                            self.P_s, S_s = self.calc_P(S_s, test_etc['ins'])
-                            self.P_u, S_u = self.update_P(S_u, test_etc['us'])
-                            self.P_v, S_v = self.update_P(S_v, test_etc['vs'])
-                            self.P_z, S_z = self.update_P(S_z, test_etc['outs'])
-                            logging.info(f'...updated projection matrices for OWM')
-
-                        # done processing prior task, move on to the next one or quit
-                        self.train_idx += 1
-                        if self.train_idx == len(self.args.train_order):
-                            ending = True
-                            logging.info(f'...done training all tasks! ending')
-                            break
-                        logging.info(f'...moving on to task {self.train_idx}.')
-                        self.train_loader = self.train_loaders[self.args.train_order[self.train_idx]]
-                        self.test_loader = self.test_loaders[self.args.train_order[self.train_idx]]
-                        running_min_error = float('inf')
-                        running_no_min = 0
-                        break
 
                     # convergence based on no avg loss decrease after patience samples
                     if test_loss < running_min_error:

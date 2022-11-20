@@ -119,28 +119,8 @@ def create_loaders(datasets, args, split_test=True, test_size=1, context_filter=
     if split_test:
         train_set = TrialDataset(dsets_train, args)
 
-    # TODO: make all this code better
-    if args.sequential:
-        # helper function for sequential loaders
-        def create_subset_loaders(dset, batch_size, drop_last):
-            loaders = []
-            max_idxs = dset.max_idxs
-            for i in range(len(datasets)):
-                if i == 0:
-                    subset = Subset(dset, range(max_idxs[0]))
-                else:
-                    subset = Subset(dset, range(max_idxs[i-1], max_idxs[i]))
-                loader = DataLoader(subset, batch_size=batch_size, shuffle=True, collate_fn=collater, drop_last=drop_last)
-                loaders.append(loader)
-            return loaders
-        # create the loaders themselves
-        test_loaders = create_subset_loaders(test_set, test_size, False)
-        if split_test:
-            train_loaders = create_subset_loaders(train_set, args.batch_size, True)
-            return (train_set, train_loaders), (test_set, test_loaders)
-        return (test_set, test_loaders)
     # filter out some contexts
-    elif len(context_filter) != 0:
+    if len(context_filter) != 0:
         def create_context_loaders(dset, batch_size, drop_last):
             max_idxs = dset.max_idxs
             c_range = []

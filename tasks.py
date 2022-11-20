@@ -34,8 +34,8 @@ class Task:
         self.dset_id = dset_id
         self.n = n
 
-        self.L = 0
-        self.Z = 0
+        self.L = 4
+        self.Z = 4
 
     def get_x(self):
         pass
@@ -43,6 +43,9 @@ class Task:
     def get_y(self):
         pass
 
+
+# modalities in: 0
+# modalities out: 0
 class RSG(Task):
     def __init__(self, args, dset_id=None, n=None):
         super().__init__(args.t_len, dset_id, n)
@@ -60,9 +63,7 @@ class RSG(Task):
         self.rsg = (ready_time, set_time, go_time)
         self.t_o = t_o
         self.t_p = t_p
-
-        self.L = 1
-        self.Z = 1
+        self.gain = args.gain
 
     def get_x(self, args=None):
         rt, st, gt = self.rsg
@@ -73,9 +74,9 @@ class RSG(Task):
         x_set = np.zeros(self.t_len)
         x_set[st:st+self.p_len] = 1
         # insert set pulse
-        x = np.zeros((1, self.t_len))
+        x = np.zeros((4, self.t_len))
         x[0] = x_set
-        # perceptual shift
+        # perceptual shift. only to the ready signal
         if args is not None and args.m_noise != 0:
             x_ready = shift_x(x_ready, args.m_noise, self.t_o)
         x[0] += x_ready
@@ -85,54 +86,18 @@ class RSG(Task):
         return x
 
     def get_y(self, args=None):
-        y = np.arange(self.t_len)
+        y = np.zeros((4, self.t_len))
+        y0 = np.arange(self.t_len)
         slope = 1 / self.t_p
-        y = y * slope - self.rsg[1] * slope
+        y0 = y0 * slope - self.rsg[1] * slope
         # so the output value is not too large
-        y = np.clip(y, 0, 1.5)
+        y0 = np.clip(y0, 0, 1.5)
         # RSG output is only 1D
-        y = y.reshape(1, self.t_len)
+        y[0] = y0
         return y
 
-class CSG(Task):
-    def __init__(self, args, dset_id=None, n=None):
-        super().__init__(args.t_len, dset_id, n)
-        if args.intervals is None:
-            t_p = np.random.randint(args.min_t, args.max_t)
-            t_percentile = (t_p - args.min_t) / (args.max_t - args.min_t)
-        else:
-            ix = np.random.randint(len(args.intervals))
-            t_p = args.intervals[ix]
-            t_percentile = ix / len(args.intervals)
-        cue_time = np.random.randint(args.p_len * 2, args.max_cue)
-        set_time = cue_time + np.random.randint(args.p_len * 2, args.max_cue)
-        go_time = set_time + t_p
-        assert go_time < self.t_len
-
-        self.t_type = args.t_type
-        self.p_len = args.p_len
-        self.t_percentile = t_percentile
-        self.csg = (cue_time, set_time, go_time)
-        self.t_p = t_p
-
-        self.L = 1
-        self.Z = 1
-
-    def get_x(self, args=None):
-        x = np.zeros((1, self.t_len))
-        ct, st, gt = self.csg
-        x[0, ct:ct+self.p_len] = 0.5 + 0.5 * self.t_percentile
-        x[0, st:st+self.p_len] = 1
-        return x
-
-    def get_y(self, args=None):
-        y = np.arange(self.t_len)
-        slope = 1 / self.t_p
-        y = y * slope - self.csg[1] * slope
-        y = np.clip(y, 0, 1.5)
-        y = y.reshape(1, -1)
-        return y
-
+# modalities in: 1, 2, 3
+# modalities out: 1, 2, 3
 class DelayProAnti(Task):
     def __init__(self, args, dset_id=None, n=None):
         super().__init__(args.t_len, dset_id, n)
@@ -148,26 +113,27 @@ class DelayProAnti(Task):
         self.fix = args.fix_t
         self.stim = self.fix + args.stim_t
 
-        self.L = 3
-        self.Z = 3
-
     def get_x(self, args=None):
-        x = np.zeros((3, self.t_len))
+        x = np.zeros((4, self.t_len))
         # 0 is fixation, the remainder are stimulus
-        x[0,:self.stim] = 1
-        x[1,self.fix:] = self.stimulus[0]
-        x[2,self.fix:] = self.stimulus[1]
+        x[1,:self.stim] = 1
+        x[2,self.fix:] = self.stimulus[0]
+        x[3,self.fix:] = self.stimulus[1]
+        if args is not None and args.x_noise != 0:
+            x = corrupt_x(args, x)
         return x
 
     def get_y(self, args=None):
-        y = np.zeros((3, self.t_len))
-        y[0,:self.stim] = 1
-        y[1,self.stim:] = self.stimulus[0]
-        y[2,self.stim:] = self.stimulus[1]
+        y = np.zeros((4, self.t_len))
+        y[1,:self.stim] = 1
+        y[2,self.stim:] = self.stimulus[0]
+        y[3,self.stim:] = self.stimulus[1]
         if self.t_type.endswith('anti'):
             y[1:,] = -y[1:,]
         return y
 
+# modalities in: 1, 2, 3
+# modalities out: 1, 2, 3
 class MemoryProAnti(Task):
     def __init__(self, args, dset_id=None, n=None):
         super().__init__(args.t_len, dset_id, n)
@@ -184,170 +150,25 @@ class MemoryProAnti(Task):
         self.stim = self.fix + args.stim_t
         self.memory = self.stim + args.memory_t
 
-        self.L = 3
-        self.Z = 3
-
     def get_x(self, args=None):
-        x = np.zeros((3, self.t_len))
-        x[0,:self.memory] = 1
-        x[1,self.fix:self.stim] = self.stimulus[0]
-        x[2,self.fix:self.stim] = self.stimulus[1]
+        x = np.zeros((4, self.t_len))
+        x[1,:self.memory] = 1
+        x[2,self.fix:self.stim] = self.stimulus[0]
+        x[3,self.fix:self.stim] = self.stimulus[1]
+        # noisy up/down corruption
+        if args is not None and args.x_noise != 0:
+            x = corrupt_x(args, x)
         return x
 
     def get_y(self, args=None):
-        y = np.zeros((3, self.t_len))
-        y[0,:self.memory] = 1
-        y[1,self.memory:] = self.stimulus[0]
-        y[2,self.memory:] = self.stimulus[1]
+        y = np.zeros((4, self.t_len))
+        y[1,:self.memory] = 1
+        y[2,self.memory:] = self.stimulus[0]
+        y[3,self.memory:] = self.stimulus[1]
         # reversing output stimulus for anti condition
         if self.t_type.endswith('anti'):
             y[1:,] = -y[1:,]
         return y
-
-class DelayCopy(Task):
-    def __init__(self, args, dset_id=None, n=None):
-        super().__init__(args.t_len, dset_id, n)
-
-        self.s_len = self.t_len // 2
-        x_r = np.arange(self.s_len)
-
-        x = np.zeros((args.dim, self.s_len))
-            
-        freqs = np.random.uniform(args.f_range[0], args.f_range[1], (args.dim, args.n_freqs))
-        amps = np.random.uniform(-args.amp, args.amp, (args.dim, args.n_freqs))
-
-        for i in range(args.dim):
-            for j in range(args.n_freqs):
-                x[i] = x[i] + amps[i,j] * np.sin(1/freqs[i,j] * x_r) / np.sqrt(args.n_freqs)
-
-        self.t_type = args.t_type
-        self.dim = args.dim
-        self.pattern = x
-
-        self.L = args.dim
-        self.Z = args.dim
-
-    def get_x(self, args=None):
-        x = np.zeros((self.dim, self.t_len))
-        x[:self.dim, :self.s_len] = self.pattern
-        return x
-
-    def get_y(self, args=None):
-        y = np.zeros((self.dim, self.t_len))
-        y[:self.dim, self.s_len:] = self.pattern
-        return y
-
-class FlipFlop(Task):
-    def __init__(self, args, dset_id=None, n=None):
-        super().__init__(args.t_len, dset_id, n)
-
-        keys = []
-        for i in range(args.dim):
-            cum_xlen = 0
-            # add new dimension
-            keys.append([])
-            while cum_xlen < self.t_len:
-                cum_xlen += np.random.geometric(args.geop) + args.p_len
-                if cum_xlen < self.t_len:
-                    sign = np.random.choice([-1, 1])
-                    keys[i].append(sign * (cum_xlen - args.p_len))
-
-        self.t_type = args.t_type
-        self.p_len = args.p_len
-        self.dim = args.dim
-        self.keys = keys
-
-        self.L = args.dim
-        self.Z = args.dim
-
-    def get_x(self, args=None):
-        x = np.zeros((self.dim, self.t_len))
-        for i in range(self.dim):
-            for idx in self.keys[i]:
-                x[i, abs(idx):abs(idx)+self.p_len] = np.sign(idx)
-        return x
-
-    def get_y(self, args=None):
-        y = np.zeros((self.dim, self.t_len))
-        for i in range(self.dim):
-            for j in range(len(self.keys[i])):
-                # the desired key we care about
-                idx = self.keys[i][j]
-                # the sign to assign to this one
-                sign = np.sign(idx)
-                if j == len(self.keys[i]) - 1:
-                    y[i, np.abs(idx):] = sign
-                else:
-                    idxs = np.abs(self.keys[i][j:j+2])
-                    y[i, idxs[0]:idxs[1]] = sign
-        return y
-
-class DurationDisc(Task):
-    def __init__(self, args, dset_id=None, n=None):
-        super().__init__(args.t_len, dset_id, n)
-
-        s1_t = np.random.randint(args.tau, args.sep_t - args.max_d - args.tau)
-        s1_len, s2_len = np.random.randint(args.min_d, args.max_d, 2)
-        s2_t = np.random.randint(args.sep_t + args.tau, args.cue_t - args.max_d - args.tau)
-
-        self.t_type = args.t_type
-        self.s1 = [s1_t, s1_len]
-        self.s2 = [s2_t, s2_len]
-        self.cue_id = np.random.choice([1, -1])
-        self.direction = (self.s1[1] < self.s2[1]) ^ (self.cue_id == 1)
-        self.cue_t = args.cue_t
-        self.select_t = args.select_t
-
-        self.L = 4
-        self.Z = 2
-
-    def get_x(self, args=None):
-        x = np.zeros((4, self.t_len))
-        s1, s1l = self.s1
-        s2, s2l = self.s2
-        x[0, s1:s1+s1l] = 1
-        x[1, s2:s2+s2l] = 1
-        if self.cue_id == 1:
-            x[2, self.cue_t:] = 1
-        else:
-            x[3, self.cue_t:] = 1
-        return x
-
-    def get_y(self, args=None):
-        y = np.zeros((2, self.t_len))
-        if self.direction:
-            y[0, self.select_t:] = 1
-        else:
-            y[1, self.select_t:] = 1
-        return y
-
-
-class DM(Task):
-    def __init__(self, args, dset_id=None, n=None):
-        super().__init__(args.t_len, dset_id, n)
-
-        self.t_type = args.t_type
-        assert self.t_type in ['dm1', 'dm2', 'dm1-ctx', 'dm2-ctx', 'dm-multi']
-
-        # hexagonal ring for dm
-        c1s1, c2s1 = np.random.randint(0, 6, 2)
-        d_c1s2, d_c2s2 = np.random.randint(1, 6, 2)
-        c1s2, c2s2 = (c1s1 + d_c1s2) % 6, (c2s1 + d_c2s2) % 6
-        gamma_mean = np.random.uniform(.8, 1.2)
-        c = np.random.choice([-.08, -.04, -.02, -.01, .01, .02, .04, .08])
-
-        self.L = 12
-        self.Z = 6
-
-    def get_x(self, args=None):
-        x = np.zeros((12, self.t_len))
-        x[c1s1, :] = gamma_mean + c
-        x[c1s2, :] = gamma_mean - c
-        x[6 + c2s1, :] = gamma_mean + c
-        x[6 + c2s2, :] = gamma_mean - c
-
-
-
 
 
 # ways to add noise to x

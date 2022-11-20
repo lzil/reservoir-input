@@ -11,6 +11,6 @@
   "fix_t": 50,
   "stim_t": 150,
   "argv": "tasks.py create delayanti -t delay-anti",
-  "L": 3,
-  "Z": 3
+  "L": 4,
+  "Z": 4
 }

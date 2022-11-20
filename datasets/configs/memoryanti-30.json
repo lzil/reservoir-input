@@ -25,6 +25,6 @@
   "stim_t": 100,
   "memory_t": 50,
   "argv": "tasks.py create memoryanti-30 -t memory-anti --angles 0 30 60 90 120 150 180 210 240 270 300 330",
-  "L": 3,
-  "Z": 3
+  "L": 4,
+  "Z": 4
 }

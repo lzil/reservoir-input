@@ -1,12 +1,10 @@
 {
   "mode": "create",
-  "name": "rsg-g1.5-100-150",
+  "name": "rsg-g1-100-150",
   "config": null,
   "t_type": "rsg",
   "n_trials": 2000,
   "task_args": [
-    "gain",
-    "1.5",
     "gt",
     "100",
     "lt",
@@ -18,11 +16,11 @@
   "angles": null,
   "t_len": 600,
   "p_len": 5,
-  "gain": 1.5,
+  "gain": 1,
   "max_ready": 80,
   "min_t": 100,
   "max_t": 150,
-  "argv": "tasks.py create rsg-g1.5-100-150 -t rsg -a gain 1.5 gt 100 lt 150 l 600",
+  "argv": "tasks.py create rsg-g1-100-150 -t rsg -a gt 100 lt 150 l 600",
   "L": 4,
   "Z": 4
 }
