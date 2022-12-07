@@ -17,7 +17,6 @@ import math
 import json
 import copy
 import pandas as pd
-import string
 
 
 from utils import log_this, load_rb, get_config, update_args, load_args
@@ -60,6 +59,9 @@ def parse_args():
     parser.add_argument('--out_act', type=str, default='none', help='output activation at the very end of the network')
     parser.add_argument('--net_fb', action='store_true', help='feedback from network output to input')
 
+    #multimodal arguments
+    parser.add_argument('--multimodal', action= 'store_true', help = 'run net on already created multimodal dataset')
+
     # dataset arguments
     parser.add_argument('-d', '--dataset', type=str, default=['datasets/rsg-100-150.pkl'], nargs='+', help='dataset(s) to use. >1 means different contexts')
     # parser.add_argument('-a', '--add_tasks', type=str, nargs='+', help='add tasks to previously trained reservoir')
@@ -68,7 +70,10 @@ def parse_args():
     # parser.add_argument('-o', '--train_order', type=int, nargs='+', default=[], help='ids of tasks to train on, in order if sequential flag is enabled. empty for all')
     # parser.add_argument('--seq_threshold', type=float, default=5, help='threshold for having solved a task before moving on to next one')
     parser.add_argument('--same_test', action='store_true', help='use entire dataset for both training and testing')
-    
+    parser.add_argument('--mm', action='store_true', help='multimodal setting where input datasets are edited that multiple tasks can be learned simultaneously with fixed net architecture')
+
+
+
     # training arguments
     parser.add_argument('--optimizer', choices=['adam', 'sgd', 'rmsprop', 'lbfgs'], default='adam')
     parser.add_argument('--k', type=int, default=0, help='k for t-bptt. use 0 for full bptt')
@@ -129,11 +134,11 @@ def adjust_args(args):
 
     # setting seeds
     if args.res_seed is None:
-        args.res_seed = int(''.join(random.choices(string.digits, k=6)))
+        args.res_seed = random.randrange(1e6)
     if args.seed is None:
-        args.seed = int(''.join(random.choices(string.digits, k=6)))
+        args.seed = random.randrange(1e6)
     if args.network_seed is None:
-        args.network_seed = int(''.join(random.choices(string.digits, k=6)))
+        args.network_seed = random.randrange(1e6)
 
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
@@ -171,10 +176,62 @@ def adjust_args(args):
     L, Z = 0, 0
     for dset in args.dataset:
         config = get_config(dset, ctype='dset', to_bunch=True)
+        print(config)
         L = max(L, config.L)
         Z = max(Z, config.Z)
     args.L = L
     args.Z = Z
+    if args.multimodal:
+        t_types = []
+        tot_L_sans_fix = 0 
+        tot_Z_sans_fix = 0
+        fixation_task_count = 0
+        fixation = True
+        for ds in args.dataset:
+                #check whether task has a fixation modality
+                config = get_config(ds, ctype='dset', to_bunch=True)
+                task_has_fix = config.has_fix
+                t_type = config.t_type
+                
+                
+                task_L =config.L
+                task_Z= config.Z
+
+                #if we haven't already seen this t_type before (recall if tasks/datasets have the same t_types we want to use the same modalities)
+                # TODOS : what about DMPA - we want it to share the same modality
+                
+                #if you haven't seen the task before
+                if t_type not in t_types:
+                    t_types.append(t_type)
+
+                    if task_has_fix:
+                        fixation_task_count +=1
+                        tot_L_sans_fix += (task_L -1 )
+                        tot_Z_sans_fix += (task_Z -1 )
+                    else:
+                        tot_L_sans_fix += (task_L )
+                        tot_Z_sans_fix += (task_Z)
+
+        if fixation_task_count == 0:
+                fixation = False #no tasks that require fixation
+        
+        #if there is at least one fixation-modality-requiring task 
+        if fixation:
+            #tell us from which index of the shells [inclusive] to start inputting modalities as we go
+            #note: for all the tasks we consider, a task has a fixation modality in input if and only if it has a fixation modality in output
+            
+            #if 
+        
+            args.L =  tot_L_sans_fix +1 
+            args.Z = tot_Z_sans_fix +1
+            
+            
+        else:
+            
+            
+            args.L =tot_L_sans_fix 
+            args.Z =tot_Z_sans_fix 
+        
 
     # initializing logging
     # do this last, because we will be logging previous parameters into the config file

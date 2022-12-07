@@ -1,3 +1,4 @@
+
 import numpy as np
 import torch
 import torch.nn as nn
@@ -10,6 +11,8 @@ import random
 from collections import OrderedDict
 
 from utils import load_rb, get_config
+
+from tasks import * #can we do wildcard imports?
 
 def sigmoid(x):
     return 1/(1 + np.exp(-x))
@@ -36,7 +39,14 @@ def get_scheduler(args, op):
 # input dataset should be in form [(dname, dset), ...]
 class TrialDataset(Dataset):
     def __init__(self, datasets, args):
+        #input is a list of [(dataset's name, dataset itself)]
+
+
+
         self.args = args
+
+        
+
         
         self.dnames = []    # names of dsets
         self.data = []      # dsets themselves
@@ -45,13 +55,14 @@ class TrialDataset(Dataset):
         self.x_ctxs = []    # precomputed context inputs
         self.max_idxs = np.zeros(len(datasets), dtype=int)
         self.t_lens = []
+        self.T = len(self.data)
         for i, (dname, ds) in enumerate(datasets):
             self.dnames.append(dname)
             self.data.append(ds)
             # setting context cue for appropriate task
             x_ctx = np.zeros((args.T, ds[0].t_len))
             x_ctx[i] = 1
-            self.x_ctxs.append(x_ctx)
+            self.x_ctxs.append(x_ctx) #rule input for the datasets 
             self.t_lens.append(ds[0].t_len)
             # cumulative lengths of data, for indexing
             self.max_idxs[i] = self.max_idxs[i-1] + len(ds)
@@ -59,8 +70,140 @@ class TrialDataset(Dataset):
             self.t_types.append(ds[0].t_type)
             self.lzs.append((ds[0].L, ds[0].Z))
 
+        if self.args.multimodal:
+            self.t_types =[]
+            self.fixation = True #start by assuming at least one task requires fixation; include a shared fixation input by default
+            self.fixation_task_count = 0 #no.of fixation tasks
+            self.max_t_len = 0
+
+            #the L,Z dimension for the augmented inputs and outputs, respectively, without counting the fixation input
+            self.tot_L_sans_fix = 0 
+            self.tot_Z_sans_fix = 0
+
+            #dictionary of input and output locations(the first index in the shells) for different task groups
+            self.input_modality_locations={}
+            self.output_modality_locations={}
+            
+            # pass through datasets in order to collect info needed to augment inputs and outputs in get_item
+            for ds in self.data:
+                #check whether task has a fixation modality
+                task_has_fix = ds[0].has_fix
+                t_type = ds[0].t_type
+                task_has_fix= ds[0].has_fix
+            
+                task_L =ds[0].L
+                task_Z= ds[0].Z
+
+                #if we haven't already seen this t_type before (recall if tasks/datasets have the same t_types we want to use the same modalities)
+                # TODOS : what about DMPA - we want it to share the same modality
+                
+                #if you haven't seen the task before
+                if t_type not in self.t_types:
+                    self.t_types.append(t_type)
+
+                    if task_has_fix:
+                        self.fixation_task_count +=1
+                        self.tot_L_sans_fix += (ds[0].L -1 )
+                        self.tot_Z_sans_fix += (ds[0].Z -1 )
+                    else:
+                        self.tot_L_sans_fix += (ds[0].L )
+                        self.tot_Z_sans_fix += (ds[0].Z)
+
+                #the length of all trials in multimodal
+                #if say an rsg task has length 300 but max is 600, we'll just put zeros after t=300
+                if ds[0].t_len > self.max_t_len:
+                    self.max_t_len = ds[0].t_len
+            
+             #where you'd input (new) task modalities if you hadn't already encountered the task
+            if self.fixation_task_count==0:
+                    self.fixation = False #no tasks that require fixation
+            
+            #if there is at least one fixation-modality-requiring task 
+            if self.fixation:
+                #tell us from which index of the shells [inclusive] to start inputting modalities as we go
+                #note: for all the tasks we consider, a task has a fixation modality in input if and only if it has a fixation modality in output
+                
+                #if 
+                self.modality_input_index = 1
+                self.modality_output_index = 1 
+
+                self.L_mm=self.tot_L_sans_fix +1 + self.T
+                self.Z_mm=self.tot_Z_sans_fix +1
+                
+                
+            else:
+                self.modality_input_index = 0
+                self.modality_output_index = 0
+                
+                self.L_mm=self.tot_L_sans_fix 
+                self.Z_mm=self.tot_Z_sans_fix 
+                
+                
+            
+            
+
+
+
+            #t_types=[]
+
+
+            
+            
+            #self.multimodal_trials=[]
+            
+
+            self.x_shell = np.zeros((self.tot_L_sans_fix, self.max_t_len))
+            self.y_shell =np.zeros((self.tot_Z_sans_fix, self.max_t_len))
+
+            
+
+            if self.fixation:
+                    #if one of the tasks requires fixations
+                    #tell us from which index of the shells [inclusive] to start inputting modalities as we go
+                    #tells us from which index of the shells [inclusive] to start inputting modalities as we go
+                    self.modality_input_index = 1
+                    self.modality_output_index = 1
+                    #shared fixation
+                    self.fix_shell=np.zeros((1,self.max_t_len))
+                    #we just add first row of x (y) to this x_fix and keep remainining
+                    self.x_shell = np.concatenate((self.fix_shell , self.x_shell), axis=0)
+                    self.y_shell =np.concatenate((self.fix_shell, self.y_shell), axis=0)
+            
+            else:
+                self.modality_input_index = 0
+                self.modality_output_index = 0
+
+            #get location in shells for input and output of different tasks
+            self.t_types = []
+            for ds in self.data:
+                task_has_fix = ds[0].has_fix
+                t_type = ds[0].t_type
+                task_has_fix= ds[0].has_fix
+            
+                task_L =ds[0].L
+                task_Z= ds[0].Z
+                
+                
+                if t_type not in self.t_types:
+                    self.t_types.append(t_type)
+                    self.input_modality_locations[t_type]=self.modality_input_index
+                    self.output_modality_locations[t_type]= self.modality_output_index
+
+
+                    #update where we'd next input a new task 
+                    if task_has_fix:
+                        self.modality_input_index+= task_L -1 
+                        self.modality_output_index += task_Z-1
+                    else:
+                        self.modality_input_index+= task_L 
+                        self.modality_output_index += task_Z
+                
+                
+
+
     def __len__(self):
-        return self.max_idxs[-1]
+        #__len_returns the number of samples in the dataset hence the following:
+        return self.max_idxs[-1] #the sum of the lengths of the datasets
 
     def __getitem__(self, idx):
         if isinstance(idx, slice):
@@ -71,21 +214,315 @@ class TrialDataset(Dataset):
         if context != 0:
             idx = idx - self.max_idxs[context-1]
 
+        # 'context' is the dataset we're indexing into i.e. which dataset
         trial = self.data[context][idx]
         x = trial.get_x(self.args)
+        y = trial.get_y(self.args)
         x_cts = self.x_ctxs[context]
+        #augment x and y and then add 
+        if self.args.multimodal:
+            t_type = trial.t_type
+            if self.x_shell.shape[1] > x.shape[1]:
+                    x_pad_len = self.x_shell.shape[1] - x.shape[1]
+                    x_pad = np.zeros((x.shape[0],x_pad_len))
+                    x = np.concatenate((x,x_pad), axis=1)
+                    x_cts_pad = np.zeros((x_cts.shape[0],self.x_shell.shape[1]-x_cts.shape[1]))
+                    x_cts = np.concatenate((x_cts,x_cts_pad),axis=1)
+                    y_pad_len = self.y_shell.shape[1] - y.shape[1] 
+                    y_pad = np.zeros((y.shape[0],y_pad_len))
+                    y = np.concatenate((y,y_pad),axis=1)
+            
+            if trial.has_fix:
+                
+                    
+                self.x_shell[0] = x[0]
+                
+                self.y_shell[0] = y[0]
+                #subtract no. of fixation inputs
+                self.x_shell[self.input_modality_locations[t_type]: self.input_modality_locations[t_type]+trial.L-1, :] = x[1:,:]
+                self.y_shell[self.output_modality_locations[t_type]: self.output_modality_locations[t_type]+trial.Z-1, :] = y[1:,:]
+
+            else:
+                if self.fixation:
+                    #if its rsg say, mm fixation is just zeros
+                    self.x_shell[0]=np.zeros((1,self.max_t_len))
+                    self.y_shell[0]=np.zeros((1,self.max_t_len))
+                    self.x_shell[self.input_modality_locations[t_type]: self.input_modality_locations[t_type]+trial.L, :] = x[0:,:]
+
+                    self.y_shell[self.output_modality_locations[t_type]: self.output_modality_locations[t_type]+trial.Z, :] = y[0:,:]
+
+            x = self.x_shell
+            y = self.y_shell 
+
         # context comes after the stimulus
         x = np.concatenate((x, x_cts))
-        y = trial.get_y(self.args)
+        #'under' stimulus 
+      
 
         trial.context = context
         trial.dname = self.dnames[context]
-        trial.lz = self.lzs[context]
+        if self.args.multimodal:
+            trial.lz = (self.L_mm, self.Z_mm)
+        else:
+            trial.lz = self.lzs[context]
         return x, y, trial
 
     def get_context(self, idx):
         return np.argmax(self.max_idxs > idx)
 
+
+
+
+
+
+        
+
+
+class MultimodalDataset(Dataset):
+    def __init__(self, args):
+        self.L=0
+        self.Z=0
+        self.T=0
+
+        self.t_types=[]
+        #collect t_types and use these to check whether we need to add a new set of modalities for each task as we go 
+        #
+
+        self.fix= True # at least one task that requires fixations, start with a fixation input by default 
+
+        input_dsets = args.datasets
+
+        self.fixation_tasks = 0 #no. of fixation tasks
+        #we initialise a fixation input by default
+
+        # but if after processing all tasks and no. of fixaton tasks is 0, lop of the shared fixation input
+        self.max_t_len=0
+
+        self.datasets_list = []
+        # a list of lists of task objects where the sublists in the l-of-l are different datasets
+        self.T = 0 #no. of different task
+
+        #for creating mask
+
+        self.tot_L_sans_fix =0
+        self.tot_Z_sans_fix = 0
+        
+
+        for d in input_dsets:
+            
+            self.T +=1
+
+            dset = load_rb(d)
+            
+            #dset is list of input-output pairs i.e.  a list task objects and we get its x values and y_values using get_x etc i.e. a list of trials)
+            self.datasets_list.append(dset)
+            
+
+            task_has_fix = dset[0].has_fix
+            
+            t_type = type(dset[0])
+            
+            
+
+            if t_type not in self.t_types:
+                self.t_types.append(t_type)
+
+
+                if task_has_fix:
+                    self.fixation_tasks +=1
+                    self.tot_L_sans_fix += (dset[0].L -1 )
+                    self.tot_Z_sans_fix += (dset[0].Z -1 )
+                else:
+                    self.tot_L_sans_fix += (dset[0].L )
+                    self.tot_Z_sans_fix += (dset[0].Z)
+
+
+            #the length of all trials in multimodal
+            #if say an rsg task has length 300 but max is 600, we'll just put zeros after t=300
+            if dset[0].t_len > self.max_t_len:
+                self.max_t_len = dset[0].t_len
+                
+        
+
+
+        #where you'd input (new) task modalities if you hadn't already encountered the task
+        if self.fix:
+            #tell us from which index of the shells [inclusive] to start inputting modalities as we go
+            #note: for all the tasks we consider, a task has a fixation modality in input if and only if it has a fixation modality in output
+            
+            #if 
+            self.modality_input_index = 1
+            self.modality_output_index = 1 
+            
+            rule_input_index = 1 + self.tot_L_sans_fix #where to put the first rule input
+            
+        else:
+            self.modality_input_index = 0
+            self.modality_output_index = 0
+
+            rule_input_index = self.tot_L_sans_fix  #where to put the first rule input
+
+        
+        self.L=self.tot_L_sans_fix +1 + self.T
+        self.Z=self.tot_Z_sans_fix +1
+        
+        
+
+        t_types=[]
+
+        
+
+
+
+        input_modality_locations={}
+        output_modality_locations={}
+        
+        self.multimodal_trials=[]
+
+
+        
+        for i, task_set in enumerate(self.datasets_list):
+
+            
+
+            task_len=task_set[0].t_len
+            t_type=type(task_set[0])
+            task_has_fix= task_set[0].has_fix
+            
+            task_L =task_set[0].L
+            task_Z= task_set[0].Z
+            
+
+            
+            
+            
+            t_len_pad = self.max_t_len - task_len
+            
+            #no. of zero columns to add to inputs and outputs so that task lenths are the same 
+            #for all tasks 
+
+            
+
+            if t_type not in t_types:
+                t_types.append(t_type)
+                input_modality_locations[t_type]=self.modality_input_index
+                output_modality_locations[t_type]= self.modality_output_index
+
+
+
+            
+            for trial in task_set: #looping over trials in d set convert into multimodal and eventually, turn into dataset using 
+                
+                self.x_shell = np.zeros((self.tot_L_sans_fix+self.T, self.max_t_len))
+                self.y_shell =np.zeros((self.tot_Z_sans_fix, self.max_t_len))
+                
+
+
+                if self.fixation_tasks==0:
+                    self.fix = False #no tasks that require fixation
+
+                if self.fix:
+                    #if one of the tasks requires fixations
+                    #shared fixation
+                    fix_shell=np.zeros((1,self.max_t_len))
+                    #we just add first row of x (y) to this x_fix and keep remainining
+                    x_shell = np.concatenate((fix_shell , x_shell), axis=0)
+                    y_shell =np.concatenate((fix_shell, y_shell), axis=0)
+                
+                x_shell[i+rule_input_index]=1
+
+                #the create_dataset code
+
+                #make x_s and y_s the same length as max_t_len using t_len pad
+                trial_x = trial.get_x()
+                trial_y= trial.get_y()
+               
+
+                x_pad=np.zeros((task_L, t_len_pad ))
+                y_pad=np.zeros((task_Z, t_len_pad))
+                
+                trial_x = np.concatenate((trial_x, x_pad ), axis=1 )
+                trial_y = np.concatenate((trial_y, y_pad ), axis=1 )
+
+
+                if t_type not in t_types:
+                    #if we haven't seen this class of tasks, put them in separate modality 
+                    #else: put them in same modality section of already seen task of same class
+                
+                    if task_has_fix:
+                        #x_fix is the shared fixation of the mm_input
+                        x_shell[0]= trial_x[0]
+                        y_shell[0] = trial_y[0]
+                        
+                        #subtract no. of fixation inputs
+                        x_shell[self.modality_input_index: self.modality_input_index+task_L -1, :] = trial_x[1:,:]
+                        y_shell[self.modality_output_index: self.modality_output_index+task_Z -1, :] = trial_y[1:,]
+                        # x[a:a+4] means select 4 rows starting with and including row with index a i
+                        
+                            
+                    else:
+                        #if its rsg say, mm fixation is just zeros
+                        x_shell[0]=np.zeros((1,self.max_t_len))
+                        y_shell[0]=np.zeros((1,self.max_t_len))
+                        x_shell[self.modality_input_index: self.modality_input_index+task_L, :] = trial_x[1:,:]
+                        y_shell[self.modality_output_index: self.modality_output_index+task_Z, :] = trial_y[1:,:]
+                    
+                    t_type_input_start= (t_type,self.modality_input_index)
+                    t_type_output_start= (t_type,self.modality_output_index)
+                    
+
+
+                    #use rule_input_index
+                    #update where we'd next input a new task 
+                    if task_has_fix:
+                        self.modality_input_index+= task_L -1 
+                        self.modality_output_index += task_Z-1
+                    else:
+                        self.modality_input_index+= task_L 
+                        self.modality_output_index += task_Z
+
+
+                else: #if task type has been seen before - need to know where the input and output sections start for already seen task family
+                    if task_has_fix:
+                        #x_fix is the shared fixation of the mm_input
+                       
+                        x_shell[0]= trial_x[0]
+                        y_shell[0] = trial_y[0]
+                        
+                        #subtract no. of fixation inputs
+                        x_shell[input_modality_locations[t_type]: input_modality_locations[t_type]+task_L -1, :] = trial_x[1:,:].reshape((task_L-1,self.max_t_len))
+                        y_shell[output_modality_locations[t_type]: output_modality_locations[t_type]+task_Z -1, :] = trial_y[1:,].reshape((task_Z-1,self.max_t_len))
+                        # x[a:a+4] means select 4 rows starting with and including row with index a i
+                        
+                            
+                    else:
+                        #if its rsg say, mm fixation is just zeros
+                        x_shell[0]=np.zeros((1,self.max_t_len))
+                        y_shell[0]=np.zeros((1,self.max_t_len))
+                     
+                        x_shell[input_modality_locations[t_type]: input_modality_locations[t_type]+task_L, :] = trial_x.reshape((task_L,self.max_t_len))
+                        y_shell[output_modality_locations[t_type]:output_modality_locations[t_type]+task_Z, :] = trial_y.reshape((task_Z,self.max_t_len))
+                    
+                    
+                
+
+
+
+                   
+
+                #pack it up:
+                
+                trial= MultimodalTrial(t_type=t_type, x=x_shell, y=y_shell, L=self.L, Z=self.Z, args=args)
+                self.multimodal_trials.append(trial)
+                
+        args.L=self.L
+        args.Z = self.Z
+
+        #want output to mimic create_dataset, so we can slot it in 
+    def retrieve_multimodal_dataset(self, args):
+        trials = self.multimodal_trials
+        return trials, args
+        
 
 # turns data samples into stuff that can be run through network
 def collater(samples):
