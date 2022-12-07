@@ -176,7 +176,7 @@ def adjust_args(args):
     L, Z = 0, 0
     for dset in args.dataset:
         config = get_config(dset, ctype='dset', to_bunch=True)
-        print(config)
+       
         L = max(L, config.L)
         Z = max(Z, config.Z)
     args.L = L
