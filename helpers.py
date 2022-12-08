@@ -149,10 +149,41 @@ class TrialDataset(Dataset):
             #self.multimodal_trials=[]
             
 
-            self.x_shell = np.zeros((self.tot_L_sans_fix, self.max_t_len))
-            self.y_shell =np.zeros((self.tot_Z_sans_fix, self.max_t_len))
+            # self.x_shell = np.zeros((self.tot_L_sans_fix, self.max_t_len))
+            # self.y_shell =np.zeros((self.tot_Z_sans_fix, self.max_t_len))
 
             
+
+            
+                
+                
+
+
+    def __len__(self):
+        #__len_returns the number of samples in the dataset hence the following:
+        return self.max_idxs[-1] #the sum of the lengths of the datasets
+
+    def __getitem__(self, idx):
+        if isinstance(idx, slice):
+            return [self[ii] for ii in range(len(self))[idx]]
+        # index into the appropriate dataset to get the trial
+        context = self.get_context(idx)
+        # idx variable now references position within dataset
+        if context != 0:
+            idx = idx - self.max_idxs[context-1]
+        # 'context' is the dataset we're indexing into i.e. which dataset
+        trial = self.data[context][idx]
+        x = trial.get_x(self.args)
+        
+        y = trial.get_y(self.args)
+        
+
+        x_cts = self.x_ctxs[context]
+        #augment x and y and then add 
+        if self.args.multimodal:
+            task_len = x.shape[1] 
+            self.x_shell = np.zeros((self.tot_L_sans_fix, task_len))
+            self.y_shell =np.zeros((self.tot_Z_sans_fix, task_len))
 
             if self.fixation:
                     #if one of the tasks requires fixations
@@ -161,7 +192,7 @@ class TrialDataset(Dataset):
                     self.modality_input_index = 1
                     self.modality_output_index = 1
                     #shared fixation
-                    self.fix_shell=np.zeros((1,self.max_t_len))
+                    self.fix_shell=np.zeros((1,task_len))
                     #we just add first row of x (y) to this x_fix and keep remainining
                     self.x_shell = np.concatenate((self.fix_shell , self.x_shell), axis=0)
                     self.y_shell =np.concatenate((self.fix_shell, self.y_shell), axis=0)
@@ -194,43 +225,27 @@ class TrialDataset(Dataset):
                     else:
                         self.modality_input_index+= task_L 
                         self.modality_output_index += task_Z
-                
-                
 
 
-    def __len__(self):
-        #__len_returns the number of samples in the dataset hence the following:
-        return self.max_idxs[-1] #the sum of the lengths of the datasets
 
-    def __getitem__(self, idx):
-        if isinstance(idx, slice):
-            return [self[ii] for ii in range(len(self))[idx]]
-        # index into the appropriate dataset to get the trial
-        context = self.get_context(idx)
-        # idx variable now references position within dataset
-        if context != 0:
-            idx = idx - self.max_idxs[context-1]
 
-        # 'context' is the dataset we're indexing into i.e. which dataset
-        trial = self.data[context][idx]
-        x = trial.get_x(self.args)
-        y = trial.get_y(self.args)
-        x_cts = self.x_ctxs[context]
-        #augment x and y and then add 
-        if self.args.multimodal:
+
+
+
+
             t_type = trial.t_type
             if self.x_shell.shape[1] > x.shape[1]:
                     x_pad_len = self.x_shell.shape[1] - x.shape[1]
-                    x_pad = np.zeros((x.shape[0],x_pad_len))
-                    x = np.concatenate((x,x_pad), axis=1)
+                    #x_pad = np.zeros((x.shape[0],x_pad_len))
+                    #x = np.concatenate((x,x_pad), axis=1)
                     #need context to be on throughout the trial even if input is zero and output are 'off' 
                     x_cts_pad_len = self.x_shell.shape[1]-x_cts.shape[1]
                     x_cts_pad = np.tile(x_cts[:,0].reshape((self.args.T,1)), reps = x_cts_pad_len )
                     x_cts = np.concatenate((x_cts,x_cts_pad),axis=1)
                 
-                    y_pad_len = self.y_shell.shape[1] - y.shape[1] 
-                    y_pad = np.zeros((y.shape[0],y_pad_len))
-                    y = np.concatenate((y,y_pad),axis=1)
+                    #y_pad_len = self.y_shell.shape[1] - y.shape[1] 
+                    #y_pad = np.zeros((y.shape[0],y_pad_len))
+                    #y = np.concatenate((y,y_pad),axis=1)
             
             if trial.has_fix:
                 
