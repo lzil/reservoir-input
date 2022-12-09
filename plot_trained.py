@@ -100,6 +100,19 @@ if not args.no_plot:
             ax.plot(xr, z[0], color='salmon', lw=2)
             ax.plot(xr, z[1], color='dodgerblue', lw=2)
 
+        elif type(trial) is DMCProAnti:
+            ax.plot(xr, x[0], color='grey', lw=.5, ls='--', alpha=.4)
+            ax.plot(xr, x[1], color='salmon', lw=.5, ls='--', alpha=.4)
+            ax.plot(xr, x[2], color='dodgerblue', lw=.5, ls='--', alpha=.7)
+            ax.plot(xr, x[3], color='magenta', lw=.5, ls='--', alpha=.7)
+            ax.plot(xr, x[4], color='lime', lw=.5, ls='--', alpha=.7)
+            ax.plot(xr, y[0], color='grey', lw=1.5, ls=':')
+            ax.plot(xr, y[1], color='magenta', lw=1.5, ls=':')
+            ax.plot(xr, y[2], color='lime', lw=1.5, ls=':')
+            ax.plot(xr, z[0], color='grey', lw=2, ls='-')
+            ax.plot(xr, z[1], color='magenta', lw=2, ls='-')
+            ax.plot(xr, z[2], color='lime', lw=2, ls='-')
+
         ax.tick_params(axis='both', color='white', labelsize=8)
         ax.set_title(f'ctx {context}, trial {ix}, loss {np.round(float(loss), 2)}', size=8)
 
