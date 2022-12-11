@@ -83,7 +83,7 @@ class TrialDataset(Dataset):
                 #check whether task has a fixation modality
                 task_has_fix = ds[0].has_fix
                 t_type = ds[0].t_type
-                print(f'this is a t_type:{t_type}')
+                
                 task_has_fix= ds[0].has_fix
             
                 task_L =ds[0].L
