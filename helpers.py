@@ -41,10 +41,7 @@ class TrialDataset(Dataset):
     def __init__(self, datasets, args):
         #input is a list of [(dataset's name, dataset itself)]
 
-
-
         self.args = args
-
         self.dnames = []    # names of dsets
         self.data = []      # dsets themselves
         self.t_types = []   # task type
@@ -86,6 +83,7 @@ class TrialDataset(Dataset):
                 #check whether task has a fixation modality
                 task_has_fix = ds[0].has_fix
                 t_type = ds[0].t_type
+                print(f'this is a t_type:{t_type}')
                 task_has_fix= ds[0].has_fix
             
                 task_L =ds[0].L
@@ -248,8 +246,6 @@ class TrialDataset(Dataset):
                     #y = np.concatenate((y,y_pad),axis=1)
             
             if trial.has_fix:
-                
-                    
                 self.x_shell[0] = x[0]
                 
                 self.y_shell[0] = y[0]
@@ -347,6 +343,28 @@ def create_loaders(datasets, args, split_test=True, test_size=1, context_filter=
             train_loaders = create_subset_loaders(train_set, args.batch_size, True)
             return (train_set, train_loaders), (test_set, test_loaders)
         return (test_set, test_loaders)
+
+    #similar idea to args.sequential,creates separate test loaders for each task 
+    elif args.multimodal:
+        def create_subset_loaders(dset, batch_size, drop_last):
+            loaders = {}
+            max_idxs = dset.max_idxs
+            # e.g of dset_types is ['dmc-pro', 'rsg', 'memory-pro']
+            for task_type in dset.t_types:
+                #indices of examples of type task_type
+                
+                task_idxs = [i for i, trial in enumerate(dset) if trial[2].t_type== task_type]
+                subset = Subset(dset,task_idxs)
+                loader = DataLoader(subset, batch_size=batch_size, shuffle=True, collate_fn=collater, drop_last=drop_last)
+                loaders[task_type]=loader
+            return loaders
+        # create the loaders themselves
+        test_loaders = create_subset_loaders(test_set, test_size, False)
+        if split_test:
+            train_loader = DataLoader(train_set, batch_size=args.batch_size, shuffle=True, collate_fn=collater, drop_last=True)
+            return (train_set, train_loader), (test_set, test_loaders)
+        return (test_set, test_loaders)
+
     # filter out some contexts
     elif len(context_filter) != 0:
         def create_context_loaders(dset, batch_size, drop_last):
@@ -373,6 +391,7 @@ def create_loaders(datasets, args, split_test=True, test_size=1, context_filter=
         # otherwise it's quite simple, create a single dataset and loader
         test_loader = DataLoader(test_set, batch_size=test_size, shuffle=True, collate_fn=collater, drop_last=False)
         if split_test:
+
             train_loader = DataLoader(train_set, batch_size=args.batch_size, shuffle=True, collate_fn=collater, drop_last=True)
             return (train_set, train_loader), (test_set, test_loader)
         return (test_set, test_loader)

@@ -37,6 +37,13 @@ class Trainer:
             self.train_idx = 0
             self.train_loader = self.train_loaders[self.args.train_order[self.train_idx]]
             self.test_loader = self.test_loaders[self.args.train_order[self.train_idx]]
+        
+        if self.args.multimodal:
+            self.train_set, self.train_loader = trains
+            #note trains is as usual, self.test_loaders is a dictionary with keys given by t_types whose values are test_loaders containining examples of t_type trials
+            self.test_set, self.test_loaders = tests
+
+
         else:
             self.train_set, self.train_loader = trains
             self.test_set, self.test_loader = tests
@@ -46,6 +53,8 @@ class Trainer:
 
         if self.args.sequential:
             logging.info(f'Sequential training. Starting with task {self.train_idx}')
+        
+
 
         # self.net = BasicNetwork(self.args)
         self.net = M2Net(self.args)
@@ -220,15 +229,24 @@ class Trainer:
 
         return loss, etc
 
-    # helper function for sequential training, for testing performance on all tasks
-    def test_tasks(self, ids):
+    # default: helper function for sequential training, for testing performance on all tasks
+    #if using multimodal: helper function for simultaneous training, for testing performance all all tasks 
+    def test_tasks(self, ids=None):
         losses = []
-        for i in ids:
-            self.test_loader = self.test_loaders[self.args.train_order[i]]
-            loss, _ = self.test()
-            losses.append((i, loss))
-        self.test_loader = self.test_loaders[self.train_idx]
+        if self.args.multimodal:
+            t_types= self.test_set.t_types
+            for task_type in t_types:
+                self.test_loader = self.test_loaders[task_type]
+                loss, _ = self.test()
+                losses.append((task_type, loss))
+        else:
+            for i in ids:
+                self.test_loader = self.test_loaders[self.args.train_order[i]]
+                loss, _ = self.test()
+                losses.append((i, loss))
+            self.test_loader = self.test_loaders[self.train_idx]
         return losses
+
 
     def update_P(self, S, states):
         S_new = torch.einsum('ijk,ilk->jl',states,states) / states.shape[0] / states.shape[2]
@@ -256,7 +274,7 @@ class Trainer:
         for e in range(self.args.n_epochs):
             for epoch_idx, (x, y, info) in enumerate(self.train_loader):
                 ix += 1
-
+                
                 x, y = x.to(self.device), y.to(self.device)
                 iter_loss, etc = self.train_iteration(x, y, info, ix_callback=ix_callback)
 
@@ -270,16 +288,36 @@ class Trainer:
                 if ix % self.log_interval == 0:
                     z = etc['outs'].cpu().numpy().squeeze()
                     train_loss = running_loss / self.log_interval
-                    test_loss, test_etc = self.test()
-                    log_arr = [
+                    if self.args.multimodal:
+                        log_arr = [
                         f'*{ix}',
-                        f'train {train_loss:.3f}',
-                        f'test {test_loss:.3f}'
+                        f'train {train_loss:.3f}'
                     ]
-                    if self.args.sequential:
-                        losses = self.test_tasks(ids=range(self.train_idx))
-                        for i, loss in losses:
-                            log_arr.append(f't{i}: {loss:.3f}')
+                        losses = self.test_tasks()
+                        test_loss= 0
+                        tasks = 0
+                        for task, loss in losses:
+                            tasks += 1
+                            test_loss += loss
+                        test_loss /= tasks
+                        log_arr.append(f'test {test_loss:.3f}')
+                        for task, loss in losses:
+                            log_arr.append(f'{task}: {loss:.3f}')
+
+                    else:
+                        test_loss, test_etc = self.test()
+                        log_arr = [
+                            f'*{ix}',
+                            f'train {train_loss:.3f}',
+                            f'test {test_loss:.3f}'
+                        ]
+                
+
+
+                        if self.args.sequential:
+                            losses = self.test_tasks(ids=range(self.train_idx))
+                            for i, loss in losses:
+                                log_arr.append(f't{i}: {loss:.3f}')
                     log_str = '\t| '.join(log_arr)
                     logging.info(log_str)
 
