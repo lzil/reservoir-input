@@ -295,11 +295,11 @@ class Trainer:
                     ]
                         losses = self.test_tasks()
                         test_loss= 0
-                        tasks = 0
+                        no_of_tasks = 0
                         for task, loss in losses:
-                            tasks += 1
+                            no_of_tasks += 1
                             test_loss += loss
-                        test_loss /= tasks
+                        test_loss /= no_of_tasks
                         log_arr.append(f'test {test_loss:.3f}')
                         for task, loss in losses:
                             log_arr.append(f'{task}: {loss:.3f}')
