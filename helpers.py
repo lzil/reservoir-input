@@ -291,6 +291,31 @@ class TrialDataset(Dataset):
 
 
             t_type = trial.t_type
+            if t_type.startswith('rsg'):
+                task_family = 'RSG'
+            elif t_type.startswith('csg'):
+                task_family = 'CSG'
+            elif t_type == 'delay-copy':
+                task_family = 'DelayCopy'
+            elif t_type == 'flip-flop':
+                task_family = 'FlipFlop'
+            elif t_type == 'delay-pro' or t_type == 'delay-anti':
+                task_family = 'DelayProAnti'
+            elif t_type == 'memory-pro' or t_type == 'memory-anti':
+                task_family = 'MemoryProAnti'
+            elif t_type == 'dm-pro' or t_type == 'dm-anti':
+                task_family = 'DMProAnti'
+
+            elif t_type == 'delay-dm-pro' or t_type == 'delay-dm-anti':
+                task_family = 'DelayDMProAnti'
+            
+            elif t_type == 'dmc-pro' or t_type == 'dmc-anti':
+                task_family = 'DMCProAnti'
+
+
+            elif t_type == 'dur-disc':
+                task_family = 'DurationDisc'
+
             if self.x_shell.shape[1] > x.shape[1]:
                     x_pad_len = self.x_shell.shape[1] - x.shape[1]
                     #x_pad = np.zeros((x.shape[0],x_pad_len))
@@ -309,6 +334,7 @@ class TrialDataset(Dataset):
                 
                 self.y_shell[0] = y[0]
                 #subtract no. of fixation inputs
+                
                 self.x_shell[self.input_modality_locations[task_family]: self.input_modality_locations[task_family]+trial.L-1, :] = x[1:,:]
                 self.y_shell[self.output_modality_locations[task_family]: self.output_modality_locations[task_family]+trial.Z-1, :] = y[1:,:]
 
