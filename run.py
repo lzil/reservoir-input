@@ -183,6 +183,7 @@ def adjust_args(args):
     args.Z = Z
     if args.multimodal:
         t_types = []
+        task_fams = []
         tot_L_sans_fix = 0 
         tot_Z_sans_fix = 0
         fixation_task_count = 0
@@ -201,8 +202,34 @@ def adjust_args(args):
                 # TODOS : what about DMPA - we want it to share the same modality
                 
                 #if you haven't seen the task before
-                if t_type not in t_types:
-                    t_types.append(t_type)
+                if t_type.startswith('rsg'):
+                    task_family = 'RSG'
+                elif t_type.startswith('csg'):
+                    task_family = 'CSG'
+                elif t_type == 'delay-copy':
+                    task_family = 'DelayCopy'
+                elif t_type == 'flip-flop':
+                    task_family = 'FlipFlop'
+                elif t_type == 'delay-pro' or t_type == 'delay-anti':
+                    task_family = 'DelayProAnti'
+                elif t_type == 'memory-pro' or t_type == 'memory-anti':
+                    task_family = 'MemoryProAnti'
+                elif t_type == 'dm-pro' or t_type == 'dm-anti':
+                    task_family = 'DMProAnti'
+
+                elif t_type == 'delay-dm-pro' or t_type == 'delay-dm-anti':
+                    task_family = 'DelayDMProAnti'
+                
+                elif t_type == 'dmc-pro' or t_type == 'dmc-anti':
+                    task_family = 'DMCProAnti'
+
+
+                elif t_type == 'dur-disc':
+                    task_family = 'DurationDisc'
+
+
+                if task_family not in task_fams:
+                    task_fams.append(task_family)
 
                     if task_has_fix:
                         fixation_task_count +=1

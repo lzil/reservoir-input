@@ -66,6 +66,8 @@ class TrialDataset(Dataset):
 
         if self.args.multimodal:
             self.t_types =[]
+            self.task_fams = []
+            self.lzs=[]
             self.fixation = True #start by assuming at least one task requires fixation; include a shared fixation input by default
             self.fixation_task_count = 0 #no.of fixation tasks
             self.max_t_len = 0
@@ -83,7 +85,6 @@ class TrialDataset(Dataset):
                 #check whether task has a fixation modality
                 task_has_fix = ds[0].has_fix
                 t_type = ds[0].t_type
-                
                 task_has_fix= ds[0].has_fix
             
                 task_L =ds[0].L
@@ -95,6 +96,36 @@ class TrialDataset(Dataset):
                 #if you haven't seen the task before
                 if t_type not in self.t_types:
                     self.t_types.append(t_type)
+
+
+                if t_type.startswith('rsg'):
+                    task_family = 'RSG'
+                elif t_type.startswith('csg'):
+                    task_family = 'CSG'
+                elif t_type == 'delay-copy':
+                    task_family = 'DelayCopy'
+                elif t_type == 'flip-flop':
+                    task_family = 'FlipFlop'
+                elif t_type == 'delay-pro' or t_type == 'delay-anti':
+                    task_family = 'DelayProAnti'
+                elif t_type == 'memory-pro' or t_type == 'memory-anti':
+                    task_family = 'MemoryProAnti'
+                elif t_type == 'dm-pro' or t_type == 'dm-anti':
+                    task_family = 'DMProAnti'
+
+                elif t_type == 'delay-dm-pro' or t_type == 'delay-dm-anti':
+                    task_family = 'DelayDMProAnti'
+                
+                elif t_type == 'dmc-pro' or t_type == 'dmc-anti':
+                    task_family = 'DMCProAnti'
+
+
+                elif t_type == 'dur-disc':
+                    task_family = 'DurationDisc'
+
+
+                if task_family not in self.task_fams:
+                    self.task_fams.append(task_family)
 
                     if task_has_fix:
                         self.fixation_task_count +=1
@@ -201,6 +232,8 @@ class TrialDataset(Dataset):
 
             #get location in shells for input and output of different tasks
             self.t_types = []
+            self.task_fams = []
+
             for ds in self.data:
                 task_has_fix = ds[0].has_fix
                 t_type = ds[0].t_type
@@ -208,12 +241,40 @@ class TrialDataset(Dataset):
             
                 task_L =ds[0].L
                 task_Z= ds[0].Z
+                if t_type.startswith('rsg'):
+                    task_family = 'RSG'
+                elif t_type.startswith('csg'):
+                    task_family = 'CSG'
+                elif t_type == 'delay-copy':
+                    task_family = 'DelayCopy'
+                elif t_type == 'flip-flop':
+                    task_family = 'FlipFlop'
+                elif t_type == 'delay-pro' or t_type == 'delay-anti':
+                    task_family = 'DelayProAnti'
+                elif t_type == 'memory-pro' or t_type == 'memory-anti':
+                    task_family = 'MemoryProAnti'
+                elif t_type == 'dm-pro' or t_type == 'dm-anti':
+                    task_family = 'DMProAnti'
+
+                elif t_type == 'delay-dm-pro' or t_type == 'delay-dm-anti':
+                    task_family = 'DelayDMProAnti'
                 
-                
+                elif t_type == 'dmc-pro' or t_type == 'dmc-anti':
+                    task_family = 'DMCProAnti'
+
+
+                elif t_type == 'dur-disc':
+                    task_family = 'DurationDisc'
+
                 if t_type not in self.t_types:
                     self.t_types.append(t_type)
-                    self.input_modality_locations[t_type]=self.modality_input_index
-                    self.output_modality_locations[t_type]= self.modality_output_index
+                
+                #if family not seen before, place according to current location pointer, and change where you put the next unseen family
+                #else: place 
+                if task_family not in self.task_fams:
+                    self.task_fams.append(task_family)
+                    self.input_modality_locations[task_family]=self.modality_input_index
+                    self.output_modality_locations[task_family]= self.modality_output_index
 
 
                     #update where we'd next input a new task 
@@ -223,8 +284,6 @@ class TrialDataset(Dataset):
                     else:
                         self.modality_input_index+= task_L 
                         self.modality_output_index += task_Z
-
-
 
 
 
@@ -250,17 +309,17 @@ class TrialDataset(Dataset):
                 
                 self.y_shell[0] = y[0]
                 #subtract no. of fixation inputs
-                self.x_shell[self.input_modality_locations[t_type]: self.input_modality_locations[t_type]+trial.L-1, :] = x[1:,:]
-                self.y_shell[self.output_modality_locations[t_type]: self.output_modality_locations[t_type]+trial.Z-1, :] = y[1:,:]
+                self.x_shell[self.input_modality_locations[task_family]: self.input_modality_locations[task_family]+trial.L-1, :] = x[1:,:]
+                self.y_shell[self.output_modality_locations[task_family]: self.output_modality_locations[task_family]+trial.Z-1, :] = y[1:,:]
 
             else:
                 if self.fixation:
                     #if its rsg say, mm fixation is just zeros
                     self.x_shell[0]=np.zeros((1,self.max_t_len))
                     self.y_shell[0]=np.zeros((1,self.max_t_len))
-                    self.x_shell[self.input_modality_locations[t_type]: self.input_modality_locations[t_type]+trial.L, :] = x[0:,:]
+                    self.x_shell[self.input_modality_locations[task_family]: self.input_modality_locations[task_family]+trial.L, :] = x[0:,:]
 
-                    self.y_shell[self.output_modality_locations[t_type]: self.output_modality_locations[t_type]+trial.Z, :] = y[0:,:]
+                    self.y_shell[self.output_modality_locations[task_family]: self.output_modality_locations[task_family]+trial.Z, :] = y[0:,:]
 
             x = self.x_shell
             y = self.y_shell 
@@ -268,12 +327,13 @@ class TrialDataset(Dataset):
         # context comes after the stimulus
         x = np.concatenate((x, x_cts))
         #'under' stimulus 
-      
+
 
         trial.context = context
         trial.dname = self.dnames[context]
         if self.args.multimodal:
-            trial.lz = (self.L_mm, self.Z_mm)
+            trial.lz = (x.shape[0],y.shape[0] )
+        
         else:
             trial.lz = self.lzs[context]
         return x, y, trial
@@ -349,10 +409,10 @@ def create_loaders(datasets, args, split_test=True, test_size=1, context_filter=
         def create_subset_loaders(dset, batch_size, drop_last):
             loaders = {}
             max_idxs = dset.max_idxs
-            # e.g of dset_types is ['dmc-pro', 'rsg', 'memory-pro']
+            # ezzZdset_types is ['dmc-pro', 'rsg', 'memory-pro']
             for task_type in dset.t_types:
                 #indices of examples of type task_type
-                
+            
                 task_idxs = [i for i, trial in enumerate(dset) if trial[2].t_type== task_type]
                 subset = Subset(dset,task_idxs)
                 loader = DataLoader(subset, batch_size=batch_size, shuffle=True, collate_fn=collater, drop_last=drop_last)
