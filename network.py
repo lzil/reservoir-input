@@ -65,8 +65,7 @@ class M2Net(nn.Module):
         self._init_vars()
         self.reset()
 
-        if self.args.multimodal:
-            self.args.T =0
+    
 
 
     def _init_vars(self):
@@ -87,6 +86,26 @@ class M2Net(nn.Module):
             # TODO load M_params
         if self.args.model_path is not None:
             self.load_state_dict(torch.load(self.args.model_path))
+
+        if self.args.synaptic_intel:
+            
+            #trainP
+            self.train_params = []
+            for k,v in self.named_parameters():
+                # k is name, v is weight
+                found = False
+                # filtering just for the parts that will be trained
+                for part in self.args.train_parts:
+                    if part in k:
+    
+                        
+                        self.train_params.append(k)
+                        found = True
+                        break
+
+            self.ws = {k:0 for k in self.train_params}
+            
+            print(self.ws)
 
     def add_task(self):
         M = self.M_u.weight.data

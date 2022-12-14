@@ -415,7 +415,13 @@ class DMProAnti(Task):
 
         
         if self.t_type.endswith('anti'):
-            y[1:,] = -y[1:,] 
+            if self.g1 > self.g2:
+                y[1,self.stim:] = self.stimulus_2[0]
+                y[2,self.stim:] = self.stimulus_2[1]
+        
+            elif self.g1 < self.g2:
+                y[1,self.stim:] = self.stimulus_1[0]
+                y[2,self.stim:] =self.stimulus_1[1]
             
         return y
 
@@ -612,15 +618,9 @@ class DMCProAnti(Task):
                 y[0]=1
             
 
-
-        
-
-
-
-        
         elif self.t_type.endswith('anti'):
-            #if they don't match
-            if not ((0<=self.theta_1 <= np.pi) and (0<=self.theta_2<=np.pi) ) or ((np.pi <self.theta_1 <= 2*np.pi) and (np.pi<self.theta_2<= 2*np.pi)):
+            #if two angles aren't in the same category
+            if ((0<=self.theta_1 <= np.pi) and (np.pi<self.theta_2<= 2*np.pi)) or  ((np.pi <self.theta_1 <= 2*np.pi) and (0<=self.theta_2<=np.pi)):
                 y[0,:self.stim]= 1
                 y[1,self.stim:] = self.stimulus_2[0]
                 y[2,self.stim:] =self.stimulus_2[1]
@@ -780,9 +780,7 @@ class MultimodalDataset:
         self.fixation_tasks = 0 #no. of fixation tasks
         #we initialise a fixation input by default
 
-        
-        
-        # but if after processing all tasks and no. of fixaton tasks is 0, lop of the shared fixation input
+        # but if after processing all tasks and no. of fixaton tasks is 0, chop off the shared fixation input
         self.max_t_len=0
 
         self.datasets_list = []
@@ -1034,6 +1032,7 @@ class MultimodalDataset:
         trials = self.multimodal_trials
         return trials, args
 
+    
 
 
 
@@ -1060,6 +1059,7 @@ def get_task_args(args):
         targs.p_len = get_tval(tarr, 'pl', 5, int)
         targs.gain = get_tval(tarr, 'gain', 1, float)
         targs.max_ready = get_tval(tarr, 'max_ready', 80, int)
+        targs.has_fix = get_tval(tarr, 'has_fix', False, bool)
         if args.intervals is None:
             targs.min_t = get_tval(tarr, 'gt', targs.p_len * 4, int)
             targs.max_t = get_tval(tarr, 'lt', targs.t_len // 2 - targs.p_len * 4 - targs.max_ready, int)
@@ -1093,38 +1093,43 @@ def get_task_args(args):
         targs.t_len = get_tval(tarr, 'l', 300, int)
         targs.fix_t = get_tval(tarr, 'fix', 50, int)
         targs.stim_t = get_tval(tarr, 'stim', 150, int)
+        targs.has_fix = get_tval(tarr, 'has_fix', True, bool)
 
     elif args.t_type == 'memory-pro' or args.t_type == 'memory-anti':
         targs.t_len = get_tval(tarr, 'l', 300, int)
         targs.fix_t = get_tval(tarr, 'fix', 50, int)
         targs.stim_t = get_tval(tarr, 'stim', 100, int)
         targs.memory_t = get_tval(tarr, 'memory', 50, int)
+        targs.has_fix = get_tval(tarr, 'has_fix', True, bool)
 
     elif args.t_type == 'dm-pro' or args.t_type == 'dm-anti':
-        targs.t_len = get_tval(tarr, 'l', 500, int)
+        targs.t_len = get_tval(tarr, 'l', 300, int)
         #default value of t_len is 300 according to this but doesn't do anything atm
         #bc for now t_len in dm is determined by stimulus duration
         targs.fix_t = get_tval(tarr, 'fix', 50, int)
-        targs.stim_t = get_tval(tarr, 'stim', 300, int)
+        targs.stim_t = get_tval(tarr, 'stim', 200, int)
+        targs.has_fix = get_tval(tarr, 'has_fix', True, bool)
 
     elif args.t_type == 'delay-dm-pro' or args.t_type == 'delay-dm-anti':
-        targs.t_len = get_tval(tarr, 'l', 450, int)
+        targs.t_len = get_tval(tarr, 'l', 300, int)
         #default value of t_len is 300 according to this but doesn't do anything atm
         #bc for now t_len in dm is determined by stimulus duration
-        targs.fix_t = get_tval(tarr, 'fix', 50, int)
-        targs.stim_t1 = get_tval(tarr, 'stimt1', 100, int)
-        targs.delay_t1=get_tval(tarr,'delayl1',50, int)
-        targs.stim_t2 = get_tval(tarr, 'stimt2', 100, int)
-        targs.delay_t2=get_tval(tarr,'delayl1', 50, int)
+        targs.fix_t = get_tval(tarr, 'fix', 33, int)
+        targs.stim_t1 = get_tval(tarr, 'stimt1', 75, int)
+        targs.delay_t1=get_tval(tarr,'delayl1',15, int)
+        targs.stim_t2 = get_tval(tarr, 'stimt2', 75, int)
+        targs.delay_t2=get_tval(tarr,'delayl1', 15, int)
+        targs.has_fix = get_tval(tarr, 'has_fix', True, bool)
 
     elif args.t_type == 'dmc-pro' or args.t_type == 'dmc-anti':
-        targs.t_len = get_tval(tarr, 'l', 450, int)
+        targs.t_len = get_tval(tarr, 'l', 300, int)
         #default value of t_len is 300 according to this but doesn't do anything atm
         #bc for now t_len in dm is determined by stimulus duration
-        targs.fix_t = get_tval(tarr, 'fix', 50, int)
+        targs.fix_t = get_tval(tarr, 'fix', 20, int)
         targs.stim_t1 = get_tval(tarr, 'stimt1', 100, int)
-        targs.delay_t1=get_tval(tarr,'delayl1',50, int)
+        targs.delay_t1=get_tval(tarr,'delayl1',20, int)
         targs.stim_t2 = get_tval(tarr, 'stimt2', 100, int)
+        targs.has_fix = get_tval(tarr, 'has_fix', True, bool)
         
 
 
@@ -1186,11 +1191,6 @@ if __name__ == '__main__':
     # delay memory pro anti preset angles
     parser.add_argument('--angles', nargs='*', type=float, default=None, help='angles in degrees for dmpa tasks')
 
-    #multi-modal argument to create a multimodal data set from already created datasets
-    parser.add_argument('--mm', action='store_true', help='multimodal setting where learning multiple tasks simultaneously with fixed net architecture')
-
-    parser.add_argument('-d', '--datasets', type=str, default=['datasets/rsg-100-150.pkl','datasets/dpro_1.pkl'], nargs='+', help='dataset(s) to use for multimodal')
-
     
 
     args = parser.parse_args()
@@ -1211,19 +1211,8 @@ if __name__ == '__main__':
         # create and save a dataset
             #if args.mm, create multimodal dataset
             #if not proceed as usual
-            
-            if args.mm:
-                multimodal_creator= MultimodalDataset(args)
-                dset, config = multimodal_creator.retrieve_multimodal_dataset(args)
+            dset, config = create_dataset(args)
 
-                # for i in [0, 2000]:
-                #     x,y, t  = dset[i].get_x(), dset[i].get_y(),dset[i].t_type
-                #     print(x, y, t)
-
-            
-            else:
-                dset, config = create_dataset(args)
-            
             save_dataset(dset, args.name, config=config)
     elif args.mode == 'load':
         # visualize a dataset
@@ -1286,20 +1275,53 @@ if __name__ == '__main__':
                 xr=np.arange(trial.t_len)
                 ax.plot(xr, trial_x[0], color='grey', lw=1, ls='--', alpha=.6)
                 #stimulus 1
+                if trial.t_type.endswith('pro'):
+                    if trial.g1 > trial.g2:
+                        ax.plot(xr, trial_x[1], color='salmon', lw=1*trial.g1, ls='--', alpha=.6)
+                        ax.plot(xr, trial_x[2], color='dodgerblue', lw=1*trial.g1, ls='--', alpha=.6)
+                        #stimulus 2
+                        ax.plot(xr, trial_x[4], color='magenta', lw=1*trial.g2, ls='dotted', alpha=.6)
+                        ax.plot(xr, trial_x[5], color='lime', lw=1*trial.g2, ls='dotted', alpha=.6)
 
-                if trial.g1 > trial.g2:
-                    ax.plot(xr, trial_x[1], color='salmon', lw=1*trial.g1, ls='--', alpha=.6)
-                    ax.plot(xr, trial_x[2], color='dodgerblue', lw=1*trial.g1, ls='--', alpha=.6)
-                    #stimulus 2
-                    ax.plot(xr, trial_x[4], color='magenta', lw=1*trial.g2, ls='dotted', alpha=.6)
-                    ax.plot(xr, trial_x[5], color='lime', lw=1*trial.g2, ls='dotted', alpha=.6)
+                        ax.plot(xr, trial_y[0], color='grey', lw=1.5)
+                        ax.plot(xr, trial_y[1], color='salmon', lw=1.5)
+                        ax.plot(xr, trial_y[2], color='dodgerblue', lw=1.5)
 
-                elif trial.g1 < trial.g2:
-                    ax.plot(xr, trial_x[1], color='salmon', lw=1*trial.g1, ls='dotted', alpha=.6)
-                    ax.plot(xr, trial_x[2], color='dodgerblue', lw=1*trial.g1, ls='dotted', alpha=.6)
-                    #stimulus 2
-                    ax.plot(xr, trial_x[4], color='magenta', lw=1*trial.g2, ls='--', alpha=.6)
-                    ax.plot(xr, trial_x[5], color='lime', lw=1*trial.g2, ls='--', alpha=.6)
+                    elif trial.g1 < trial.g2:
+                        ax.plot(xr, trial_x[1], color='salmon', lw=1*trial.g1, ls='dotted', alpha=.6)
+                        ax.plot(xr, trial_x[2], color='dodgerblue', lw=1*trial.g1, ls='dotted', alpha=.6)
+                        #stimulus 2
+                        ax.plot(xr, trial_x[4], color='magenta', lw=1*trial.g2, ls='--', alpha=.6)
+                        ax.plot(xr, trial_x[5], color='lime', lw=1*trial.g2, ls='--', alpha=.6)
+
+                        ax.plot(xr, trial_y[0], color='grey', lw=1.5)
+                        ax.plot(xr, trial_y[1], color='magenta', lw=1.5)
+                        ax.plot(xr, trial_y[2], color='lime', lw=1.5)
+                elif trial.t_type.endswith('anti'):
+                    if trial.g1 > trial.g2:
+                        ax.plot(xr, trial_x[1], color='salmon', lw=1*trial.g1, ls='--', alpha=.6)
+                        ax.plot(xr, trial_x[2], color='dodgerblue', lw=1*trial.g1, ls='--', alpha=.6)
+                        #stimulus 2
+                        ax.plot(xr, trial_x[4], color='magenta', lw=1*trial.g2, ls='dotted', alpha=.6)
+                        ax.plot(xr, trial_x[5], color='lime', lw=1*trial.g2, ls='dotted', alpha=.6)
+
+                        ax.plot(xr, trial_y[0], color='grey', lw=1.5)
+                        ax.plot(xr, trial_y[1], color='magenta', lw=1.5)
+                        ax.plot(xr, trial_y[2], color='lime', lw=1.5)
+
+                    elif trial.g1 < trial.g2:
+                        ax.plot(xr, trial_x[1], color='salmon', lw=1*trial.g1, ls='dotted', alpha=.6)
+                        ax.plot(xr, trial_x[2], color='dodgerblue', lw=1*trial.g1, ls='dotted', alpha=.6)
+                        #stimulus 2
+                        ax.plot(xr, trial_x[4], color='magenta', lw=1*trial.g2, ls='--', alpha=.6)
+                        ax.plot(xr, trial_x[5], color='lime', lw=1*trial.g2, ls='--', alpha=.6)
+
+
+                        ax.plot(xr, trial_y[0], color='grey', lw=1.5)
+                        ax.plot(xr, trial_y[1], color='salmon', lw=1.5)
+                        ax.plot(xr, trial_y[2], color='dodgerblue', lw=1.5)
+                        
+
 
 
             elif t_type is DMCProAnti:
@@ -1307,30 +1329,57 @@ if __name__ == '__main__':
                 ax.plot(xr, trial_x[0], color='grey', lw=1, ls='--', alpha=.6)
                 #stimulus 1
 
+                if trial.t_type.endswith('pro'):
+                    if ((0<=trial.theta_1 <= np.pi) and (0<=trial.theta_2<=np.pi) ) or ((np.pi <trial.theta_1 <= 2*np.pi) and (np.pi<trial.theta_2<= 2*np.pi)):
+                        #if match both solid
+                        ax.plot(xr, trial_x[1], color='salmon', lw=1, ls='solid', alpha=.6)
+                        ax.plot(xr, trial_x[2], color='dodgerblue', lw=1, ls='solid', alpha=.6)
+                        #stimulus 2
+                        ax.plot(xr, trial_x[3], color='magenta', lw=1, ls='solid', alpha=.6)
+                        ax.plot(xr, trial_x[4], color='lime', lw=1, ls='solid', alpha=.6)
 
-                if ((0<=trial.theta_1 <= np.pi) and (0<=trial.theta_2<=np.pi) ) or ((np.pi <trial.theta_1 <= 2*np.pi) and (np.pi<trial.theta_2<= 2*np.pi)):
-                    #if match both solid
-                    ax.plot(xr, trial_x[1], color='salmon', lw=1, ls='solid', alpha=.6)
-                    ax.plot(xr, trial_x[2], color='dodgerblue', lw=1, ls='solid', alpha=.6)
-                    #stimulus 2
-                    ax.plot(xr, trial_x[3], color='magenta', lw=1, ls='solid', alpha=.6)
-                    ax.plot(xr, trial_x[4], color='lime', lw=1, ls='solid', alpha=.6)
+                        ax.plot(xr, trial_y[0], color='grey', lw=1.5)
+                        ax.plot(xr, trial_y[1], color='magenta', lw=1.5)
+                        ax.plot(xr, trial_y[2], color='lime', lw=1.5)
 
-                    ax.plot(xr, trial_y[0], color='grey', lw=1.5)
-                    ax.plot(xr, trial_y[1], color='magenta', lw=1.5)
-                    ax.plot(xr, trial_y[2], color='lime', lw=1.5)
+                    else:
+                        #if they don't match
+                        ax.plot(xr, trial_x[1], color='salmon', lw=1, ls='--', alpha=.6)
+                        ax.plot(xr, trial_x[2], color='dodgerblue', lw=1, ls='--', alpha=.6)
+                        #stimulus 2
+                        ax.plot(xr, trial_x[3], color='magenta', lw=1, ls='dotted', alpha=.6)
+                        ax.plot(xr, trial_x[4], color='lime', lw=1, ls='dotted', alpha=.6)
 
-                else:
-                    #if they don't match
-                    ax.plot(xr, trial_x[1], color='salmon', lw=1, ls='--', alpha=.6)
-                    ax.plot(xr, trial_x[2], color='dodgerblue', lw=1, ls='--', alpha=.6)
-                    #stimulus 2
-                    ax.plot(xr, trial_x[3], color='magenta', lw=1, ls='dotted', alpha=.6)
-                    ax.plot(xr, trial_x[4], color='lime', lw=1, ls='dotted', alpha=.6)
-
-                    ax.plot(xr, trial_y[0], color='grey', lw=1.5)
+                        ax.plot(xr, trial_y[0], color='grey', lw=1.5)
+                        x.plot(xr, trial_y[0], color='grey', lw=1.5)
+                        ax.plot(xr, trial_y[1], color='magenta', lw=1.5)
+                        ax.plot(xr, trial_y[2], color='lime', lw=1.5)
                 
+                elif trial.t_type.endswith('anti'):
+                    #if angles aren't in same categories
+                    if ((0<=trial.theta_1 <= np.pi) and (np.pi<trial.theta_2<= 2*np.pi)) or  ((np.pi <trial.theta_1 <= 2*np.pi) and (0<=trial.theta_2<=np.pi)):
+                        #if they don't match
+                        ax.plot(xr, trial_x[1], color='salmon', lw=1, ls='--', alpha=.6)
+                        ax.plot(xr, trial_x[2], color='dodgerblue', lw=1, ls='--', alpha=.6)
+                        #stimulus 2
+                        ax.plot(xr, trial_x[3], color='magenta', lw=1, ls='dotted', alpha=.6)
+                        ax.plot(xr, trial_x[4], color='lime', lw=1, ls='dotted', alpha=.6)
 
+                        ax.plot(xr, trial_y[0], color='grey', lw=1.5)
+                        ax.plot(xr, trial_y[1], color='magenta', lw=1.5)
+                        ax.plot(xr, trial_y[2], color='lime', lw=1.5)
+
+                    else:
+                        ax.plot(xr, trial_x[1], color='salmon', lw=1, ls='solid', alpha=.6)
+                        ax.plot(xr, trial_x[2], color='dodgerblue', lw=1, ls='solid', alpha=.6)
+                        #stimulus 2
+                        ax.plot(xr, trial_x[3], color='magenta', lw=1, ls='solid', alpha=.6)
+                        ax.plot(xr, trial_x[4], color='lime', lw=1, ls='solid', alpha=.6)
+
+                        ax.plot(xr, trial_y[0], color='grey', lw=1.5)
+                        ax.plot(xr, trial_y[1], color='magenta', lw=1.5)
+                        ax.plot(xr, trial_y[2], color='lime', lw=1.5)
+                
                     
 
 
@@ -1338,33 +1387,56 @@ if __name__ == '__main__':
                 xr=np.arange(trial.t_len)
                 ax.plot(xr, trial_x[0], color='grey', lw=1, ls='--', alpha=.6)
                 #stimulus 1
+                if trial.t_type.endswith('pro'):
+                    if trial.g1 > trial.g2:
+                        ax.plot(xr, trial_x[1], color='salmon', lw=1*trial.g1, ls='--', alpha=.6)
+                        ax.plot(xr, trial_x[2], color='dodgerblue', lw=1*trial.g1, ls='--', alpha=.6)
+                        #stimulus 2
+                        ax.plot(xr, trial_x[4], color='magenta', lw=1*trial.g2, ls='dotted', alpha=.6)
+                        ax.plot(xr, trial_x[5], color='lime', lw=1*trial.g2, ls='dotted', alpha=.6)
 
-                if trial.g1 > trial.g2:
-                    ax.plot(xr, trial_x[1], color='salmon', lw=1*trial.g1, ls='--', alpha=.6)
-                    ax.plot(xr, trial_x[2], color='dodgerblue', lw=1*trial.g1, ls='--', alpha=.6)
-                    #stimulus 2
-                    ax.plot(xr, trial_x[4], color='magenta', lw=1*trial.g2, ls='dotted', alpha=.6)
-                    ax.plot(xr, trial_x[5], color='lime', lw=1*trial.g2, ls='dotted', alpha=.6)
+                        ax.plot(xr, trial_y[0], color='grey', lw=1.5)
+                        ax.plot(xr, trial_y[1], color='salmon', lw=1.5)
+                        ax.plot(xr, trial_y[2], color='dodgerblue', lw=1.5)
 
-                elif trial.g1 < trial.g2:
-                    ax.plot(xr, trial_x[1], color='salmon', lw=1*trial.g1, ls='dotted', alpha=.6)
-                    ax.plot(xr, trial_x[2], color='dodgerblue', lw=1*trial.g1, ls='dotted', alpha=.6)
-                    #stimulus 2
-                    ax.plot(xr, trial_x[4], color='magenta', lw=1*trial.g2, ls='--', alpha=.6)
-                    ax.plot(xr, trial_x[5], color='lime', lw=1*trial.g2, ls='--', alpha=.6)
 
+                    elif trial.g1 < trial.g2:
+                        ax.plot(xr, trial_x[1], color='salmon', lw=1*trial.g1, ls='dotted', alpha=.6)
+                        ax.plot(xr, trial_x[2], color='dodgerblue', lw=1*trial.g1, ls='dotted', alpha=.6)
+                        #stimulus 2
+                        ax.plot(xr, trial_x[4], color='magenta', lw=1*trial.g2, ls='--', alpha=.6)
+                        ax.plot(xr, trial_x[5], color='lime', lw=1*trial.g2, ls='--', alpha=.6)
+
+                        ax.plot(xr, trial_y[0], color='grey', lw=1.5)
+                        ax.plot(xr, trial_y[1], color='magenta', lw=1.5)
+                        ax.plot(xr, trial_y[2], color='lime', lw=1.5)
+
+                elif trial.t_type.endswith('anti'):
+                    if trial.g1 > trial.g2:
+                        ax.plot(xr, trial_x[1], color='salmon', lw=1*trial.g1, ls='--', alpha=.6)
+                        ax.plot(xr, trial_x[2], color='dodgerblue', lw=1*trial.g1, ls='--', alpha=.6)
+                        #stimulus 2
+                        ax.plot(xr, trial_x[4], color='magenta', lw=1*trial.g2, ls='dotted', alpha=.6)
+                        ax.plot(xr, trial_x[5], color='lime', lw=1*trial.g2, ls='dotted', alpha=.6)
+
+                        ax.plot(xr, trial_y[0], color='grey', lw=1.5)
+                        ax.plot(xr, trial_y[1], color='magenta', lw=1.5)
+                        ax.plot(xr, trial_y[2], color='lime', lw=1.5)
+
+                    elif trial.g1 < trial.g2:
+                        ax.plot(xr, trial_x[1], color='salmon', lw=1*trial.g1, ls='dotted', alpha=.6)
+                        ax.plot(xr, trial_x[2], color='dodgerblue', lw=1*trial.g1, ls='dotted', alpha=.6)
+                        #stimulus 2
+                        ax.plot(xr, trial_x[4], color='magenta', lw=1*trial.g2, ls='--', alpha=.6)
+                        ax.plot(xr, trial_x[5], color='lime', lw=1*trial.g2, ls='--', alpha=.6)
+
+
+                        ax.plot(xr, trial_y[0], color='grey', lw=1.5)
+                        ax.plot(xr, trial_y[1], color='salmon', lw=1.5)
+                        ax.plot(xr, trial_y[2], color='dodgerblue', lw=1.5)
 
                 
 
-                if trial.g1>trial.g2:
-                    ax.plot(xr, trial_y[0], color='grey', lw=1.5)
-                    ax.plot(xr, trial_y[1], color='salmon', lw=1.5)
-                    ax.plot(xr, trial_y[2], color='dodgerblue', lw=1.5)
-
-                elif trial.g1 < trial.g2:
-                    ax.plot(xr, trial_y[0], color='grey', lw=1.5)
-                    ax.plot(xr, trial_y[1], color='magenta', lw=1.5)
-                    ax.plot(xr, trial_y[2], color='lime', lw=1.5)
             
 
                 

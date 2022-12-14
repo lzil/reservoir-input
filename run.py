@@ -67,6 +67,7 @@ def parse_args():
     # parser.add_argument('-a', '--add_tasks', type=str, nargs='+', help='add tasks to previously trained reservoir')
     parser.add_argument('-s', '--sequential', action='store_true', help='sequential training')
     parser.add_argument('--owm', action='store_true', help='use orthogonal weight modification')
+    parser.add_argument('--synaptic_intel', action = 'store_true', help='use synaptic intelligence')
     # parser.add_argument('-o', '--train_order', type=int, nargs='+', default=[], help='ids of tasks to train on, in order if sequential flag is enabled. empty for all')
     # parser.add_argument('--seq_threshold', type=float, default=5, help='threshold for having solved a task before moving on to next one')
     parser.add_argument('--same_test', action='store_true', help='use entire dataset for both training and testing')
