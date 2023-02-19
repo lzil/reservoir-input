@@ -133,7 +133,7 @@ class Trainer:
                 pickle.dump(self.vis_samples, f)
 
     # runs an iteration where we want to match a certain trajectory
-    def run_trial(self, x, y, trial, training=True, extras=False):
+    def run_trial(self, x, y, trial, training=True, extras=False, synaptic_intel_penalty=False):
         self.net.reset(self.args.res_x_init, device=self.device)
         trial_loss = 0.
         k_loss = 0.
@@ -158,7 +158,10 @@ class Trainer:
                 k_outs = torch.stack(outs[-k:], dim=2)
                 k_targets = y[:,:,j+1-k:j+1]
                 for c in self.criteria:
-                    k_loss += c(k_outs, k_targets, i=trial, t_ix=j+1-k)
+                    if synaptic_intel_penalty:
+                        k_loss += c(k_outs, k_targets, i=trial, t_ix=j+1-k) + self.args.stabilization*sum((omega*((p-p_prev).pow(2.0))).sum() for p, p_prev,omega in zip(self.net.params_train, self.net.prev_task_params,self.net.omegas))
+                    else:
+                        k_loss += c(k_outs, k_targets, i=trial, t_ix=j+1-k)
                 trial_loss += k_loss.detach().item()
                 if training:
                     k_loss.backward()
@@ -178,10 +181,12 @@ class Trainer:
                             if self.args.ff_bias:
                                 self.net.M_u.bias.grad[:] = 0
                                 self.net.M_ro.bias.grad[:] = 0
+                    
+                    
                             
                 k_loss = 0.
                 self.net.reservoir.x = self.net.reservoir.x.detach()
-
+                
         trial_loss /= x.shape[0]
 
         if extras:
@@ -194,11 +199,15 @@ class Trainer:
                 'vs': net_vs
             }
             return trial_loss, etc
-        return trial_loss
+        else:
+            return trial_loss
 
-    def train_iteration(self, x, y, trial, ix_callback=None):
+    def train_iteration(self, x, y, trial, ix_callback=None, synaptic_intel_penalty=False):
         self.optimizer.zero_grad()
-        trial_loss, etc = self.run_trial(x, y, trial, extras=True)
+        if synaptic_intel_penalty:
+            trial_loss, etc = self.run_trial(x, y, trial, extras=True, synaptic_intel_penalty=True)
+        else:
+            trial_loss, etc = self.run_trial(x, y, trial, extras=True)
 
         if ix_callback is not None:
             ix_callback(trial_loss, etc)
@@ -276,7 +285,32 @@ class Trainer:
                 ix += 1
                 
                 x, y = x.to(self.device), y.to(self.device)
-                iter_loss, etc = self.train_iteration(x, y, info, ix_callback=ix_callback)
+                if self.args.synaptic_intel:
+                    
+                    #calculate gradients using unstabilized loss but don't take step, store gradients
+                    trial_loss= self.run_trial(x, y)
+
+                    gradients = { k : v.grad.detach().clone() for k,v in zip(self.net.self.params_train_names, self.net.params_train)}
+
+                    params_before_train_step = { k : p.detach().clone() for k,p in zip(self.net.self.params_train_names, self.net.params_train)}
+                    
+                    #zero grads and take step using gradients of stabilized(i.e. loss with with synpatic_intel_penalty)
+                    iter_loss, etc = self.train_iteration(x, y, info, ix_callback=ix_callback, synaptic_intel_penalty=True)
+                    params_after_train_step = { k : p.detach().clone() for k,p in zip(self.net.self.params_train_names, self.net.params_train)}
+                    
+                    
+                    
+                    if params_after_train_step == params_before_train_step:
+                        raise NotImplementedError('param copy before train-step is identical to param copy after train step')
+                    else:
+                        self.net.update_ws_and_param_deltas(params_before_train_step, gradients, params_after_train_step)
+
+                        
+
+
+
+                else:
+                    iter_loss, etc = self.train_iteration(x, y, info, ix_callback=ix_callback)
 
                 if iter_loss == -1:
                     logging.info(f'iteration {ix}: is nan. ending')
@@ -333,6 +367,10 @@ class Trainer:
                         losses = self.test_tasks(ids=range(self.train_idx + 1))
                         for i, loss in losses:
                             logging.info(f'...loss on task {i}: {loss:.3f}')
+                        if self.args.synaptic_intel:
+                            self.net.prev_task_params ={ k : p.detach().clone() for k,p in zip(self.net.self.params_train_names, self.net.params_train)}
+                            self.net.update_omegas()
+                            self.net.zero_ws_and_param_deltas()
 
                         # orthogonal weight modification of M_u and M_ro
                         if self.args.owm:

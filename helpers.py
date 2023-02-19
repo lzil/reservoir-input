@@ -106,22 +106,15 @@ class TrialDataset(Dataset):
                     task_family = 'DelayCopy'
                 elif t_type == 'flip-flop':
                     task_family = 'FlipFlop'
-                elif t_type == 'delay-pro' or t_type == 'delay-anti':
-                    task_family = 'DelayProAnti'
-                elif t_type == 'memory-pro' or t_type == 'memory-anti':
-                    task_family = 'MemoryProAnti'
-                elif t_type == 'dm-pro' or t_type == 'dm-anti':
-                    task_family = 'DMProAnti'
 
-                elif t_type == 'delay-dm-pro' or t_type == 'delay-dm-anti':
-                    task_family = 'DelayDMProAnti'
+                elif t_type == 'delay-pro' or t_type == 'delay-anti' or t_type == 'memory-pro' or t_type == 'memory-anti':
+                    task_family = 'DelMemProAnti'
+                
+                elif t_type == 'dm-pro' or t_type == 'dm-anti' or t_type == 'delay-dm-pro' or t_type == 'delay-dm-anti':
+                    task_family = 'DMandDelayDMProAnti'
                 
                 elif t_type == 'dmc-pro' or t_type == 'dmc-anti':
                     task_family = 'DMCProAnti'
-
-
-                elif t_type == 'dur-disc':
-                    task_family = 'DurationDisc'
 
 
                 if task_family not in self.task_fams:
@@ -202,6 +195,7 @@ class TrialDataset(Dataset):
             idx = idx - self.max_idxs[context-1]
         # 'context' is the dataset we're indexing into i.e. which dataset
         trial = self.data[context][idx]
+        
         x = trial.get_x(self.args)
         
         y = trial.get_y(self.args)
@@ -241,6 +235,7 @@ class TrialDataset(Dataset):
             
                 task_L =ds[0].L
                 task_Z= ds[0].Z
+
                 if t_type.startswith('rsg'):
                     task_family = 'RSG'
                 elif t_type.startswith('csg'):
@@ -249,18 +244,19 @@ class TrialDataset(Dataset):
                     task_family = 'DelayCopy'
                 elif t_type == 'flip-flop':
                     task_family = 'FlipFlop'
-                elif t_type == 'delay-pro' or t_type == 'delay-anti':
-                    task_family = 'DelayProAnti'
-                elif t_type == 'memory-pro' or t_type == 'memory-anti':
-                    task_family = 'MemoryProAnti'
-                elif t_type == 'dm-pro' or t_type == 'dm-anti':
-                    task_family = 'DMProAnti'
 
-                elif t_type == 'delay-dm-pro' or t_type == 'delay-dm-anti':
-                    task_family = 'DelayDMProAnti'
+                elif t_type == 'delay-pro' or t_type == 'delay-anti' or t_type == 'memory-pro' or t_type == 'memory-anti':
+                    task_family = 'DelMemProAnti'
+                
+                elif t_type == 'dm-pro' or t_type == 'dm-anti' or t_type == 'delay-dm-pro' or t_type == 'delay-dm-anti':
+                    task_family = 'DMandDelayDMProAnti'
                 
                 elif t_type == 'dmc-pro' or t_type == 'dmc-anti':
                     task_family = 'DMCProAnti'
+
+
+                elif t_type == 'dur-disc':
+                    task_family = 'DurationDisc'
 
 
                 elif t_type == 'dur-disc':
@@ -292,22 +288,19 @@ class TrialDataset(Dataset):
 
             t_type = trial.t_type
             if t_type.startswith('rsg'):
-                task_family = 'RSG'
+                    task_family = 'RSG'
             elif t_type.startswith('csg'):
                 task_family = 'CSG'
             elif t_type == 'delay-copy':
                 task_family = 'DelayCopy'
             elif t_type == 'flip-flop':
                 task_family = 'FlipFlop'
-            elif t_type == 'delay-pro' or t_type == 'delay-anti':
-                task_family = 'DelayProAnti'
-            elif t_type == 'memory-pro' or t_type == 'memory-anti':
-                task_family = 'MemoryProAnti'
-            elif t_type == 'dm-pro' or t_type == 'dm-anti':
-                task_family = 'DMProAnti'
 
-            elif t_type == 'delay-dm-pro' or t_type == 'delay-dm-anti':
-                task_family = 'DelayDMProAnti'
+            elif t_type == 'delay-pro' or t_type == 'delay-anti' or t_type == 'memory-pro' or t_type == 'memory-anti':
+                task_family = 'DelMemProAnti'
+            
+            elif t_type == 'dm-pro' or t_type == 'dm-anti' or t_type == 'delay-dm-pro' or t_type == 'delay-dm-anti':
+                task_family = 'DMandDelayDMProAnti'
             
             elif t_type == 'dmc-pro' or t_type == 'dmc-anti':
                 task_family = 'DMCProAnti'
@@ -357,6 +350,7 @@ class TrialDataset(Dataset):
 
         trial.context = context
         trial.dname = self.dnames[context]
+        
         if self.args.multimodal:
             trial.lz = (x.shape[0],y.shape[0] )
         
@@ -367,16 +361,6 @@ class TrialDataset(Dataset):
     def get_context(self, idx):
         return np.argmax(self.max_idxs > idx)
 
-
-
-
-
-
-        
-
-
-
-        
 
 # turns data samples into stuff that can be run through network
 def collater(samples):
