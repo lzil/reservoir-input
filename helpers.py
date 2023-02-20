@@ -353,7 +353,9 @@ class TrialDataset(Dataset):
         
         if self.args.multimodal:
             trial.lz = (x.shape[0],y.shape[0] )
-        
+            trial.input_modality_locations = self.input_modality_locations
+            trial.output_modality_locations = self.output_modality_locations
+            trial.task_family = task_family
         else:
             trial.lz = self.lzs[context]
         return x, y, trial
@@ -374,7 +376,7 @@ def collater(samples):
     return xs, ys, trials
 
 # creates datasets and dataloaders
-def create_loaders(datasets, args, split_test=True, test_size=1, context_filter=[]):
+def create_loaders(datasets, args, split_test=True, test_size=1, context_filter=[], multimodal_test = False):
     dsets_train = []
     dsets_test = []
     for i, dpath in enumerate(datasets):
@@ -415,7 +417,8 @@ def create_loaders(datasets, args, split_test=True, test_size=1, context_filter=
         return (test_set, test_loaders)
 
     #similar idea to args.sequential,creates separate test loaders for each task 
-    elif args.multimodal:
+    elif args.multimodal and not multimodal_test:
+        
         def create_subset_loaders(dset, batch_size, drop_last):
             loaders = {}
             max_idxs = dset.max_idxs

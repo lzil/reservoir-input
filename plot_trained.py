@@ -39,6 +39,7 @@ else:
 config = update_args(args, config)
 dsets = config.dataset
 
+
 net = load_model_path(args.model, config=config)
 # assuming config is in the same folder as the model
 
@@ -55,8 +56,10 @@ if not args.no_plot:
 
     fig, ax = plt.subplots(3,4,sharex=False, sharey=False, figsize=(12,8))
     for i, ax in enumerate(fig.axes):
+        #to delete: o
         context, ix, trial, x, y, z, loss = data[i]
         xr = np.arange(x.shape[-1])
+        #for trial get z posititon
 
         ax.axvline(x=0, color='dimgray', alpha = 1)
         ax.axhline(y=0, color='dimgray', alpha = 1)
@@ -66,52 +69,218 @@ if not args.no_plot:
         ax.spines['left'].set_visible(False)
         ax.spines['bottom'].set_visible(False)
         
-        if type(trial) in [DelayProAnti, MemoryProAnti]:
-            ax.plot(xr, x[0], color='grey', lw=1, ls='--', alpha=.4)
-            ax.plot(xr, x[1], color='salmon', lw=1, ls='--', alpha=.4)
-            ax.plot(xr, x[2], color='dodgerblue', lw=1, ls='--', alpha=.4)
-            ax.plot(xr, y[0], color='grey', lw=1.5, ls=':')
-            ax.plot(xr, y[1], color='salmon', lw=1.5, ls=':')
-            ax.plot(xr, y[2], color='dodgerblue', lw=1.5, ls=':')
-            ax.plot(xr, z[0], color='grey', lw=2)
-            ax.plot(xr, z[1], color='salmon', lw=2)
-            ax.plot(xr, z[2], color='dodgerblue', lw=2)
+        if config.multimodal:
+            input_loc =trial.input_modality_locations[trial.task_family]
+            output_loc = trial.output_modality_locations[trial.task_family]
+            if type(trial) in [DelayProAnti, MemoryProAnti]:
+                ax.plot(xr, x[0], color='grey', lw=1, ls='--', alpha=.4)
+                ax.plot(xr, x[input_loc], color='salmon', lw=1, ls='--', alpha=.4)
+                ax.plot(xr, x[input_loc +1], color='dodgerblue', lw=1, ls='--', alpha=.4)
+                ax.plot(xr, y[0], color='grey', lw=1.5, ls=':')
+                ax.plot(xr, y[output_loc], color='salmon', lw=1.5, ls=':')
+                ax.plot(xr, y[output_loc+1], color='dodgerblue', lw=1.5, ls=':')
+                ax.plot(xr, z[0], color='grey', lw=2)
+                ax.plot(xr, z[output_loc], color='salmon', lw=2)
+                ax.plot(xr, z[output_loc+1], color='dodgerblue', lw=2)
 
-        elif type(trial) in [RSG, CSG]:
-            ax.plot(xr, y[0], color='coral', alpha=1, lw=1, label='target')
-            ax.plot(xr, z[0], color='cornflowerblue', alpha=1, lw=1.5, label='response')
-        elif 'bce' in config.loss:
-            ax.scatter(xr, y, color='coral', alpha=0.5, s=3, label='target')
-            ax.plot(xr, z, color='cornflowerblue', alpha=1, lw=1.5, label='response')
+            elif type(trial) in [RSG, CSG]:
+                ax.plot(xr, y[output_loc], color='coral', alpha=1, lw=1, label='target')
+                ax.plot(xr, z[output_loc], color='cornflowerblue', alpha=1, lw=1.5, label='response')
+            elif 'bce' in config.loss:
+                ax.scatter(xr, y, color='coral', alpha=0.5, s=3, label='target')
+                ax.plot(xr, z, color='cornflowerblue', alpha=1, lw=1.5, label='response')
 
-        elif type(trial) is FlipFlop:
-            for j in range(trial.dim):
-                ax.plot(xr, x[j], color=cols[j], ls='--', lw=.5, alpha=.4)
-                ax.plot(xr, y[j], color=cols[j], lw=1.5, ls=':')
-                ax.plot(xr, z[j], color=cols[j], lw=2)
+            elif type(trial) is FlipFlop:
+                for j in range(trial.dim):
+                    ax.plot(xr, x[j], color=cols[j], ls='--', lw=.5, alpha=.4)
+                    ax.plot(xr, y[j], color=cols[j], lw=1.5, ls=':')
+                    ax.plot(xr, z[j], color=cols[j], lw=2)
 
-        elif type(trial) is DurationDisc:
-            ax.plot(xr, x[0], color='grey', lw=.5, ls='--', alpha=.4)
-            ax.plot(xr, x[1], color='grey', lw=.5, ls='--', alpha=.4)
-            ax.plot(xr, x[2], color='salmon', lw=.5, ls='--', alpha=.7)
-            ax.plot(xr, x[3], color='dodgerblue', lw=.5, ls='--', alpha=.7)
-            ax.plot(xr, y[0], color='salmon', lw=1.5, ls=':')
-            ax.plot(xr, y[1], color='dodgerblue', lw=1.5, ls=':')
-            ax.plot(xr, z[0], color='salmon', lw=2)
-            ax.plot(xr, z[1], color='dodgerblue', lw=2)
+            elif type(trial) is DurationDisc:
+                ax.plot(xr, x[0], color='grey', lw=.5, ls='--', alpha=.4)
+                ax.plot(xr, x[1], color='grey', lw=.5, ls='--', alpha=.4)
+                ax.plot(xr, x[2], color='salmon', lw=.5, ls='--', alpha=.7)
+                ax.plot(xr, x[3], color='dodgerblue', lw=.5, ls='--', alpha=.7)
+                ax.plot(xr, y[0], color='salmon', lw=1.5, ls=':')
+                ax.plot(xr, y[1], color='dodgerblue', lw=1.5, ls=':')
+                ax.plot(xr, z[0], color='salmon', lw=2)
+                ax.plot(xr, z[1], color='dodgerblue', lw=2)
 
-        elif type(trial) is DMCProAnti:
-            ax.plot(xr, x[0], color='grey', lw=.5, ls='--', alpha=.4)
-            ax.plot(xr, x[1], color='salmon', lw=.5, ls='--', alpha=.4)
-            ax.plot(xr, x[2], color='dodgerblue', lw=.5, ls='--', alpha=.7)
-            ax.plot(xr, x[3], color='magenta', lw=.5, ls='--', alpha=.7)
-            ax.plot(xr, x[4], color='lime', lw=.5, ls='--', alpha=.7)
-            ax.plot(xr, y[0], color='grey', lw=1.5, ls=':')
-            ax.plot(xr, y[1], color='magenta', lw=1.5, ls=':')
-            ax.plot(xr, y[2], color='lime', lw=1.5, ls=':')
-            ax.plot(xr, z[0], color='grey', lw=2, ls='-')
-            ax.plot(xr, z[1], color='magenta', lw=2, ls='-')
-            ax.plot(xr, z[2], color='lime', lw=2, ls='-')
+            elif type(trial) is DMCProAnti:
+                ax.plot(xr, x[0], color='grey', lw=.5, ls='--', alpha=.4)
+                ax.plot(xr, x[input_loc], color='salmon', lw=.5, ls='--', alpha=.4)
+                ax.plot(xr, x[input_loc+1], color='dodgerblue', lw=.5, ls='--', alpha=.7)
+                ax.plot(xr, x[input_loc+2], color='magenta', lw=.5, ls='--', alpha=.7)
+                ax.plot(xr, x[input_loc+3], color='lime', lw=.5, ls='--', alpha=.7)
+                ax.plot(xr, y[0], color='grey', lw=1.5, ls=':')
+                ax.plot(xr, y[output_loc], color='magenta', lw=1.5, ls=':')
+                ax.plot(xr, y[output_loc+1], color='lime', lw=1.5, ls=':')
+                ax.plot(xr, z[0], color='grey', lw=2, ls='-')
+                ax.plot(xr, z[output_loc], color='magenta', lw=2, ls='-')
+                ax.plot(xr, z[output_loc+1], color='lime', lw=2, ls='-')
+
+            elif type(trial) in [DMProAnti, DelayDMProAnti] :
+                if trial.t_type.endswith('pro'):
+                        if trial.g1 > trial.g2:
+                            ax.plot(xr, x[input_loc], color='salmon', lw=1*trial.g1, ls='--', alpha=.6)
+                            ax.plot(xr, x[input_loc +1], color='dodgerblue', lw=1*trial.g1, ls='--', alpha=.6)
+                            #stimulus 2
+                            ax.plot(xr, x[input_loc +3], color='magenta', lw=1*trial.g2, ls='dotted', alpha=.6)
+                            ax.plot(xr, x[input_loc +4 ], color='lime', lw=1*trial.g2, ls='dotted', alpha=.6)
+
+                            ax.plot(xr, y[0], color='grey', lw=1.5, ls = ':')
+                            ax.plot(xr, y[output_loc], color='salmon', lw=1.5, ls = ':')
+                            ax.plot(xr, y[output_loc + 1], color='dodgerblue', lw=1.5,  ls = ':')
+
+                        elif trial.g1 < trial.g2:
+                            ax.plot(xr, x[input_loc], color='salmon', lw=1*trial.g1, ls='--', alpha=.6)
+                            ax.plot(xr, x[input_loc +1], color='dodgerblue', lw=1*trial.g1, ls='--', alpha=.6)
+                            #stimulus 2
+                            ax.plot(xr, x[input_loc +3], color='magenta', lw=1*trial.g2, ls='dotted', alpha=.6)
+                            ax.plot(xr, x[input_loc +4 ], color='lime', lw=1*trial.g2, ls='dotted', alpha=.6)
+
+                            ax.plot(xr, y[0], color='grey', lw=1.5, ls = ':')
+                            ax.plot(xr, y[output_loc], color='salmon', lw=1.5, ls = ':')
+                            ax.plot(xr, y[output_loc + 1], color='dodgerblue', lw=1.5,  ls = ':')
+                        
+                        ax.plot(xr, z[0], color='grey', lw=2, ls='-')
+                        ax.plot(xr, z[output_loc], color='red', lw=2, ls='-')
+                        ax.plot(xr, z[output_loc +1], color='turquoise', lw=2, ls='-')
+
+
+
+                elif trial.t_type.endswith('anti'):
+                    if trial.g1 > trial.g2:
+                        ax.plot(xr, x[input_loc], color='salmon', lw=1*trial.g1, ls='--', alpha=.6)
+                        ax.plot(xr, x[input_loc +1], color='dodgerblue', lw=1*trial.g1, ls='--', alpha=.6)
+                        #stimulus 2
+                        ax.plot(xr, x[input_loc +3], color='magenta', lw=1*trial.g2, ls='dotted', alpha=.6)
+                        ax.plot(xr, x[input_loc  + 4], color='lime', lw=1*trial.g2, ls='dotted', alpha=.6)
+
+                        ax.plot(xr, y[0], color='grey', lw=1.5)
+                        ax.plot(xr, y[output_loc], color='magenta', lw=1.5)
+                        ax.plot(xr, y[output_loc+1], color='lime', lw=1.5)
+
+                    elif trial.g1 < trial.g2:
+                        ax.plot(xr, x[input_loc], color='salmon', lw=1*trial.g1, ls='dotted', alpha=.6)
+                        ax.plot(xr, x[input_loc +1], color='dodgerblue', lw=1*trial.g1, ls='dotted', alpha=.6)
+                        #stimulus 2
+                        ax.plot(xr, x[input_loc+3 ], color='magenta', lw=1*trial.g2, ls='--', alpha=.6)
+                        ax.plot(xr, x[input_loc + 4], color='lime', lw=1*trial.g2, ls='--', alpha=.6)
+
+
+                        ax.plot(xr, y[0], color='grey', lw=1.5)
+                        ax.plot(xr, y[output_loc], color='salmon', lw=1.5)
+                        ax.plot(xr, y[output_loc+1], color='dodgerblue', lw=1.5)
+                    ax.plot(xr, z[0], color='grey', lw=2, ls='-')
+                    ax.plot(xr, z[output_loc], color='red', lw=2, ls='-')
+                    ax.plot(xr, z[output_loc+1], color='turquoise', lw=2, ls='-')
+        
+        else:
+            if type(trial) in [DelayProAnti, MemoryProAnti]:
+                ax.plot(xr, x[0], color='grey', lw=1, ls='--', alpha=.4)
+                ax.plot(xr, x[1], color='salmon', lw=1, ls='--', alpha=.4)
+                ax.plot(xr, x[2], color='dodgerblue', lw=1, ls='--', alpha=.4)
+                ax.plot(xr, y[0], color='grey', lw=1.5, ls=':')
+                ax.plot(xr, y[1], color='salmon', lw=1.5, ls=':')
+                ax.plot(xr, y[2], color='dodgerblue', lw=1.5, ls=':')
+                ax.plot(xr, z[0], color='grey', lw=2)
+                ax.plot(xr, z[1], color='salmon', lw=2)
+                ax.plot(xr, z[2], color='dodgerblue', lw=2)
+
+            elif type(trial) in [RSG, CSG]:
+                ax.plot(xr, y[0], color='coral', alpha=1, lw=1, label='target')
+                ax.plot(xr, z[0], color='cornflowerblue', alpha=1, lw=1.5, label='response')
+            elif 'bce' in config.loss:
+                ax.scatter(xr, y, color='coral', alpha=0.5, s=3, label='target')
+                ax.plot(xr, z, color='cornflowerblue', alpha=1, lw=1.5, label='response')
+
+            elif type(trial) is FlipFlop:
+                for j in range(trial.dim):
+                    ax.plot(xr, x[j], color=cols[j], ls='--', lw=.5, alpha=.4)
+                    ax.plot(xr, y[j], color=cols[j], lw=1.5, ls=':')
+                    ax.plot(xr, z[j], color=cols[j], lw=2)
+
+            elif type(trial) is DurationDisc:
+                ax.plot(xr, x[0], color='grey', lw=.5, ls='--', alpha=.4)
+                ax.plot(xr, x[1], color='grey', lw=.5, ls='--', alpha=.4)
+                ax.plot(xr, x[2], color='salmon', lw=.5, ls='--', alpha=.7)
+                ax.plot(xr, x[3], color='dodgerblue', lw=.5, ls='--', alpha=.7)
+                ax.plot(xr, y[0], color='salmon', lw=1.5, ls=':')
+                ax.plot(xr, y[1], color='dodgerblue', lw=1.5, ls=':')
+                ax.plot(xr, z[0], color='salmon', lw=2)
+                ax.plot(xr, z[1], color='dodgerblue', lw=2)
+
+            elif type(trial) is DMCProAnti:
+                ax.plot(xr, x[0], color='grey', lw=.5, ls='--', alpha=.4)
+                ax.plot(xr, x[1], color='salmon', lw=.5, ls='--', alpha=.4)
+                ax.plot(xr, x[2], color='dodgerblue', lw=.5, ls='--', alpha=.7)
+                ax.plot(xr, x[3], color='magenta', lw=.5, ls='--', alpha=.7)
+                ax.plot(xr, x[4], color='lime', lw=.5, ls='--', alpha=.7)
+                ax.plot(xr, y[0], color='grey', lw=1.5, ls=':')
+                ax.plot(xr, y[1], color='magenta', lw=1.5, ls=':')
+                ax.plot(xr, y[2], color='lime', lw=1.5, ls=':')
+                ax.plot(xr, z[0], color='grey', lw=2, ls='-')
+                ax.plot(xr, z[1], color='magenta', lw=2, ls='-')
+                ax.plot(xr, z[2], color='lime', lw=2, ls='-')
+
+            elif type(trial) in [DMProAnti, DelayDMProAnti] :
+                if trial.t_type.endswith('pro'):
+                        if trial.g1 > trial.g2:
+                            ax.plot(xr, x[1], color='salmon', lw=1*trial.g1, ls='--', alpha=.6)
+                            ax.plot(xr, x[2], color='dodgerblue', lw=1*trial.g1, ls='--', alpha=.6)
+                            #stimulus 2
+                            ax.plot(xr, x[4], color='magenta', lw=1*trial.g2, ls='dotted', alpha=.6)
+                            ax.plot(xr, x[5], color='lime', lw=1*trial.g2, ls='dotted', alpha=.6)
+
+                            ax.plot(xr, y[0], color='grey', lw=1.5, ls = ':')
+                            ax.plot(xr, y[1], color='salmon', lw=1.5, ls = ':')
+                            ax.plot(xr, y[2], color='dodgerblue', lw=1.5,  ls = ':')
+
+                        elif trial.g1 < trial.g2:
+                            ax.plot(xr, x[1], color='salmon', lw=1*trial.g1, ls='dotted', alpha=.6)
+                            ax.plot(xr, x[2], color='dodgerblue', lw=1*trial.g1, ls='dotted', alpha=.6)
+                            #stimulus 2
+                            ax.plot(xr, x[4], color='magenta', lw=1*trial.g2, ls='--', alpha=.6)
+                            ax.plot(xr, x[5], color='lime', lw=1*trial.g2, ls='--', alpha=.6)
+
+                            ax.plot(xr, y[0], color='grey', lw=1.5,  ls = ':')
+                            ax.plot(xr, y[1], color='magenta', lw=1.5,  ls = ':')
+                            ax.plot(xr, y[2], color='lime', lw=1.5,  ls = ':')
+                        
+                        ax.plot(xr, z[0], color='grey', lw=2, ls='-')
+                        ax.plot(xr, z[1], color='red', lw=2, ls='-')
+                        ax.plot(xr, z[2], color='turquoise', lw=2, ls='-')
+
+
+
+                elif trial.t_type.endswith('anti'):
+                    if trial.g1 > trial.g2:
+                        ax.plot(xr, x[1], color='salmon', lw=1*trial.g1, ls='--', alpha=.6)
+                        ax.plot(xr, x[2], color='dodgerblue', lw=1*trial.g1, ls='--', alpha=.6)
+                        #stimulus 2
+                        ax.plot(xr, x[4], color='magenta', lw=1*trial.g2, ls='dotted', alpha=.6)
+                        ax.plot(xr, x[5], color='lime', lw=1*trial.g2, ls='dotted', alpha=.6)
+
+                        ax.plot(xr, y[0], color='grey', lw=1.5)
+                        ax.plot(xr, y[1], color='magenta', lw=1.5)
+                        ax.plot(xr, y[2], color='lime', lw=1.5)
+
+                    elif trial.g1 < trial.g2:
+                        ax.plot(xr, x[1], color='salmon', lw=1*trial.g1, ls='dotted', alpha=.6)
+                        ax.plot(xr, x[2], color='dodgerblue', lw=1*trial.g1, ls='dotted', alpha=.6)
+                        #stimulus 2
+                        ax.plot(xr, x[4], color='magenta', lw=1*trial.g2, ls='--', alpha=.6)
+                        ax.plot(xr, x[5], color='lime', lw=1*trial.g2, ls='--', alpha=.6)
+
+
+                        ax.plot(xr, y[0], color='grey', lw=1.5)
+                        ax.plot(xr, y[1], color='salmon', lw=1.5)
+                        ax.plot(xr, y[2], color='dodgerblue', lw=1.5)
+                    ax.plot(xr, z[0], color='grey', lw=2, ls='-')
+                    ax.plot(xr, z[1], color='red', lw=2, ls='-')
+                    ax.plot(xr, z[2], color='turquoise', lw=2, ls='-')
+
 
         ax.tick_params(axis='both', color='white', labelsize=8)
         ax.set_title(f'ctx {context}, trial {ix}, loss {np.round(float(loss), 2)}', size=8)
