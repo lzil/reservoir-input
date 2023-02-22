@@ -60,7 +60,7 @@ def parse_args():
     parser.add_argument('--net_fb', action='store_true', help='feedback from network output to input')
 
     #multimodal arguments
-    parser.add_argument('--multimodal', action= 'store_true', help = 'run net on already created multimodal dataset')
+    parser.add_argument('--multimodal', action= 'store_true', help = 'multimodal setting: instances from different tasks interleaved and augmented so that many tasks can be learned simultaneously with fixed net architecture')
 
     # dataset arguments
     parser.add_argument('-d', '--dataset', type=str, default=['datasets/rsg-100-150.pkl'], nargs='+', help='dataset(s) to use. >1 means different contexts')
@@ -68,10 +68,12 @@ def parse_args():
     parser.add_argument('-s', '--sequential', action='store_true', help='sequential training')
     parser.add_argument('--owm', action='store_true', help='use orthogonal weight modification')
     parser.add_argument('--synaptic_intel', action = 'store_true', help='use synaptic intelligence')
-    # parser.add_argument('-o', '--train_order', type=int, nargs='+', default=[], help='ids of tasks to train on, in order if sequential flag is enabled. empty for all')
-    # parser.add_argument('--seq_threshold', type=float, default=5, help='threshold for having solved a task before moving on to next one')
+    parser.add_argument('--damp_term', type=float,default = 0.002, help='damping term' )
+    parser.add_argument('--stabilization', type = float, default = 1, help='strength of regularization/stabilization')
+    parser.add_argument('-o', '--train_order', type=int, nargs='+', default=[], help='ids of tasks to train on, in order if sequential flag is enabled. empty for all')
+    parser.add_argument('--seq_threshold', type=float, default=5, help='threshold for having solved a task before moving on to next one')
     parser.add_argument('--same_test', action='store_true', help='use entire dataset for both training and testing')
-    parser.add_argument('--mm', action='store_true', help='multimodal setting where input datasets are edited that multiple tasks can be learned simultaneously with fixed net architecture')
+    # parser.add_argument('--mm', action='store_true', help='multimodal setting: instances from different tasks interleaved and augmented so that many tasks can be learned simultaneously with fixed net architecture')
 
 
 
@@ -211,15 +213,12 @@ def adjust_args(args):
                     task_family = 'DelayCopy'
                 elif t_type == 'flip-flop':
                     task_family = 'FlipFlop'
-                elif t_type == 'delay-pro' or t_type == 'delay-anti':
-                    task_family = 'DelayProAnti'
-                elif t_type == 'memory-pro' or t_type == 'memory-anti':
-                    task_family = 'MemoryProAnti'
-                elif t_type == 'dm-pro' or t_type == 'dm-anti':
-                    task_family = 'DMProAnti'
 
-                elif t_type == 'delay-dm-pro' or t_type == 'delay-dm-anti':
-                    task_family = 'DelayDMProAnti'
+                elif t_type == 'delay-pro' or t_type == 'delay-anti' or t_type == 'memory-pro' or t_type == 'memory-anti':
+                    task_family = 'DelMemProAnti'
+                
+                elif t_type == 'dm-pro' or t_type == 'dm-anti' or t_type == 'delay-dm-pro' or t_type == 'delay-dm-anti':
+                    task_family = 'DMandDelayDMProAnti'
                 
                 elif t_type == 'dmc-pro' or t_type == 'dmc-anti':
                     task_family = 'DMCProAnti'
@@ -248,7 +247,7 @@ def adjust_args(args):
             #tell us from which index of the shells [inclusive] to start inputting modalities as we go
             #note: for all the tasks we consider, a task has a fixation modality in input if and only if it has a fixation modality in output
             
-            #if 
+            
         
             args.L =  tot_L_sans_fix +1 
             args.Z = tot_Z_sans_fix +1

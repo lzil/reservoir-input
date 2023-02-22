@@ -35,7 +35,12 @@ def load_model_path(path, config=None):
 def test_model(net, config, n_tests=128):
     if config.sequential:
         config.sequential = False
-    test_set, test_loader = create_loaders(config.dataset, config, split_test=False, test_size=n_tests)
+    if config.multimodal:
+        multimodal_test =True
+    else:
+        multimodal_test = False
+    test_set, test_loader = create_loaders(config.dataset, config, split_test=False, test_size=n_tests, multimodal_test= multimodal_test)
+    
     x, y, trials = next(iter(test_loader))
 
     criteria = get_criteria(config)
