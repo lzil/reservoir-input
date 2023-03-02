@@ -95,6 +95,58 @@ class RSG(Task):
         y = y.reshape(1, self.t_len)
         return y
 
+
+class BinaryRSG(Task):
+    def __init__(self, args, dset_id=None, n=None):
+        super().__init__(args.t_len, dset_id, n)
+        self.has_fix= False 
+        if args.intervals is None:
+            t_o = np.random.randint(args.min_t, args.max_t)
+        else:
+            t_o = random.choice(args.intervals)
+        t_p = int(t_o * args.gain)
+        ready_time = np.random.randint(args.p_len * 2, args.max_ready)
+        set_time = ready_time + t_o
+        go_time = set_time + t_p
+
+        self.t_type = args.t_type
+        self.p_len = args.p_len
+        self.rsg = (ready_time, set_time, go_time)
+        self.t_o = t_o
+        self.t_p = t_p
+
+        self.L = 1
+        self.Z = 1
+
+    def get_x(self, args=None):
+        rt, st, gt = self.rsg
+        # ready pulse
+        x_ready = np.zeros(self.t_len)
+        x_ready[rt:rt+self.p_len] = 1
+        # set pulse
+        x_set = np.zeros(self.t_len)
+        x_set[st:st+self.p_len] = 1
+        # insert set pulse
+        x = np.zeros((1, self.t_len))
+        x[0] = x_set
+        # perceptual shift
+        if args is not None and args.m_noise != 0:
+            x_ready = shift_x(x_ready, args.m_noise, self.t_o)
+        x[0] += x_ready
+        # noisy up/down corruption
+        if args is not None and args.x_noise != 0:
+            x = corrupt_x(args, x)
+        return x
+
+    def get_y(self, args=None):
+        y = np.zeros((1, self.t_len))
+        #y either 0 or 1, we want it to 1 exactly at then go time and after the go time
+        rt, st, gt = self.rsg
+        y[0, gt:] = 1 
+        return y
+    
+
+
 class CSG(Task):
     def __init__(self, args, dset_id=None, n=None):
         super().__init__(args.t_len, dset_id, n)
@@ -383,15 +435,15 @@ class DMProAnti(Task):
     def get_x(self,args=None):
         x=np.zeros((7,self.t_len))
         
-        x[0,:self.stim]=1
+        x[0, :self.stim]=1
         #stimulus 1
-        x[1, self.fix:]=self.stimulus_1[0]
-        x[2,self.fix:] = self.stimulus_1[1]
-        x[3, self.fix:] =self.g1
+        x[1, :]=self.stimulus_1[0]
+        x[2, :] = self.stimulus_1[1]
+        x[3, :] =self.g1
         #stimulus 2
-        x[4, self.fix:]=self.stimulus_2[0]
-        x[5,self.fix:] =self.stimulus_2[1]
-        x[6, self.fix:] =self.g2
+        x[4, :]=self.stimulus_2[0]
+        x[5, :] =self.stimulus_2[1]
+        x[6, :] =self.g2
         
         #I think  I have a way to update the matrices if a new task modality added that keeps the old weights and keeps them in the right position and still keeps the dimension D1 the same.
         return x 
@@ -462,7 +514,7 @@ class DelayDMProAnti(Task):
         
         
 
-        self.stim1=self.fix+args.stim_t1 #we'll define args.stim_t1
+        self.stim1=args.stim_t1 #we'll define args.stim_t1
         #we show stimulus 1 up until this point self.stim_1
         self.delay1=self.stim1+args.delay_t1
         self.stim_2=self.delay1+args.stim_t2 
@@ -486,12 +538,12 @@ class DelayDMProAnti(Task):
         
         x[0,:self.stim]=1
         #stimulus 1
-        x[1, self.fix:self.stim1]=self.stimulus_1[0]
-        x[2,self.fix:self.stim1] = self.stimulus_1[1]
-        x[3, self.fix:self.stim1] =self.g1
+        x[1, :self.stim1]=self.stimulus_1[0]
+        x[2, :self.stim1] = self.stimulus_1[1]
+        x[3, :self.stim1] =self.g1
         #stimulus 2
         x[4, self.delay1:self.stim_2]=self.stimulus_2[0]
-        x[5,self.delay1:self.stim_2:] =self.stimulus_2[1]
+        x[5, self.delay1:self.stim_2:] =self.stimulus_2[1]
         x[6, self.delay1:self.stim_2] =self.g2
         
         #I think  I have a way to update the matrices if a new task modality added that keeps the old weights and keeps them in the right position and still keeps the dimension D1 the same.
@@ -698,6 +750,9 @@ def create_dataset(args, multimodal=False):
         if t_type.startswith('rsg'):
             assert args.max_ready + args.max_t + int(args.max_t * args.gain) < args.t_len
             TaskObj = RSG
+        elif t_type.startswith('binary-rsg'):
+            assert args.max_ready + args.max_t + int(args.max_t * args.gain) < args.t_len
+            TaskObj = BinaryRSG
         elif t_type.startswith('csg'):
             TaskObj = CSG
         elif t_type == 'delay-copy':
@@ -1054,7 +1109,7 @@ class MultimodalDataset:
 def get_task_args(args):
     tarr = args.task_args
     targs = Bunch()
-    if args.t_type.startswith('rsg'):
+    if args.t_type == 'rsg' or 'binary-rsg':
         targs.t_len = get_tval(tarr, 'l', 600, int)
         targs.p_len = get_tval(tarr, 'pl', 5, int)
         targs.gain = get_tval(tarr, 'gain', 1, float)
@@ -1107,7 +1162,7 @@ def get_task_args(args):
         #default value of t_len is 300 according to this but doesn't do anything atm
         #bc for now t_len in dm is determined by stimulus duration
         targs.fix_t = get_tval(tarr, 'fix', 50, int)
-        targs.stim_t = get_tval(tarr, 'stim', 200, int)
+        targs.stim_t = get_tval(tarr, 'stim', 100, int)
         targs.has_fix = get_tval(tarr, 'has_fix', True, bool)
 
     elif args.t_type == 'delay-dm-pro' or args.t_type == 'delay-dm-anti':
@@ -1238,20 +1293,25 @@ if __name__ == '__main__':
             trial_x = trial.get_x()
             trial_y = trial.get_y()
 
-            if t_type in [RSG, CSG]:
+            if t_type in [RSG, CSG, BinaryRSG]:
                 trial_x = np.sum(trial_x, axis=0)
+                
                 trial_y = trial_y[0]
+                
+                
                 ml, sl, bl = ax.stem(xr, trial_x, use_line_collection=True, linefmt='coral', label='ready/set')
                 ml.set_markerfacecolor('coral')
                 ml.set_markeredgecolor('coral')
-                if t_type == 'rsg-bin':
-                    ml, sl, bl = ax.stem(xr, [1], use_line_collection=True, linefmt='dodgerblue', label='go')
-                    ml.set_markerfacecolor('dodgerblue')
-                    ml.set_markeredgecolor('dodgerblue')
-                else:
-                    ax.plot(xr, trial_y, color='dodgerblue', label='go', lw=2)
-                    if t_type is RSG:
-                        ax.set_title(f'{trial.rsg}: [{trial.t_o}, {trial.t_p}] ', fontsize=9)
+                # if t_type == 'binary-rsg':
+                #     ax.plot(xr, trial_y, color='dodgerblue', lw=1*trial.g1, ls='--', alpha=.6)
+                #     # ml, sl, bl = ax.stem(xr, [1], use_line_collection=True, linefmt='dodgerblue', label='go')
+                #     # ml.set_markerfacecolor('dodgerblue')
+                    # ml.set_markeredgecolor('dodgerblue')
+        
+                ax.plot(xr, trial_y, color='dodgerblue', label='go', lw=2)
+                if t_type is RSG:
+                    ax.set_title(f'{trial.rsg}: [{trial.t_o}, {trial.t_p}] ', fontsize=9)
+
 
             elif t_type is DelayCopy:
                 for j in range(trial.dim):
@@ -1351,7 +1411,7 @@ if __name__ == '__main__':
                         ax.plot(xr, trial_x[4], color='lime', lw=1, ls='dotted', alpha=.6)
 
                         ax.plot(xr, trial_y[0], color='grey', lw=1.5)
-                        x.plot(xr, trial_y[0], color='grey', lw=1.5)
+                        ax.plot(xr, trial_y[0], color='grey', lw=1.5)
                         ax.plot(xr, trial_y[1], color='magenta', lw=1.5)
                         ax.plot(xr, trial_y[2], color='lime', lw=1.5)
                 
