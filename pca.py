@@ -404,7 +404,10 @@ def pca_var_plot(svals, data_matrices, relative =True, axis=None ):
         cumulative_var = cumulative_var / cumulative_var[-1] #last entry is sum of non-zero eigenvalues which gives the total variance
 
     y =  cumulative_var.numpy()
-    axis.plot(y, 'ro')
+    y = np.concatenate((np.zeros(1),y))
+    xr = np.arange(0, len(y))
+    axis.plot(xr,y, 'black')
+    axis.scatter(np.arange(len(y)),y, marker = 'o',c = 'black')
     plt.xticks(range(0,len(y)))
     plt.xlabel('Number of PCs')
     plt.ylabel('Cumulative explained variance')
