@@ -66,14 +66,23 @@ def parse_args():
     parser.add_argument('-d', '--dataset', type=str, default=['datasets/rsg-100-150.pkl'], nargs='+', help='dataset(s) to use. >1 means different contexts')
     # parser.add_argument('-a', '--add_tasks', type=str, nargs='+', help='add tasks to previously trained reservoir')
     parser.add_argument('-s', '--sequential', action='store_true', help='sequential training')
+    
     parser.add_argument('--owm', action='store_true', help='use orthogonal weight modification')
-    parser.add_argument('--synaptic_intel', action = 'store_true', help='use synaptic intelligence')
-    parser.add_argument('--damp_term', type=float,default = 0.002, help='damping term' )
-    parser.add_argument('--stabilization', type = float, default = 1, help='strength of regularization/stabilization')
+    
+    # synaptic intelligence arguments
+    parser.add_argument('--synaptic_intel', action='store_true', help='use synaptic_intelligence loss to stabilize weights to those of previous task')
+    parser.add_argument('--stab_strength', type=float, default=20, help = 'stabilization strength hyperparameter for synaptic stablization (c in paper)')
+    parser.add_argument('--damp_term', type=float, default=0.01, help = 'damping hyperparameter for synaptic intelligence ')
+    
+    # xdg arguments
+    parser.add_argument('--xdg', action = 'store_true', help = 'use context-dependent gating')
+    parser.add_argument('-X',type=int, default= 80, help= 'percentage of units to gate in each gated layer')
+    parser.add_argument('--gate_layers',choices=['u','v','x', 'uv', 'ux','vx','uvx'], default='uvx')
+
     parser.add_argument('-o', '--train_order', type=int, nargs='+', default=[], help='ids of tasks to train on, in order if sequential flag is enabled. empty for all')
     parser.add_argument('--seq_threshold', type=float, default=5, help='threshold for having solved a task before moving on to next one')
     parser.add_argument('--same_test', action='store_true', help='use entire dataset for both training and testing')
-    # parser.add_argument('--mm', action='store_true', help='multimodal setting: instances from different tasks interleaved and augmented so that many tasks can be learned simultaneously with fixed net architecture')
+    parser.add_argument('--seq_iters', type = int, default=0, help="alternative to seq_threshold; train each task for fixed no. of iterations. If 0, then sequential threshold is used")
 
 
 
@@ -90,6 +99,10 @@ def parse_args():
     parser.add_argument('--l2_reg', type=float, default=0, help='amount of l2 regularization')
     parser.add_argument('--s_rate', default=None, type=float, help='scheduler rate. dont use for no scheduler')
     parser.add_argument('--loss', type=str, nargs='+', default=['mse'])
+    
+    # bce parameters
+    parser.add_argument('--pos_weight', type=float, nargs='+', default=1, help = 'weights for positive examples in bce loss; controls precision/recall tradeoff')
+
 
     # adam lambdas
     parser.add_argument('--l1', type=float, default=1, help='weight of normal loss')

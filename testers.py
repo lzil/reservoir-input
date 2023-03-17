@@ -32,7 +32,7 @@ def load_model_path(path, config=None):
 
 # given a model and a dataset, see how well the model does on it
 # works with plot_trained.py
-def test_model(net, config, n_tests=128):
+def test_model(net, config, n_tests=128, xdg_gates=None):
     if config.sequential:
         config.sequential = False
     if config.multimodal:
@@ -53,6 +53,11 @@ def test_model(net, config, n_tests=128):
         # saving each individual loss per sample, per timestep
         losses = np.zeros(len(x))
         outs = []
+        if net.args.xdg:
+            
+            net.tasks_gates_by_context = xdg_gates
+            net.xdg_test_mode(same_context=False, contexts = contexts)
+                # run the step
 
         for j in range(x.shape[2]):
             # run the step
