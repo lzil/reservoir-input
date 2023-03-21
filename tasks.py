@@ -792,13 +792,13 @@ def get_task_args(args):
         targs.geop = get_tval(tarr, 'p', .02, float)
 
     elif args.t_type == 'delay-pro' or args.t_type == 'delay-anti':
-        targs.t_len = get_tval(tarr,'has_fix',True, bool)
+        targs.has_fix= get_tval(tarr,'has_fix',True, bool)
         targs.t_len = get_tval(tarr, 'l', 300, int)
         targs.fix_t = get_tval(tarr, 'fix', 50, int)
         targs.stim_t = get_tval(tarr, 'stim', 150, int)
 
     elif args.t_type == 'memory-pro' or args.t_type == 'memory-anti':
-        targs.t_len = get_tval(tarr,'has_fix',True, bool)
+        targs.has_fix= get_tval(tarr,'has_fix',True, bool)
         targs.t_len = get_tval(tarr, 'l', 300, int)
         targs.fix_t = get_tval(tarr, 'fix', 50, int)
         targs.stim_t = get_tval(tarr, 'stim', 100, int)
@@ -814,7 +814,7 @@ def get_task_args(args):
         targs.select_t = get_tval(tarr, 'select_t', 440, int)
 
     elif args.t_type == 'dm-pro' or args.t_type == 'dm-anti':
-        targs.t_len = get_tval(tarr,'has_fix',True, bool)
+        targs.has_fix= get_tval(tarr,'has_fix',True, bool)
         targs.t_len = get_tval(tarr, 'l', 300, int)
         #default value of t_len is 300 according to this but doesn't do anything atm
         #bc for now t_len in dm is determined by stimulus duration
@@ -823,7 +823,7 @@ def get_task_args(args):
         targs.has_fix = get_tval(tarr, 'has_fix', True, bool)
 
     elif args.t_type == 'delay-dm-pro' or args.t_type == 'delay-dm-anti':
-        targs.t_len = get_tval(tarr,'has_fix',True, bool)
+        targs.has_fix= get_tval(tarr,'has_fix',True, bool)
         targs.t_len = get_tval(tarr, 'l', 300, int)
         #default value of t_len is 300 according to this but doesn't do anything atm
         #bc for now t_len in dm is determined by stimulus duration
@@ -835,7 +835,7 @@ def get_task_args(args):
         targs.has_fix = get_tval(tarr, 'has_fix', True, bool)
 
     elif args.t_type == 'dmc-pro' or args.t_type == 'dmc-anti':
-        targs.t_len = get_tval(tarr,'has_fix',True, bool)
+        targs.has_fix= get_tval(tarr,'has_fix',True, bool)
         targs.t_len = get_tval(tarr, 'l', 300, int)
         #default value of t_len is 300 according to this but doesn't do anything atm
         #bc for now t_len in dm is determined by stimulus duration
