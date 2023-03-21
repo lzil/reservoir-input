@@ -100,6 +100,9 @@ def parse_args():
     parser.add_argument('--s_rate', default=None, type=float, help='scheduler rate. dont use for no scheduler')
     parser.add_argument('--loss', type=str, nargs='+', default=['mse'])
     
+
+    #pca arguments:
+    parser.add_argument('--pca_vars', action = 'store_true', help= 'perform pca on model at end of training and log cumulative explained values')
     # bce parameters
     parser.add_argument('--pos_weight', type=float, nargs='+', default=1, help = 'weights for positive examples in bce loss; controls precision/recall tradeoff')
 
@@ -311,7 +314,12 @@ if __name__ == '__main__':
     if args.optimizer == 'lbfgs':
         best_loss, n_iters = trainer.optimize_lbfgs()
     elif args.optimizer in ['sgd', 'rmsprop', 'adam']:
-        best_loss, n_iters = trainer.train()
+        if args.pca_vars:
+            if args.multimodal:
+                best_loss, n_iters, task_losses, pca_variances = trainer.train()
+                
+        else:
+            best_loss, n_iters = trainer.train()
 
     if args.slurm_id is not None:
         # if running many jobs, then we gonna put the results into a csv
@@ -328,6 +336,16 @@ if __name__ == '__main__':
             if args.optimizer != 'lbfgs':
                 labels_csv.extend(['lr', 'epochs'])
                 vals_csv.extend([args.lr, args.n_epochs])
+            if args.multimodal: 
+                many_tasks_names = [str(t[0]) for t in task_losses]
+                many_tasks_losses = [t[1] for t in task_losses]
+                
+                labels_csv.extend(many_tasks_names)
+                vals_csv.extend(many_tasks_losses)
+            if args.pca_vars:
+                pcs_labels = ['PC_{}'.format(i) for i in range(1,len(pca_variances)+1)]
+                labels_csv.extend(pcs_labels)
+                vals_csv.extend(pca_variances)
 
             if not csv_exists:
                 writer.writerow(labels_csv)

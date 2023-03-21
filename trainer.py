@@ -24,6 +24,10 @@ from network import M2Net
 from utils import log_this, load_rb, get_config, update_args
 from helpers import get_optimizer, get_scheduler, get_criteria, create_loaders, collater
 
+# for PCA variances:
+from testers import get_states
+from pca import pca_multimodal
+
 class Trainer:
     def __init__(self, args):
         self.args = args
@@ -560,22 +564,6 @@ class Trainer:
 
    
                 
-                
-
-    def update_proj(self, new_cov= None, recurrent = False):
-        alpha = 1e-3
-        #if updating projection of recurrent weights the projection has a different form 
-        # if recurrent:
-        #     W = 
-        #     P = torch.inverse(alpha**(-1) * )
-        
-        # else:
-        #      P =torch.inverse(alpha**(-1) * new_cov + torch.eye(new_cov.shape[0]))
-
-
-
-
-
 
     def train(self, ix_callback=None):
         ix = 0
@@ -1074,7 +1062,18 @@ class Trainer:
             self.csv_path.close()
 
         logging.info(f'END | iterations: {(ix // self.log_interval) * self.log_interval} | best loss: {running_min_error}')
-        return running_min_error, ix
+        # for pca explained variances
+        if self.args.pca_vars:
+            x,y, trials = next(iter(self.test_loader))
+            A = get_states(self.net, x)
+            #pca multimodal with plot = False just returns the cumulative variances
+            # note: n_reps needs to be the same as 'test size' for the test loader used to generate the A
+            pca_vars = pca_multimodal(self.args, A_uncut=A, trials = trials, n_reps=50, plot=False)
+
+            return running_min_error, ix, losses, pca_vars
+        
+        else:
+            return running_min_error, ix
 
 
     def optimize_lbfgs(self):
