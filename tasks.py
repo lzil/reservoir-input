@@ -755,7 +755,7 @@ def get_task_args(args):
     #create an empty bunched dictionary to be populated
 
     if args.t_type.startswith('rsg'):
-        targs.t_len = get_tval(tarr,'has_fix',False, bool)
+        targs.has_fix = get_tval(tarr,'has_fix',False, bool)
         targs.t_len = get_tval(tarr, 'l', 600, int)
         targs.p_len = get_tval(tarr, 'pl', 5, int)
         targs.gain = get_tval(tarr, 'gain', 1, float)
