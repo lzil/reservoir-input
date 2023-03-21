@@ -2,6 +2,7 @@
 import numpy as np
 import torch
 import torch.nn as nn
+import torch.functional as F
 import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader, Subset
 
@@ -475,6 +476,7 @@ def get_criteria(args):
     criteria = []
     if 'mse' in args.loss:
         # do this in a roundabout way due to truncated bptt
+        
         fn = nn.MSELoss(reduction='sum')
         def mse(o, t, i, t_ix, single=False):
             # last dimension is number of timesteps
@@ -485,22 +487,44 @@ def get_criteria(args):
                 o = o.unsqueeze(0)
                 t = t.unsqueeze(0)
                 i = [i]
+            
+            #len(t) is batch size
             for j in range(len(t)):
                 length = i[j].t_len
                 if t_ix + t.shape[-1] <= length:
-                    loss += fn(t[j], o[j])# / length
+                    loss += fn(t[j], o[j])# / length #loss on the whole of a single trial 
                 elif t_ix < length:
                     t_adj = t[j,:,:length-t_ix]
                     o_adj = o[j,:,:length-t_ix]
                     loss += fn(t_adj, o_adj)# / length
             return args.l1 * loss / args.batch_size
         criteria.append(mse)
+
+    if 'sp' in args.loss:
+        #bce loss saturates in line with DL 6.2.2.2
+        #try alternate formulation - must run net with sigmoid output activation 
+        fn = StableSoftplus()
+        def sp(sigmoid_o,t, **kwargs):
+            return (fn(sigmoid_o,t))
+        criteria.append(sp)
+
+        
+
+
+    if 'bce-loss-manual' in args.loss:
+        def bce_with_logits_loss(sigmoid_o, t, **kwargs):
+            return (- t * torch.log(sigmoid_o+ 1e-10) - (1-t)*torch.log(1-sigmoid_o+1e-10)).sum()
+        criteria.append(bce_with_logits_loss)
+        
     if 'bce' in args.loss:
-        weights = args.l3 * torch.ones(1)
-        fn = nn.BCEWithLogitsLoss(reduction='sum', pos_weight=weights)
+        weights = args.pos_weight * torch.ones(1)
+        fn = nn.BCEWithLogitsLoss(reduction='sum', pos_weight=None)
         def bce(o, t, **kwargs):
-            return args.l1 * fn(t, o)
+            
+            return args.l1 * fn(o, t) #bcelosswithlogits takes model output as first argument and targets as second
         criteria.append(bce)
+
+    
     if 'mse-e' in args.loss:
         # ONLY FOR RSG AND CSG, WITH [1D] OUTPUT
         # exponential decaying loss from the go time on both sides
@@ -538,6 +562,39 @@ def get_criteria(args):
         raise NotImplementedError
     return criteria
 
+#attempt to avoid numerical errors using log-sum-exp-trick
+def logit(x):
+    eps = torch.finfo(x.dtype).eps
+    return torch.where(
+        x <= eps, 
+        torch.log(torch.tensor(eps)),
+        torch.where(
+        x >= 1 -eps,
+        torch.log(torch.tensor(1-eps)),
+        torch.log(x/(1-x))
+        )
+    )
+
+# stable sigmoid activation 
+class StableSigmoid(nn.Module):
+    def __init__(self):
+        super().__init__()
+    def forward(self, x):
+        return 0.5 * (torch.tanh(x/2)+1)
+    
+
+class StableSoftplus(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self,sigmoid_o,t):
+        o = logit(sigmoid_o)
+        softplus= torch.nn.Softplus()
+        return torch.sum(softplus((1 - 2 * t) * o))
+
+
+
+
 def get_activation(name):
     if name == 'exp':
         fn = torch.exp
@@ -545,6 +602,8 @@ def get_activation(name):
         fn = nn.ReLU()
     elif name == 'sigmoid':
         fn = nn.Sigmoid()
+    elif name =='stable-sigmoid':
+        fn = StableSigmoid()
     elif name == 'tanh':
         fn = nn.Tanh()
     elif name == 'none':
