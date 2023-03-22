@@ -349,7 +349,7 @@ if __name__ == '__main__':
             if args.optimizer != 'lbfgs':
                 labels_csv.extend(['lr', 'epochs'])
                 vals_csv.extend([args.lr, args.n_epochs])
-            if args.multimodal: 
+            if args.multimodal or args.one_mod or args.sequential:
                 many_tasks_names = [str(t[0]) for t in task_losses]
                 many_tasks_losses = [t[1] for t in task_losses]
                 
