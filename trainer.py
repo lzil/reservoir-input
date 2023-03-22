@@ -45,7 +45,21 @@ class Trainer:
         elif self.args.multimodal:
             self.train_set, self.train_loader = trains
             #note trains is as usual, self.test_loaders is a dictionary with keys given by t_types whose values are test_loaders containining examples of t_type trials
-            self.test_set, self.test_loaders = tests
+            self.test_set, self.og_test_loaders = tests
+            
+            self.test_loader = self.og_test_loaders
+            
+            #ad hoc code for testing RSG tasks when doing multimodal with variant of RSG
+            #tidy later but for now
+            # if self.test_set.t_types == ['rsg']:
+            #     rsg_trains, rsg_tests= create_loaders(self.args.dataset, self.args, split_test=True, test_size=50, multimodal_rsg=True)
+            #     _ , self.rsg_test_loader = rsg_tests
+        
+        elif self.args.one_mod:
+            self.train_set, self.train_loader = trains
+            self.test_set, self.og_test_loader = tests
+
+            self.test_loader = self.og_test_loader
       
 
 
@@ -510,8 +524,9 @@ class Trainer:
             }
             return trial_loss, etc
 
-    def test(self, current_xdg = True):
+    def test(self, current_xdg = True, multimodal_rsg=False,task_idx=None):
         with torch.no_grad():
+            
             x, y, trials = next(iter(self.test_loader))
             x, y = x.to(self.device), y.to(self.device)
             #update:
@@ -540,10 +555,22 @@ class Trainer:
         losses = []
         if self.args.multimodal:
             t_types= self.test_set.t_types
+            # quick solution: get context signal ( will always be last self.args.T of input , extract that then position of 1 gives diff tasks)
             for task_type in t_types:
                 self.test_loader = self.test_loaders[task_type]
                 loss, _ = self.test()
                 losses.append((task_type, loss))
+
+        elif self.args.one_mod:
+            for context, ds in enumerate(self.args.dataset):
+                _trains, _tests = create_loaders(self.args.dataset, self.args, split_test=True, test_size=50, subset_loader=True)
+                _t_set, one_task_test_loader = _tests
+                self.test_loader = one_task_test_loader[self.args.train_order[context]]
+                loss, _ = self.test()
+                losses.append(('task_{}'.format(context), loss))
+            self.test_loader = self.og_test_loader
+
+
         else:
             for i in ids:
                 self.test_loader = self.test_loaders[self.args.train_order[i]]
@@ -631,7 +658,7 @@ class Trainer:
                 ix += 1
                 
                 x, y = x.to(self.device), y.to(self.device)
-                
+               
                     
                     
                 
@@ -668,6 +695,21 @@ class Trainer:
                         for task, loss in losses:
                             log_arr.append(f'{task}: {loss:.3f}')
                     
+                    elif self.args.one_mod:
+                        log_arr = [
+                        f'*{ix}',
+                        f'train {train_loss:.3f}'
+                    ]
+                        losses = self.test_tasks()
+                        test_loss= 0
+                        no_of_tasks = 0
+                        for task, loss in losses:
+                            no_of_tasks += 1
+                            test_loss += loss
+                        test_loss /= no_of_tasks
+                        log_arr.append(f'test {test_loss:.3f}')
+                        for task, loss in losses:
+                            log_arr.append(f'{task}: {loss:.3f}')
                     else:
                         test_loss, test_etc = self.test()
                         # print(test_etc['ins'].shape [batch_size, output dimension, task_length]

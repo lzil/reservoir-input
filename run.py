@@ -59,8 +59,9 @@ def parse_args():
     parser.add_argument('--out_act', type=str, default='none', help='output activation at the very end of the network')
     parser.add_argument('--net_fb', action='store_true', help='feedback from network output to input')
 
-    #multimodal arguments
+    #simultaneous training arguments
     parser.add_argument('--multimodal', action= 'store_true', help = 'multimodal setting: instances from different tasks interleaved and augmented so that many tasks can be learned simultaneously with fixed net architecture')
+    parser.add_argument('--one_mod', action='store_true', help= 'train different tasks simultaneuosly through the same set of modalities')
 
     # dataset arguments
     parser.add_argument('-d', '--dataset', type=str, default=['datasets/rsg-100-150.pkl'], nargs='+', help='dataset(s) to use. >1 means different contexts')
@@ -183,6 +184,10 @@ def adjust_args(args):
     # shortcut for training in designated order
     if args.sequential and len(args.train_order) == 0:
         args.train_order = list(range(len(args.dataset)))
+    if args.multimodal and len(args.train_order)==0:
+        args.train_order = list(range(len(args.dataset)))
+    if args.one_mod:
+        args.train_order = list(range(len(args.dataset)))
 
     # TODO
     if 'rsg' in args.dataset[0]:
@@ -210,6 +215,7 @@ def adjust_args(args):
         for ds in args.dataset:
                 #check whether task has a fixation modality
                 config = get_config(ds, ctype='dset', to_bunch=True)
+                
                 task_has_fix = config.has_fix
                 t_type = config.t_type
                 
@@ -314,12 +320,19 @@ if __name__ == '__main__':
     if args.optimizer == 'lbfgs':
         best_loss, n_iters = trainer.optimize_lbfgs()
     elif args.optimizer in ['sgd', 'rmsprop', 'adam']:
-        if args.pca_vars:
-            if args.multimodal:
+        
+        if args.multimodal:
+            if args.pca_vars:
                 best_loss, n_iters, task_losses, pca_variances = trainer.train()
+            else:
+                best_loss, n_iters = trainer.train()
+
                 
         else:
-            best_loss, n_iters = trainer.train()
+            if args.pca_vars:
+                best_loss, n_iters, task_losses, pca_variances = trainer.train()
+            else:
+                best_loss, n_iters = trainer.train()
 
     if args.slurm_id is not None:
         # if running many jobs, then we gonna put the results into a csv
@@ -343,7 +356,7 @@ if __name__ == '__main__':
                 labels_csv.extend(many_tasks_names)
                 vals_csv.extend(many_tasks_losses)
             if args.pca_vars:
-                pcs_labels = ['PC_{}'.format(i) for i in range(1,len(pca_variances)+1)]
+                pcs_labels = ['{}_PCs'.format(i) for i in range(1,len(pca_variances)+1)]
                 labels_csv.extend(pcs_labels)
                 vals_csv.extend(pca_variances)
 

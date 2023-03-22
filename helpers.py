@@ -377,7 +377,7 @@ def collater(samples):
     return xs, ys, trials
 
 # creates datasets and dataloaders
-def create_loaders(datasets, args, split_test=True, test_size=1, context_filter=[], multimodal_test = False):
+def create_loaders(datasets, args, split_test=True, test_size=1, context_filter=[], multimodal_test = False, subset_loader= False):
     dsets_train = []
     dsets_test = []
     for i, dpath in enumerate(datasets):
@@ -397,7 +397,7 @@ def create_loaders(datasets, args, split_test=True, test_size=1, context_filter=
         train_set = TrialDataset(dsets_train, args)
 
     # TODO: make all this code better
-    if args.sequential:
+    if args.sequential or subset_loader:
         # helper function for sequential loaders
         def create_subset_loaders(dset, batch_size, drop_last):
             loaders = []
