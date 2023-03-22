@@ -45,9 +45,7 @@ class Trainer:
         elif self.args.multimodal:
             self.train_set, self.train_loader = trains
             #note trains is as usual, self.test_loaders is a dictionary with keys given by t_types whose values are test_loaders containining examples of t_type trials
-            self.test_set, self.og_test_loaders = tests
-            
-            self.test_loader = self.og_test_loaders
+            self.test_set, self.test_loaders = tests
             
             #ad hoc code for testing RSG tasks when doing multimodal with variant of RSG
             #tidy later but for now
@@ -560,6 +558,7 @@ class Trainer:
                 self.test_loader = self.test_loaders[task_type]
                 loss, _ = self.test()
                 losses.append((task_type, loss))
+            
 
         elif self.args.one_mod:
             for context, ds in enumerate(self.args.dataset):
