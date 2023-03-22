@@ -321,7 +321,7 @@ if __name__ == '__main__':
         best_loss, n_iters = trainer.optimize_lbfgs()
     elif args.optimizer in ['sgd', 'rmsprop', 'adam']:
         
-        if args.multimodal:
+        if args.multimodal or args.one_mod:
             if args.pca_vars:
                 best_loss, n_iters, task_losses, pca_variances = trainer.train()
             else:

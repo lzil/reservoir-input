@@ -565,6 +565,7 @@ class Trainer:
             for context, ds in enumerate(self.args.dataset):
                 _trains, _tests = create_loaders(self.args.dataset, self.args, split_test=True, test_size=50, subset_loader=True)
                 _t_set, one_task_test_loader = _tests
+                # create outside of test tasks so we don't ahve to create a loader every time 
                 self.test_loader = one_task_test_loader[self.args.train_order[context]]
                 loss, _ = self.test()
                 losses.append(('task_{}'.format(context), loss))
