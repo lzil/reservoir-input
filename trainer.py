@@ -130,7 +130,11 @@ class Trainer:
             self.vis_samples = []
             self.csv_path = open(os.path.join(self.log.run_dir, f'losses_{self.run_id}.csv'), 'a')
             self.writer = csv.writer(self.csv_path, delimiter=',', quotechar='|', quoting=csv.QUOTE_MINIMAL)
-            self.writer.writerow(['ix', 'train_loss', 'test_loss'])
+            if self.args.sequential:
+                task_names = ['t{}'.format(i) for i in range(len(self.args.dataset))]
+                self.writer.writerow(['ix', 'train_loss', 'test_loss']+task_names)
+            else:
+                self.writer.writerow(['ix', 'train_loss', 'test_loss'])
             self.plot_checkpoint_path = os.path.join(self.log.run_dir, f'checkpoints_{self.run_id}.pkl')
             self.save_model_path = os.path.join(self.log.run_dir, f'model_{self.run_id}.pth')
         
@@ -156,8 +160,14 @@ class Trainer:
             os.remove(self.save_model_path)
         torch.save(self.net.state_dict(), self.save_model_path)
 
-    def log_checkpoint(self, ix, x, y, z, train_loss, test_loss):
-        self.writer.writerow([ix, train_loss, test_loss])
+    def log_checkpoint(self, ix, x, y, z, train_loss, test_loss, seq_losses_all_tasks):
+        if seq_losses_all_tasks is not None:
+            seq_losses = []
+            for i in range(len(seq_losses_all_tasks)):
+                seq_losses.append(seq_losses_all_tasks[i][1])
+            self.writer.writerow([ix, train_loss, test_loss]+seq_losses)
+        else:
+            self.writer.writerow([ix, train_loss, test_loss])
         self.csv_path.flush()
 
         self.log_model(ix)
@@ -723,19 +733,24 @@ class Trainer:
                     
 
                     if self.args.sequential:
+                        seq_losses_all_tasks = self.test_tasks(ids=range(len(self.args.dataset)))
                         losses = self.test_tasks(ids=range(self.train_idx))
                         for i, loss in losses:
                             log_arr.append(f't{i}: {loss:.3f}')
                     log_str = '\t| '.join(log_arr)
                     logging.info(log_str)
+                    
+                    
+                        
 
                     if not self.args.no_log:
-                        self.log_checkpoint(ix, etc['ins'].cpu().numpy(), etc['goals'].cpu().numpy(), z, train_loss, test_loss)
+                        if self.args.sequential:
+                            self.log_checkpoint(ix, etc['ins'].cpu().numpy(), etc['goals'].cpu().numpy(), z, train_loss, test_loss, seq_losses_all_tasks)
+                        else:
+                            self.log_checkpoint(ix, etc['ins'].cpu().numpy(), etc['goals'].cpu().numpy(), z, train_loss, test_loss)
                     running_loss = 0.0
 
-                    if not self.args.no_log:
-                        self.log_checkpoint(ix, etc['ins'].cpu().numpy(), etc['goals'].cpu().numpy(), z, train_loss, test_loss)
-                    running_loss = 0.0
+                
 
                     # if training sequentially, move on to the next task
                     # if doing OWM-like updates, do them here
