@@ -160,7 +160,7 @@ class Trainer:
             os.remove(self.save_model_path)
         torch.save(self.net.state_dict(), self.save_model_path)
 
-    def log_checkpoint(self, ix, x, y, z, train_loss, test_loss, seq_losses_all_tasks):
+    def log_checkpoint(self, ix, x, y, z, train_loss, test_loss, seq_losses_all_tasks=None):
         if seq_losses_all_tasks is not None:
             seq_losses = []
             for i in range(len(seq_losses_all_tasks)):
@@ -669,9 +669,7 @@ class Trainer:
                 
                 x, y = x.to(self.device), y.to(self.device)
                
-                    
-                    
-                
+               
 
                 if self.args.xdg:
                     self.net.xdg_train_mode(self.train_idx)
@@ -1126,6 +1124,7 @@ class Trainer:
             #pca multimodal with plot = False just returns the cumulative variances
             # note: n_reps needs to be the same as 'test size' for the test loader used to generate the A
             pca_vars = pca_multimodal(self.args, A_uncut=A, trials = trials, n_reps=50, plot=False)
+            print(pca_vars)
 
             return running_min_error, ix, losses, pca_vars
         

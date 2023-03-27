@@ -30,7 +30,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description='')
     # parser.add_argument('-L', type=int, default=5, help='latent input dimension')
     parser.add_argument('--D1', type=int, default=50, help='u dimension')
-    parser.add_argument('--D2', type=int, default=50, help='v dimension')
+    parser.add_argument('--D2', type=int, default=0, help='v dimension')
     parser.add_argument('-N', type=int, default=300, help='number of neurons in reservoir')
     # parser.add_argument('-Z', type=int, default=5, help='output dimension')
 
@@ -349,7 +349,7 @@ if __name__ == '__main__':
             if args.optimizer != 'lbfgs':
                 labels_csv.extend(['lr', 'epochs'])
                 vals_csv.extend([args.lr, args.n_epochs])
-            if args.multimodal or args.one_mod or args.sequential:
+            if args.multimodal or args.one_mod:
                 many_tasks_names = [str(t[0]) for t in task_losses]
                 many_tasks_losses = [t[1] for t in task_losses]
                 

@@ -74,6 +74,7 @@ if not args.no_plot:
     for i, ax in enumerate(fig.axes):
         #to delete: o
         context, ix, trial, x, y, z, loss = data[i]
+        
         xr = np.arange(x.shape[-1])
         #for trial get z posititon
 
@@ -100,8 +101,8 @@ if not args.no_plot:
                 ax.plot(xr, z[output_loc+1], color='dodgerblue', lw=2)
 
             elif type(trial) in [RSG, CSG]:
-                ax.plot(xr, y[output_loc], color='coral', alpha=1, lw=1, label='target')
-                ax.plot(xr, z[output_loc], color='cornflowerblue', alpha=1, lw=1.5, label='response')
+                ax.plot(xr, y[0], color='coral', alpha=1, lw=1, label='target')
+                ax.plot(xr, z[0], color='cornflowerblue', alpha=1, lw=1.5, label='response')
             elif 'bce' in config.loss:
                 ax.scatter(xr, y, color='coral', alpha=0.5, s=3, label='target')
                 ax.plot(xr, z, color='cornflowerblue', alpha=1, lw=1.5, label='response')
