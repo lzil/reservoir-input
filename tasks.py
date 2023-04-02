@@ -139,7 +139,7 @@ class BinaryRSG(Task):
 
     def get_y(self, args=None):
         y = np.zeros((1, self.t_len))
-        #y either 0 or 1, we want it to 1 exactly at then go time and after the go time
+        #y either 0 or 1, we want it to 1 exactly at  go time and thereafter
         rt, st, gt = self.rsg
         y[0, gt:] = 1 
         return y
@@ -706,7 +706,10 @@ def create_dataset(args):
     t_type = args.t_type
     n_trials = args.n_trials
 
-    if t_type.startswith('rsg'):
+    if t_type == 'binary-rsg':
+        assert args.max_ready + args.max_t + int(args.max_t * args.gain) < args.t_len
+        TaskObj = BinaryRSG
+    elif t_type.startswith('rsg'):
         assert args.max_ready + args.max_t + int(args.max_t * args.gain) < args.t_len
         TaskObj = RSG
     elif t_type.startswith('csg'):
@@ -754,7 +757,7 @@ def get_task_args(args):
     targs = Bunch()
     #create an empty bunched dictionary to be populated
 
-    if args.t_type.startswith('rsg'):
+    if args.t_type.startswith('rsg') or args.t_type.startswith('binary'):
         targs.has_fix = get_tval(tarr,'has_fix',False, bool)
         targs.t_len = get_tval(tarr, 'l', 600, int)
         targs.p_len = get_tval(tarr, 'pl', 5, int)
@@ -1018,6 +1021,23 @@ if __name__ == '__main__':
                     ax.plot(xr, trial_y, color='dodgerblue', label='go', lw=2)
                     if t_type is RSG:
                         ax.set_title(f'{trial.rsg}: [{trial.t_o}, {trial.t_p}] ', fontsize=9)
+
+            elif t_type is BinaryRSG:
+                trial_x = np.sum(trial_x, axis=0)
+
+                trial_y = trial_y[0]
+                ml, sl, bl = ax.stem(xr, trial_x, use_line_collection=True, linefmt='coral', label='ready/set')
+                ml.set_markerfacecolor('coral')
+                ml.set_markeredgecolor('coral')
+                if t_type == 'rsg-bin':
+                    ml, sl, bl = ax.stem(xr, [1], use_line_collection=True, linefmt='dodgerblue', label='go')
+                    ml.set_markerfacecolor('dodgerblue')
+                    ml.set_markeredgecolor('dodgerblue')
+                else:
+                    ax.plot(xr, trial_y, color='dodgerblue', label='go', lw=2)
+                    if t_type is RSG:
+                        ax.set_title(f'{trial.rsg}: [{trial.t_o}, {trial.t_p}] ', fontsize=9)
+
 
             elif t_type is DelayCopy:
                 for j in range(trial.dim):

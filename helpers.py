@@ -500,15 +500,35 @@ def get_criteria(args):
             return args.l1 * loss / args.batch_size
         criteria.append(mse)
 
-    if 'sp' in args.loss:
-        #bce loss saturates in line with DL 6.2.2.2
-        #try alternate formulation - must run net with sigmoid output activation 
-        fn = StableSoftplus()
-        def sp(sigmoid_o,t, **kwargs):
-            return (fn(sigmoid_o,t))
-        criteria.append(sp)
+    
 
-        
+    
+    if 'sp-bce' in args.loss:
+        def softplus_bce_loss(input, target, i, t_ix, single=False):
+            # Compute the Softplus BCE loss for each time step
+            loss = []
+            if single:
+                input = input.unsqueeze(0)
+                target = target.unsqueeze(0)
+                i = [i]
+            for t in range(input.size(2)):
+                z_t = inv_sigmoid(input[:, :, t])
+                #torch.log(input[:, :, t] / (1 - input[:, :, t] + 1e-8))
+                
+                if torch.sum(torch.isnan(z_t)) !=0:
+                    print('z_t:{}'.format(z_t))
+                    pdb.set_trace()
+                loss_t = nn.Softplus()((1 - 2 * target[:, :, t]) * z_t)
+                if torch.sum(torch.isnan(loss_t)) !=0:
+                    print('loss_t:{}'.format(loss_t))
+                    pdb.set_trace()
+                
+                
+                loss.append(loss_t)
+            loss = torch.stack(loss, dim=2)
+            return args.l1 * torch.sum(loss)/args.batch_size
+        criteria.append(softplus_bce_loss)
+
 
 
     if 'bce-loss-manual' in args.loss:
@@ -574,6 +594,10 @@ def logit(x):
         torch.log(x/(1-x))
         )
     )
+
+def inv_sigmoid(x):
+    x = torch.clamp(x, min = 1e-7, max = 1 - 1e-7)
+    return torch.log(x/(1-x))
 
 # stable sigmoid activation 
 class StableSigmoid(nn.Module):

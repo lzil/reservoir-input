@@ -190,8 +190,13 @@ def adjust_args(args):
         args.train_order = list(range(len(args.dataset)))
 
     # TODO
-    if 'rsg' in args.dataset[0]:
+
+    if  'sp-bce' in args.loss:
+        args.out_act = 'sigmoid'
+
+    elif 'rsg' in args.dataset[0]:
         args.out_act = 'exp'
+    
     else:
         args.out_act = 'none'
 

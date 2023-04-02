@@ -258,7 +258,12 @@ class Trainer:
                         
                         synaptic_intel_penalty.backward()
                     else:
+                        
                         k_loss.backward()
+                        if 'sp-bce' in self.args.loss:
+                            #clip gradients
+                            
+                            nn.utils.clip_grad_norm_(self.net.parameters(), max_norm=1)
                     # strategies for continual learning that involve modifying gradients
                     if self.args.sequential and self.train_idx > 0:
                         if self.args.owm:

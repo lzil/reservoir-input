@@ -57,8 +57,11 @@ class M2Net(nn.Module):
        
         if self.args.network_seed is None:
             self.args.network_seed = random.randrange(1e6)
-
+        
         self.out_act = get_activation(self.args.out_act)
+        if  'sp-bce' in self.args.loss:
+            self.out_act = nn.Sigmoid()
+        
         
         self.m1_act = get_activation(self.args.m1_act)
         self.m2_act = get_activation(self.args.m2_act)
@@ -260,6 +263,7 @@ class M2Net(nn.Module):
                 v = v * self.v_mask
         
         z = self.M_ro(self.m2_act(v))
+        
         self.z = self.out_act(z)
 
         if not extras:
