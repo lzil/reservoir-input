@@ -210,7 +210,7 @@ if not args.no_plot:
                 ax.plot(xr, z[0], color='cornflowerblue', alpha=1, lw=1.5, label='response')
             elif type(trial) is BinaryRSG:
                 
-                ax.plot(xr, x[0], color='grey', alpha=1, lw=1, label='target')
+                ax.plot(xr, x[0], color='grey', alpha=1, lw=1, label='stimulus')
                 ax.plot(xr, y[0], color='coral', alpha=1, lw=1, label='target')
                 ax.plot(xr, z[0], color='cornflowerblue', alpha=1, lw=1.5, label='response')
 
