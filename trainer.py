@@ -199,6 +199,7 @@ class Trainer:
 
         if self.args.synaptic_intel and training:
             grads_m_u = 0
+            grads_w_u =0
             grads_j = 0
             grads_m_ro = 0
         
@@ -232,10 +233,8 @@ class Trainer:
                         k_loss.backward()
                         
                        
-                        # self.grads_list['M_u'].append(self.net.M_u.weight.grad.detach().clone())
-                        # self.grads_list['J'].append(self.net.reservoir.J.weight.grad.detach().clone())
-                        # self.grads_list['M_ro'].append(self.net.M_ro.weight.grad.detach().clone())
                         grads_m_u += self.net.M_u.weight.grad.detach().clone()
+                        grads_w_u += self.net.reservoir.W_u.weight.grad.detach().clone()
                         grads_j += self.net.reservoir.J.weight.grad.detach().clone()
                         grads_m_ro = self.net.M_ro.weight.grad.detach().clone()
                         
@@ -243,11 +242,18 @@ class Trainer:
                         
                         
                         penalty_m_u = torch.sum(self.omega_m_u*(self.net.M_u.weight - self.m_u_prev)**2)
+                        # if W_u exists and is trainable then need to stabilize it 
+                        penalty_w_u = torch.sum(self.omega_w_u*(self.net.reservoir.W_u.weight - self.w_u_prev)**2)
                         penalty_j= torch.sum(self.omega_j*(self.net.reservoir.J.weight - self.j_prev)**2)
+                        
                         penalty_m_ro = torch.sum(self.omega_m_ro * (self.net.M_ro.weight - self.m_ro_prev)**2)
                         # i think we need to times by k so as to add SI for loss at each timestep 
-                        
-                        synaptic_intel_penalty = self.args.stab_strength * (penalty_m_u + penalty_j + penalty_m_ro)
+
+                        # if W_u exists and is trainable then need to stabilize it 
+                        if self.args.D1 != 0 and self.args.train_parts == ['']:
+                            synaptic_intel_penalty = self.args.stab_strength * (penalty_m_u + penalty_w_u+ penalty_j + penalty_m_ro)
+                        else:
+                             synaptic_intel_penalty = self.args.stab_strength * (penalty_m_u + penalty_j + penalty_m_ro)
                         
                     
 
@@ -292,6 +298,7 @@ class Trainer:
         trial_loss /= x.shape[0]
         if self.args.synaptic_intel and training:
             self.grads_list['M_u'].append(grads_m_u)
+            self.grads_list['W_u'].append(grads_w_u)
             self.grads_list['J'].append(grads_j)
             self.grads_list['M_ro'].append(grads_m_ro)
 
@@ -496,12 +503,15 @@ class Trainer:
             z_outs = []
             
         if self.args.synaptic_intel:
-            self.grads_list = {'M_u':[],'J':[], 'M_ro':[]}
-            self.weight_changes_list = {'M_u':[],'J':[], 'M_ro':[]}
+            self.grads_list = {'M_u':[],'W_u':[], 'J':[], 'M_ro':[]}
+            self.weight_changes_list = {'M_u':[],'W_u':[],'J':[], 'M_ro':[]}
             self.omega_m_u =0
+            self.omega_w_u = 0
             self.omega_j =0
             self.omega_m_ro =0
+            
             self.m_u_prev=0
+            self.w_u_prev = 0
             self.j_prev = 0
             self.m_ro_prev=0
             
@@ -701,7 +711,6 @@ class Trainer:
                             mini_omega_m_u = torch.zeros_like(self.net.M_u.weight).detach()
                             mini_omega_w_u = torch.zeros_like(self.net.reservoir.W_u.weight).detach()
                             mini_omega_j = torch.zeros_like(self.net.reservoir.J.weight).detach()
-                            
                             mini_omega_m_ro = torch.zeros_like(self.net.M_ro.weight).detach()
 
                             for i in range(len(self.grads_list['M_u'])):
@@ -711,6 +720,7 @@ class Trainer:
                                 mini_omega_m_ro += self.weight_changes_list['M_ro'][i] * self.grads_list['M_ro'][i] * -1
 
                                 total_change_m_u += self.weight_changes_list['M_u'][i]
+                                total_change_w_u +=self.weight_changes_list['W_u'][i]
                                 total_change_j += self.weight_changes_list['J'][i]
                                 total_change_m_ro += self.weight_changes_list['M_ro'][i]
                             
@@ -718,7 +728,6 @@ class Trainer:
                             max_input_m_u = mini_omega_m_u/(total_change_m_u**2 +self.args.damp_term)
                             max_input_w_u = mini_omega_w_u/(total_change_w_u**2 + self.args.damp_term)
                             max_input_j = mini_omega_j/(total_change_j**2 +self.args.damp_term)
-                            
                             max_input_m_ro = mini_omega_m_ro/(total_change_m_ro**2 +self.args.damp_term)
                             
                             
