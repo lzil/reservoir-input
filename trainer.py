@@ -450,7 +450,7 @@ class Trainer:
         #reshape tensor so that all the activities are in the rows, number of rows should be equal to act_acount
         act_batch_reshaped = act_batch.transpose(1,2).reshape(-1, act_batch.shape[1])
         #average of outer product of each row with itself
-        return torch.mm(act_batch_reshaped.t(), act_batch_reshaped) / n
+        return torch.mm(act_batch_reshaped.t(), act_batch_reshaped) # don't divide by n for now 
     
     # for later:  combineupdate cov and update projections shoul 
     def owm_update_tot_cov(self,total_cov, task_cov=None):
@@ -458,6 +458,7 @@ class Trainer:
         return ((k-1)/k) * total_cov + (1/k) * task_cov
     def owm_update_proj(self, total_cov=None):
         return torch.inverse(self.args.alpha_owm**(-1) * total_cov + torch.eye(total_cov.shape[0]))
+    
     
                 
 
@@ -472,6 +473,13 @@ class Trainer:
 
        # for OWM
         if self.args.owm:
+            self.val_trial_count = 0 # number of validation trials over which to average the task covariances; reset before moving onto new task
+            task_sigma_s = 0
+            task_sigma_pre_act_u = 0
+            task_sigma_q = 0
+            task_sigma_x = 0
+            task_sigma_z = 0
+
             self.total_sigma_s= 0
             self.total_sigma_pre_act_u = 0
             self.total_sigma_x = 0
@@ -486,7 +494,6 @@ class Trainer:
             rec_xs = []
             rec_xs_post_ac = []
             z_outs = []
-            
             
         if self.args.synaptic_intel:
             self.grads_list = {'M_u':[],'J':[], 'M_ro':[]}
@@ -591,12 +598,53 @@ class Trainer:
                         test_loss, test_etc = self.test()
                         # print(test_etc['ins'].shape [batch_size, output dimension, task_length]
                         if self.args.owm:
-                        s_ins.append(test_etc['ins'])
-                        us.append(test_etc['us'])
-                        rec_xs.append(test_etc['pre_act_xs'])
-                        rec_xs_post_ac.append(test_etc['xs'])
-                        z_outs.append(test_etc['outs'])
-                        
+                            s_ins.append(test_etc['ins'])
+                            us.append(test_etc['us'])
+                            rec_xs.append(test_etc['pre_act_xs'])
+                            rec_xs_post_ac.append(test_etc['xs'])
+                            z_outs.append(test_etc['outs'])
+                            
+                            if  self.args.train_parts == [''] and self.args.D1 ==0 and self.args.D2==0:
+                                # 0th dimension is the batch element, 2nd dimension is number of timesteps
+                                # 1st dimension is the actual vector representation
+                                #compute current task covariance
+                                s_ins = torch.cat(s_ins, dim=0)              
+                                rec_xs = torch.cat(rec_xs, dim =0 )
+                                rec_xs_post_ac = torch.cat(rec_xs_post_ac, dim =0)
+                                z_outs = torch.cat(z_outs, dim=0)
+                                # group different direct inputs to reservoir; q is the batch of [x^T , s^T]s - note: use xs preactivation
+                                q_xs_ins =  torch.cat((rec_xs, s_ins), dim =1) #torch.Size([50, 307, 300], torch.allclose(q_xs_ins[:,:300, :], rec_xs ) == True
+
+                                self.val_trial_count += z_outs.shape[0] * z_outs.shape[2]
+                                task_sigma_q += self.owm_task_cov(q_xs_ins)
+                                task_sigma_x += self.owm_task_cov(rec_xs_post_ac)
+                                task_sigma_z += self.owm_task_cov(z_outs)
+
+                            elif self.args.train_parts == ['M_u', 'M_ro']:
+                                s_ins = torch.cat(s_ins, dim=0)
+                                us = self.net.M_u(s_ins)
+                                rec_xs = torch.cat(rec_xs, dim =0 )
+                                rec_xs_post_ac = torch.cat(rec_xs_post_ac, dim =0)
+                                z_outs = torch.cat(z_outs, dim=0)
+                                q_xs_ins =  torch.cat((rec_xs, us), dim =1)
+
+
+                                self.val_trial_count += z_outs.shape[0] * z_outs.shape[2]
+                                # M_u 
+                                task_sigma_s += self.owm_task_cov(s_ins)
+                                task_sigma_u += self.own_task_covs(us)
+
+                                # M_ro
+                                task_sigma_x += self.owm_task_covs(rec_xs_post_ac)
+                                task_sigma_z += self.owm_task_covs(z_outs)
+                            else:
+                                raise NotImplementedError('No implentation of OWM for this network architecture yet. D1 and D2 should be zero if training all parts; if u-layer reservoir, D2 should be zero')
+                            
+                            s_ins = []        
+                            rec_xs = []
+                            rec_xs_post_ac = []
+                            z_outs = []
+
                         log_arr = [
                             f'*{ix}',
                             f'train {train_loss:.3f}',
@@ -612,8 +660,8 @@ class Trainer:
                     log_str = '\t| '.join(log_arr)
                     logging.info(log_str)
                     
-                    
-                        
+
+                
 
                     if not self.args.no_log:
                         if self.args.sequential:
@@ -622,248 +670,19 @@ class Trainer:
                             self.log_checkpoint(ix, etc['ins'].cpu().numpy(), etc['goals'].cpu().numpy(), z, train_loss, test_loss)
                     running_loss = 0.0
 
-                
-
                     # if training sequentially, move on to the next task
                     # if doing OWM-like updates, do them here
                     
 
-
-                    if self.args.sequential and self.args.seq_iters == 0:
-                    
-                    
-                        if self.args.sequential and test_loss < self.args.seq_threshold:
-                            logging.info(f'Successfully trained task {self.train_idx}...')
-                            
-                            losses = self.test_tasks(ids=range(self.train_idx + 1))
-                            
-
-                            for i, loss in losses:
-                                logging.info(f'...loss on task {i}: {loss:.3f}')
-                            if self.args.synaptic_intel:
-                                #current synaptic intel 
-                                #update Omegas
-                                
-                                
-                                total_change_m_u = 0
-                                total_change_j = 0
-                                total_change_m_ro  = 0
-
-
-
-                                mini_omega_m_u = torch.zeros_like(self.net.M_u.weight).detach()
-                                
-                                mini_omega_j = torch.zeros_like(self.net.reservoir.J.weight).detach()
-                                
-                                mini_omega_m_ro = torch.zeros_like(self.net.M_ro.weight).detach()
-
-                                for i in range(len(self.grads_list['M_u'])):
-                                    mini_omega_m_u += self.weight_changes_list['M_u'][i] * self.grads_list['M_u'][i] * -1
-                                    mini_omega_j += self.weight_changes_list['J'][i] * self.grads_list['J'][i] * -1
-                                    mini_omega_m_ro += self.weight_changes_list['M_ro'][i] * self.grads_list['M_ro'][i] * -1
-
-                                    total_change_m_u += self.weight_changes_list['M_u'][i]
-                                    total_change_j += self.weight_changes_list['J'][i]
-                                    total_change_m_ro += self.weight_changes_list['M_ro'][i]
-                                
-
-                                max_input_m_u = mini_omega_m_u/(total_change_m_u**2 +self.args.damp_term)
-                                max_input_j = mini_omega_j/(total_change_j**2 +self.args.damp_term)
-                                
-                                max_input_m_ro = mini_omega_m_ro/(total_change_m_ro**2 +self.args.damp_term)
-                                
-                                
-
-
-                                task_omega_m_u= torch.maximum(torch.zeros_like(mini_omega_m_u),max_input_m_u )
-                                task_omega_j= torch.maximum(torch.zeros_like(mini_omega_j),max_input_j )
-                                task_omega_m_ro= torch.maximum(torch.zeros_like(mini_omega_m_ro),max_input_m_ro)
-
-                                #save weights at the end of training this task - right now this is onlu works with weights, when we use biasses we'll go m_u_weight_prev
-                                self.m_u_prev =  self.net.M_u.weight.detach().clone()
-                                self.j_prev =  self.net.reservoir.J.weight.detach().clone()
-                                self.m_ro_prev = self.net.M_ro.weight.detach().clone()
-
-                                #reset objects used to calculate omegas
-                                self.grads_list = {'M_u':[],'J':[], 'M_ro':[]}
-                                self.weight_changes_list = {'M_u':[],'J':[], 'M_ro':[]}
-                                
-                                self.omega_m_u += task_omega_m_u
-                                self.omega_j += task_omega_j
-                                self.omega_m_ro += task_omega_m_ro
-                                
-
-                            
-
-                            # orthogonal weight modification of M_u and M_ro
-                            if self.args.owm:
-                                 #if training all parts 
-                                if self.args.train_parts == ['']:
-                                    self.args.seq_threshold += 0.02
-                                    # 0th dimension is the batch element, 2nd dimension is number of timesteps
-                                    # 1st dimension is the actual vector representation
-                                    #compute current task covariances
-
-
-
-                                    s_ins = torch.cat(s_ins, dim=0)
-                                    
-                                    
-                                    rec_xs = torch.cat(rec_xs, dim =0 )
-
-                                    rec_xs_post_ac = torch.cat(rec_xs_post_ac, dim =0)
-                                    
-                                    z_outs = torch.cat(z_outs, dim=0)
-
-                                    # group different direct inputs to reservoir; q is the batch of [x^T , s^T]s - note: use xs preactivation
-                                    q_xs_ins =  torch.cat((rec_xs, s_ins), dim =1)  #torch.Size([50, 307, 300], torch.allclose(q_xs_ins[:,:300, :], rec_xs ) == True
-
-                                    task_sigma_q = self.owm_task_cov(q_xs_ins)
-                                    task_sigma_x = self.owm_task_cov(rec_xs_post_ac)
-                                    task_sigma_z = self.owm_task_cov(z_outs)
-                                    
-
-                                    
-                                    # task wq calculated using task_sigma_q 
-                                    j_end_of_task = self.net.reservoir.J.weight.detach().clone()
-                                    m_u_end_of_task =  self.net.M_u.weight.detach().clone()
-                                    W = torch.cat((j_end_of_task, m_u_end_of_task), dim =1)
-                                    
-                                    
-                                
-
-                                    #update total covariances - refactor as function later
-                                
-                                    self.total_sigma_x=  self.owm_update_tot_cov(self.total_sigma_x, task_sigma_x)
-                                    self.total_sigma_q =  self.owm_update_tot_cov(self.total_sigma_q, task_sigma_q)
-                                    self.total_sigma_wq = W @ self.total_sigma_q @ W.t()
-                                    self.total_sigma_z = self.owm_update_tot_cov(self.total_sigma_z, task_sigma_z)
-                                    
-
-                                    
-                                    #update projections  - refactor as function later 
-                                    self.P_q = self.owm_update_proj(self.total_sigma_q)
-                                    self.P_wq = torch.inverse( (1/self.args.alpha_owm) * self.total_sigma_wq + torch.eye((self.total_sigma_wq.shape[0])) )
-                                    self.P_x = self.owm_update_proj(self.total_sigma_x)
-                                    self.P_z = self.owm_update_proj(self.total_sigma_z)
-
-                                    #starter for calc_cov(test_etc['ins'/'us','bs])
-                                    
-                                
-                                    logging.info(f'...updated projection matrices for OWM')
-                                    # reset activity collectors for next task 
-                                    s_ins = []
-                                    rec_xs = []
-                                    rec_xs_post_ac = []
-                                    z_outs = []
-                                
-                                # if doing owm on reservoir with D2 ==0 
-                                else:
-                                    self.args.seq_threshold += 0.08
-                                    # 0th dimension is the batch element, 2nd dimension is number of timesteps
-                                    # 1st dimension is the actual vector representation
-                                    #compute current task covariances
-
-
-
-                                    
-                                    # task activities 
-                                    s_ins = torch.cat(s_ins, dim=0)
-                                    us = self.net.M_u(s_ins)
-
-
-
-                                    rec_xs = torch.cat(rec_xs, dim =0 )
-                                    rec_xs_post_ac = torch.cat(rec_xs_post_ac, dim =0)
-                                    z_outs = torch.cat(z_outs, dim=0)
-                                    q_xs_ins =  torch.cat((rec_xs, us), dim =1)
-
-                                    task_sigma_s = 0
-                                    task_sigma_pre_act_u = 0
-                                    task_sigma_q = 0
-                                    task_sigma_x =0
-                                    task_sigma_z= 0
-                                    
-                                    # takes care of M_u
-                                    task_sigma_s = self.owm_task_cov(s_ins)
-                                    task_sigma_u = self.own_task_covs(us)
-
-                                    # M_ro
-                                    task_sigma_x = self.owm_task_covs(rec_xs_post_ac)
-                                    task_sigma_z = self.owm_task_covs(z_outs)
-                                    
-                                    
-                                    self.total_sigma_s = self.owm_update_tot_cov(self.total_sigma_s, task_sigma_s)
-                                    
-                                    self.total_sigma_u = self.owm_update_tot_cov(self.total_sigma_u, task_sigma_u)
-
-                                    self.total_sigma_x = self.owm_update_tot_cov(self.total_sigma_x, task_sigma_x)
-
-                                    self.total_sigma_z = self.owm_update_tot_cov(self.total_sigma_z, task_sigma_z)
-                                    
-                                    
-                                
-                                    #update projections 
-                                    self.P_s = self.owm_update_proj(self.total_sigma_s)
-                                    self.P_u = self.owm_update_proj(self.totat_sigma_u)
-
-                                    self.P_x = self.owm_update_proj(self.total_sigma_x)
-                                    self.P_z = self.owm_update_proj(self.total_sigma_z)
-                                    
-                                    logging.info(f'...updated projection matrices for OWM')
-                                    
-                                    if self.args.orthog_reservoirs:
-                                    #pdate reservoir weights
-                                        pdb.set_trace()
-                                        projected_reservoir_weights_j_w_u = self.P_wq @ W @ self.P_q
-                                        
-                                        
-                                        self.net.reservoir.J.weight = nn.Parameter(self.net.reservoir.J.weight + projected_reservoir_weights_j_w_u[:, :300], requires_grad =True)
-                                        self.net.reservoir.W_u.weight= nn.Parameter(self.net.reservoir.W_u.weight + projected_reservoir_weights_j_w_u[:, -self.net.reservoir.W_u.weight.shape[1]:], requires_grad =True)
-
-
-
-                                    s_ins = []
-                                    
-                                    rec_xs = []
-                                    rec_xs_post_ac = []
-                                    z_outs = []
-                                
-                                
-                                
-                                logging.info(f'...updated projection matrices for OWM')
-                                
-                            # done processing prior task, move on to the next one or quit
-                            self.train_idx += 1
-
-                                
-
-                            if self.args.xdg or self.args.synaptic_intel or self.args.owm:
-                                #reset optimizer and scheduler between tasks as Masse et al do.
-                                self.optimizer = get_optimizer(self.args, self.train_params)
-                                self.scheduler = get_scheduler(self.args, self.optimizer)
-                            
-                            
-
-                            if self.train_idx == len(self.args.train_order):
-                                ending = True
-                                logging.info(f'...done training all tasks! ending')
-                                break
-                            logging.info(f'...moving on to task {self.train_idx}.')
-                            self.train_loader = self.train_loaders[self.args.train_order[self.train_idx]]
-                            self.test_loader = self.test_loaders[self.args.train_order[self.train_idx]]
-                            running_min_error = float('inf')
-                            running_no_min = 0
-                            break
-
-
-                    elif self.args.sequential and self.args.seq_iters > 0 and ix == self.args.seq_iters + self.train_idx * self.args.seq_iters:
-                        
-                        
+                   
+    
+                    # if training sequentially, move on to the next task
+                    # if doing OWM-like updates, do them here
+                    if (self.args.sequential and test_loss < self.args.seq_threshold and self.args.seq_iters == 0) ^ (self.args.sequential and self.args.seq_iters > 0 and ix == self.args.seq_iters + self.train_idx * self.args.seq_iters):  # ^ is XOR operator
                         logging.info(f'Successfully trained task {self.train_idx}...')
-                            
+                    
                         losses = self.test_tasks(ids=range(self.train_idx + 1))
-                            
+                        
 
                         for i, loss in losses:
                             logging.info(f'...loss on task {i}: {loss:.3f}')
@@ -873,19 +692,21 @@ class Trainer:
                             
                             
                             total_change_m_u = 0
+                            total_change_w_u = 0 
                             total_change_j = 0
                             total_change_m_ro  = 0
 
 
 
                             mini_omega_m_u = torch.zeros_like(self.net.M_u.weight).detach()
-                            
+                            mini_omega_w_u = torch.zeros_like(self.net.reservoir.W_u.weight).detach()
                             mini_omega_j = torch.zeros_like(self.net.reservoir.J.weight).detach()
                             
                             mini_omega_m_ro = torch.zeros_like(self.net.M_ro.weight).detach()
 
                             for i in range(len(self.grads_list['M_u'])):
                                 mini_omega_m_u += self.weight_changes_list['M_u'][i] * self.grads_list['M_u'][i] * -1
+                                mini_omega_w_u += self.weight_changes_list['W_u'][i] * self.grads_list['W_u'][i] * -1
                                 mini_omega_j += self.weight_changes_list['J'][i] * self.grads_list['J'][i] * -1
                                 mini_omega_m_ro += self.weight_changes_list['M_ro'][i] * self.grads_list['M_ro'][i] * -1
 
@@ -895,6 +716,7 @@ class Trainer:
                             
 
                             max_input_m_u = mini_omega_m_u/(total_change_m_u**2 +self.args.damp_term)
+                            max_input_w_u = mini_omega_w_u/(total_change_w_u**2 + self.args.damp_term)
                             max_input_j = mini_omega_j/(total_change_j**2 +self.args.damp_term)
                             
                             max_input_m_ro = mini_omega_m_ro/(total_change_m_ro**2 +self.args.damp_term)
@@ -903,19 +725,22 @@ class Trainer:
 
 
                             task_omega_m_u= torch.maximum(torch.zeros_like(mini_omega_m_u),max_input_m_u )
+                            task_omega_w_u = torch.maximum(torch.zeros_like(mini_omega_w_u), max_input_w_u)
                             task_omega_j= torch.maximum(torch.zeros_like(mini_omega_j),max_input_j )
                             task_omega_m_ro= torch.maximum(torch.zeros_like(mini_omega_m_ro),max_input_m_ro)
 
                             #save weights at the end of training this task - right now this is onlu works with weights, when we use biasses we'll go m_u_weight_prev
                             self.m_u_prev =  self.net.M_u.weight.detach().clone()
+                            self.w_u_prev = self.net.reservoir.W_u.weight.detach().clone()
                             self.j_prev =  self.net.reservoir.J.weight.detach().clone()
                             self.m_ro_prev = self.net.M_ro.weight.detach().clone()
 
                             #reset objects used to calculate omegas
-                            self.grads_list = {'M_u':[],'J':[], 'M_ro':[]}
-                            self.weight_changes_list = {'M_u':[],'J':[], 'M_ro':[]}
+                            self.grads_list = {'M_u':[],'W_u':[],'J':[], 'M_ro':[]}
+                            self.weight_changes_list = {'M_u':[],'W_u':[],'J':[], 'M_ro':[]}
                             
                             self.omega_m_u += task_omega_m_u
+                            self.omega_w_u +=task_omega_w_u
                             self.omega_j += task_omega_j
                             self.omega_m_ro += task_omega_m_ro
                             
@@ -924,153 +749,120 @@ class Trainer:
 
                         # orthogonal weight modification of M_u and M_ro
                         if self.args.owm:
-                            if self.args.owm:
                             # if training all parts
-                                if self.args.train_parts == [''] and self.args.D1 ==0 and self.args.D2==0:
-                                    # 0th dimension is the batch element, 2nd dimension is number of timesteps
-                                        # 1st dimension is the actual vector representation
-                                        #compute current task covariances
-                                    s_ins = torch.cat(s_ins, dim=0)
-                                    
-                                    rec_xs = torch.cat(rec_xs, dim =0 )
-
-                                    rec_xs_post_ac = torch.cat(rec_xs_post_ac, dim =0)
-                                    
-                                    z_outs = torch.cat(z_outs, dim=0)
-
-                                    # group different direct inputs to reservoir; q is the batch of [x^T , s^T]s - note: use xs preactivation
-                                    q_xs_ins =  torch.cat((rec_xs, s_ins), dim =1)  #torch.Size([50, 307, 300], torch.allclose(q_xs_ins[:,:300, :], rec_xs ) == True
-
-                                    task_sigma_q = self.owm_task_cov(q_xs_ins)
-                                    task_sigma_x = self.owm_task_cov(rec_xs_post_ac)
-                                    task_sigma_z = self.owm_task_cov(z_outs)
-                                    
-
-                                    
-                                    # task wq calculated using task_sigma_q 
-                                    j_end_of_task = self.net.reservoir.J.weight.detach().clone()
-                                    m_u_end_of_task =  self.net.M_u.weight.detach().clone()
-                                    W = torch.cat((j_end_of_task, m_u_end_of_task), dim =1)
-                                    
-                                    
+                            if self.args.train_parts == ['']:
+                                self.args.seq_threshold += 0.02
                                 
 
-                                    #update total covariances - refactor as function later
-                                
-                                    self.total_sigma_x=  self.owm_update_tot_cov(self.total_sigma_x, task_sigma_x)
-                                    self.total_sigma_q =  self.owm_update_tot_cov(self.total_sigma_q, task_sigma_q)
-                                    self.total_sigma_z = self.owm_update_tot_cov(self.total_sigma_z, task_sigma_z)
-
-                                    total_sigma_wq = W @ self.total_sigma_q @ W.t()
-                                    #update projections  - refactor as function later 
-                                    self.P_q = self.owm_update_proj(self.total_sigma_q)
-                                    self.P_wq = torch.inverse( (1/self.args.alpha_owm) * total_sigma_wq + torch.eye((total_sigma_wq.shape[0])) )
-                                    self.P_x = self.owm_update_proj(self.total_sigma_x)
-                                    self.P_z = self.owm_update_proj(self.total_sigma_z)
-
-                                    #starter for calc_cov(test_etc['ins'/'us','bs])
-                                    
-                                
-                                    logging.info(f'...updated projection matrices for OWM')
-                                    # reset activity collectors for next task 
-                                    s_ins = []
-                                    rec_xs = []
-                                    rec_xs_post_ac = []
-                                    z_outs = []
-                            # if doing owm on reservoir with D2 ==0 
-                                elif self.args.train_parts == ['M_u', 'M_ro']:
-                                    self.args.seq_threshold += 0.08
-                                    # 0th dimension is the batch element, 2nd dimension is number of timesteps
-                                    # 1st dimension is the actual vector representation
-                                    #compute current task covariances
-                                
-                                    # task activities 
-                                    s_ins = torch.cat(s_ins, dim=0)
-                                    us = torch.cat(us, dim=0)
-                                    rec_xs = torch.cat(rec_xs, dim =0 )
-                                    rec_xs_post_ac = torch.cat(rec_xs_post_ac, dim =0)
-                                    z_outs = torch.cat(z_outs, dim=0)
-                                    q_xs_ins =  torch.cat((rec_xs, us), dim =1)
-
-                                    
-
-                                    task_sigma_s = 0
-                                    task_sigma_pre_act_u = 0
-                                    task_sigma_q = 0
-                                    task_sigma_x =0
-                                    task_sigma_z= 0
-                                    
-                                    # 'number' of activities when testing network on this task: (batch_size * timesteps) - 
-                                    activ_count = s_ins.shape[0] * s_ins.shape[2]
-                                    
-                                    for b in range(s_ins.shape[0]):
-                                        for timestep in range(s_ins.shape[2]):
-                                            with torch.no_grad():
-                                                task_sigma_s += torch.outer(s_ins[b, :, timestep],s_ins[b, :, timestep]) 
-                                                task_sigma_pre_act_u += torch.outer(self.net.M_u(s_ins[b, :, timestep]), self.net.M_u(s_ins[b, :, timestep]))
-                                                task_sigma_q += torch.outer(q_xs_ins[b, :, timestep], q_xs_ins[b, :, timestep] )
-                                                task_sigma_x += torch.outer(rec_xs_post_ac[b, :, timestep], rec_xs_post_ac[b, :, timestep]) 
-                                                task_sigma_z += torch.outer(z_outs[b, :, timestep], z_outs[b, :, timestep] ) 
-                                        
-                                    # task wq calculated using task_sigma_q 
-                                    j_end_of_task = self.net.reservoir.J.weight.detach().clone()
-                                    w_u_end_of_task = self.net.reservoir.W_u.weight.detach().clone()
+                                task_sigma_q /= self.val_trial_count
+                                task_sigma_x /= self.val_trial_count
+                                task_sigma_z /= self.val_trial_count
                                 
 
-                                    W = torch.cat((j_end_of_task, w_u_end_of_task), dim =1)
-                                    
-                                    
-                                    #update total covariances - refactor as function later
-                                    k = self.train_idx +1
-                                    self.total_sigma_s=  ((k-1)/k) * self.total_sigma_s+ (1/k) * task_sigma_s
-                                    self.total_sigma_pre_act_u =  ((k-1)/k) * self.total_sigma_pre_act_u + (1/k) * task_sigma_pre_act_u
-                                    self.total_sigma_x=  ((k-1)/k) * self.total_sigma_x + (1/k) * task_sigma_x
-                                    self.total_sigma_q =  ((k-1)/k) * self.total_sigma_q + (1/k) * task_sigma_q
-                                    self.total_sigma_wq =  W @ self.total_sigma_q @ torch.transpose(W, dim0=0, dim1=1) 
-                                    self.total_sigma_z =  ((k-1)/k) * self.total_sigma_z + (1/k) * task_sigma_z
-
-                                    
-                                    #update projections  - refactor as function later 
-                                    self.P_s = torch.inverse( (1/self.args.alpha_owm) * self.total_sigma_s + torch.eye((self.total_sigma_s.shape[0])) )
-                                    self.P_u = torch.inverse( (1/self.args.alpha_owm) * self.total_sigma_pre_act_u + torch.eye((self.total_sigma_pre_act_u.shape[0])) )
-                                    self.P_q = torch.inverse( (1/self.args.alpha_owm) * self.total_sigma_q + torch.eye((self.total_sigma_q.shape[0])) )
-                                    self.P_wq = torch.inverse( (1/self.args.alpha_owm) * self.total_sigma_wq + torch.eye((self.total_sigma_wq.shape[0])) )
-                                    self.P_x = torch.inverse( (1/self.args.alpha_owm) * self.total_sigma_x + torch.eye((self.total_sigma_x.shape[0])) )
-                                    self.P_z = torch.inverse( (1/self.args.alpha_owm) * self.total_sigma_z + torch.eye((self.total_sigma_z.shape[0])) )
-                                    
-                                    logging.info(f'...updated projection matrices for OWM')
-                                    
-                                    if self.args.orthog_reservoirs:
-                                    #pdate reservoir weights
-                                        pdb.set_trace()
-                                        projected_reservoir_weights_j_w_u = self.P_wq @ W @ self.P_q
-                                        
-                                        
-                                        self.net.reservoir.J.weight = nn.Parameter(self.net.reservoir.J.weight + projected_reservoir_weights_j_w_u[:, :300], requires_grad =True)
-                                        self.net.reservoir.W_u.weight= nn.Parameter(self.net.reservoir.W_u.weight + projected_reservoir_weights_j_w_u[:, -self.net.reservoir.W_u.weight.shape[1]:], requires_grad =True)
-
-
-
-                                    s_ins = []
-                                    pre_act_us = []
-                                    us=[]
-                                    rec_xs = []
-                                    rec_xs_post_ac = []
-                                    z_outs = []
                                 
-                            else:
-                                raise NotImplementedError('No implentation of OWM for this input configuration yet. D1 and D2 should be zero if training all parts, if u-layer reservoir, should be zero')
-                            logging.info(f'...updated projection matrices for OWM')
+                                # task wq calculated using task_sigma_q 
+                                j_end_of_task = self.net.reservoir.J.weight.detach().clone()
+                                m_u_end_of_task =  self.net.M_u.weight.detach().clone()
+                                W = torch.cat((j_end_of_task, m_u_end_of_task), dim =1)
+                                
+                                
                             
+
+                                
+                            
+                                self.total_sigma_x=  self.owm_update_tot_cov(self.total_sigma_x, task_sigma_x)
+                                self.total_sigma_q =  self.owm_update_tot_cov(self.total_sigma_q, task_sigma_q)
+                                self.total_sigma_wq = W @ self.total_sigma_q @ W.t()
+                                self.total_sigma_z = self.owm_update_tot_cov(self.total_sigma_z, task_sigma_z)
+                                
+
+                                
+                                #update projections  - refactor as function later 
+                                self.P_q = self.owm_update_proj(self.total_sigma_q)
+                                self.P_wq = torch.inverse( (1/self.args.alpha_owm) * self.total_sigma_wq + torch.eye((self.total_sigma_wq.shape[0])) )
+                                self.P_x = self.owm_update_proj(self.total_sigma_x)
+                                self.P_z = self.owm_update_proj(self.total_sigma_z)
+
+                                #starter for calc_cov(test_etc['ins'/'us','bs])
+                                
+                            
+                                logging.info(f'...updated projection matrices for OWM')
+                                # reset activity collectors for next task 
+                                s_ins = []
+                                rec_xs = []
+                                rec_xs_post_ac = []
+                                z_outs = []
+                                self.val_trial_count = 0 # number of validation trials over which to average the task covariances; reset before moving onto new task
+                                task_sigma_q = 0
+                                task_sigma_x = 0
+                                task_sigma_z = 0
+                            
+                            # if doing owm on reservoir with D2 ==0 
+                            else:
+                                self.args.seq_threshold += 0.08
+                                    # M_u
+                                task_sigma_s /= self.val_trial_count
+                                task_sigma_u /= self.val_trial_count
+
+                                # M_ro
+                                task_sigma_x /= self.val_trial_count
+                                task_sigma_z /= self.val_trial_count
+                                
+                                self.total_sigma_s = self.owm_update_tot_cov(self.total_sigma_s, task_sigma_s)
+                                
+                                self.total_sigma_u = self.owm_update_tot_cov(self.total_sigma_u, task_sigma_u)
+
+                                self.total_sigma_x = self.owm_update_tot_cov(self.total_sigma_x, task_sigma_x)
+
+                                self.total_sigma_z = self.owm_update_tot_cov(self.total_sigma_z, task_sigma_z)
+                                
+                                
+                            
+                                #update projections 
+                                self.P_s = self.owm_update_proj(self.total_sigma_s)
+                                self.P_u = self.owm_update_proj(self.totat_sigma_u)
+
+                                self.P_x = self.owm_update_proj(self.total_sigma_x)
+                                self.P_z = self.owm_update_proj(self.total_sigma_z)
+                                
+                                logging.info(f'...updated projection matrices for OWM')
+                                
+                                # if self.args.orthog_reservoirs:
+                                # #pdate reservoir weights
+                                #     pdb.set_trace()
+                                #     projected_reservoir_weights_j_w_u = self.P_wq @ W @ self.P_q
+                                    
+                                    
+                                #     self.net.reservoir.J.weight = nn.Parameter(self.net.reservoir.J.weight + projected_reservoir_weights_j_w_u[:, :300], requires_grad =True)
+                                #     self.net.reservoir.W_u.weight= nn.Parameter(self.net.reservoir.W_u.weight + projected_reservoir_weights_j_w_u[:, -self.net.reservoir.W_u.weight.shape[1]:], requires_grad =True)
+
+
+
+                                s_ins = []
+                                
+                                rec_xs = []
+                                rec_xs_post_ac = []
+                                z_outs = []
+                                self.val_trial_count = 0 # number of validation trials over which to average the task covariances; reset before moving onto new task
+                                task_sigma_s = 0
+                                task_sigma_u = 0
+                                task_sigma_q = 0
+                                task_sigma_x = 0
+                                task_sigma_z = 0
+                                
+                               
+                                
                         # done processing prior task, move on to the next one or quit
                         self.train_idx += 1
 
                             
 
                         if self.args.xdg or self.args.synaptic_intel or self.args.owm:
-                            #reset optimizer and scheduler as Masse et al do.
+                            #reset optimizer and scheduler between tasks as Masse et al do.
                             self.optimizer = get_optimizer(self.args, self.train_params)
                             self.scheduler = get_scheduler(self.args, self.optimizer)
+                        
+                        
 
                         if self.train_idx == len(self.args.train_order):
                             ending = True
@@ -1082,6 +874,8 @@ class Trainer:
                         running_min_error = float('inf')
                         running_no_min = 0
                         break
+
+
 
 
 
