@@ -69,9 +69,11 @@ def parse_args():
     parser.add_argument('-s', '--sequential', action='store_true', help='sequential training')
     
     parser.add_argument('--owm', action='store_true', help='use orthogonal weight modification')
+    parser.add_argument('--alpha_owm', type=float, default=0.001, help = 'regularization and invertibility-ensuring constant for owm')
     
-    # synaptic intelligence arguments
+    # 
     parser.add_argument('--synaptic_intel', action='store_true', help='use synaptic_intelligence loss to stabilize weights to those of previous task')
+    parser.add_argument('--ewc', action='store_true', help='use elastic weight consolidation loss to stabilize weights to those of previous task')
     parser.add_argument('--stab_strength', type=float, default=20, help = 'stabilization strength hyperparameter for synaptic stablization (c in paper)')
     parser.add_argument('--damp_term', type=float, default=0.01, help = 'damping hyperparameter for synaptic intelligence ')
     
@@ -332,7 +334,7 @@ if __name__ == '__main__':
             else:
                 best_loss, n_iters = trainer.train()
 
-                
+
         else:
             if args.pca_vars:
                 best_loss, n_iters, task_losses, pca_variances = trainer.train()
@@ -345,11 +347,11 @@ if __name__ == '__main__':
         csv_exists = os.path.exists(csv_path)
         with open(csv_path, 'a') as f:
             writer = csv.writer(f, delimiter=',', quotechar='|', quoting=csv.QUOTE_MINIMAL)
-            labels_csv = ['slurm_id', 'N', 'D1', 'D2', 'seed', 'rseed', 'fp', 'fb', 'mnoise', 'rnoise', 'dset', 'niter', 'tparts', 'loss']
+            labels_csv = ['slurm_id', 'N', 'D1', 'D2', 'seed', 'rseed', 'fp', 'fb', 'mnoise', 'rnoise', 'dset', 'niter', 'tparts', 'stab', 'loss']
             vals_csv = [
                 args.slurm_id, args.N, args.D1, args.D2, args.seed,
                 args.res_seed, args.fixed_pts, args.fixed_beta, args.m_noise, args.res_noise,
-                args.dataset, n_iters, '-'.join(args.train_parts), best_loss
+                args.dataset, n_iters, '-'.join(args.train_parts), args.stab_strength , best_loss
             ]
             if args.optimizer != 'lbfgs':
                 labels_csv.extend(['lr', 'epochs'])
