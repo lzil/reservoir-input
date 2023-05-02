@@ -91,7 +91,7 @@ class Trainer:
                     stab_method = 'elastic weight consolidation'
                 logging.info(f'Stabilizing trainable parameters with {stab_method}. Hyperparameter values: '.format(stab_method))
                 logging.info(f'  Stabilization strength: {self.args.stab_strength}')
-                if self.args.synpatic_intel:
+                if self.args.synaptic_intel:
                     logging.info((f'  Damping term : {self.args.damp_term}'))
         
         # self.net = BasicNetwork(self.args)
@@ -748,13 +748,15 @@ class Trainer:
 
                             for i in range(len(self.grads_list['M_u'])):
                                 mini_omega_m_u += self.weight_changes_list['M_u'][i] * self.grads_list['M_u'][i] * -1
-                                mini_omega_w_u += self.weight_changes_list['W_u'][i] * self.grads_list['W_u'][i] * -1
-                                mini_omega_j += self.weight_changes_list['J'][i] * self.grads_list['J'][i] * -1
+                                if self.args.train_parts == ['']:
+                                    mini_omega_w_u += self.weight_changes_list['W_u'][i] * self.grads_list['W_u'][i] * -1
+                                    mini_omega_j += self.weight_changes_list['J'][i] * self.grads_list['J'][i] * -1
                                 mini_omega_m_ro += self.weight_changes_list['M_ro'][i] * self.grads_list['M_ro'][i] * -1
 
                                 total_change_m_u += self.weight_changes_list['M_u'][i]
-                                total_change_w_u += self.weight_changes_list['W_u'][i]
-                                total_change_j += self.weight_changes_list['J'][i]
+                                if self.args.train_parts == ['']:
+                                    total_change_w_u += self.weight_changes_list['W_u'][i]
+                                    total_change_j += self.weight_changes_list['J'][i]
                                 total_change_m_ro += self.weight_changes_list['M_ro'][i]
                             
 
@@ -1036,6 +1038,15 @@ class Trainer:
             print(pca_vars)
 
             return running_min_error, ix, losses, pca_vars
+        
+        elif self.args.sequential:
+            mean_loss = 0
+            for idx_task_loss in losses:
+                mean_loss += idx_task_loss[1]
+            mean_loss /= len(self.args.dataset)
+            print(f'mean loss {mean_loss}')
+            
+            return running_min_error, ix , losses , mean_loss
         
         else:
             return running_min_error, ix
