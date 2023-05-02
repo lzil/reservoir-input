@@ -338,6 +338,9 @@ if __name__ == '__main__':
         else:
             if args.pca_vars:
                 best_loss, n_iters, task_losses, pca_variances = trainer.train()
+
+            elif args.sequential:
+                best_loss, n_iters, task_losses, mean_task_loss= trainer.train()
             else:
                 best_loss, n_iters = trainer.train()
 
@@ -356,12 +359,15 @@ if __name__ == '__main__':
             if args.optimizer != 'lbfgs':
                 labels_csv.extend(['lr', 'epochs'])
                 vals_csv.extend([args.lr, args.n_epochs])
-            if args.multimodal or args.one_mod:
+            if args.multimodal or args.one_mod or args.sequential:
                 many_tasks_names = [str(t[0]) for t in task_losses]
                 many_tasks_losses = [t[1] for t in task_losses]
                 
                 labels_csv.extend(many_tasks_names)
                 vals_csv.extend(many_tasks_losses)
+            if args.sequential:
+                labels_csv.extend(['mean_loss'])
+                vals_csv.extend([mean_task_loss])
             if args.pca_vars:
                 pcs_labels = ['{}_PCs'.format(i) for i in range(1,len(pca_variances)+1)]
                 labels_csv.extend(pcs_labels)
