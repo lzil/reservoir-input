@@ -366,8 +366,24 @@ if __name__ == '__main__':
                 labels_csv.extend(many_tasks_names)
                 vals_csv.extend(many_tasks_losses)
             if args.sequential:
+                
+                if args.synaptic_intel:
+                    cl_strategy = 'SI'
+                elif args.ewc:
+                    cl_strategy = 'EWC'
+                elif args.owm:
+                    cl_strategy = 'OWM'
+
+                labels_csv.extend(['cl_strat'])
+                vals_csv.extend([cl_strategy])
+
+                if args.seq_iters == 0: 
+                    labels_csv.extend(['seq_iters'])
+                    vals_csv.extend([args.seq_iters])
+
                 labels_csv.extend(['mean_loss'])
                 vals_csv.extend([mean_task_loss])
+                
             if args.pca_vars:
                 pcs_labels = ['{}_PCs'.format(i) for i in range(1,len(pca_variances)+1)]
                 labels_csv.extend(pcs_labels)
