@@ -267,6 +267,9 @@ class Trainer:
                         else:
                              synaptic_intel_penalty = self.args.stab_strength * (penalty_m_u + penalty_j + penalty_m_ro)
                         
+                        
+                        synaptic_intel_penalty.backward()
+
                     elif self.args.ewc  and self.train_idx > 0 and ewc_fish_estim == False:
                         k_loss.backward()
                         penalty_m_u = torch.sum(self.omega_m_u*(self.net.M_u.weight - self.m_u_prev)**2)
@@ -381,12 +384,13 @@ class Trainer:
             w_u_before_step = self.net.reservoir.W_u.weight.detach().clone()
             j_before_step =  self.net.reservoir.J.weight.detach().clone()
             m_ro_before_step = self.net.M_ro.weight.detach().clone()
+            
             trial_loss, etc = self.run_trial(x, y, trial, extras=True)
             
-
             if ix_callback is not None:
                 ix_callback(trial_loss, etc)
             self.optimizer.step()
+
             m_u_change= self.net.M_u.weight.detach().clone() - m_u_before_step
             w_u_change = self.net.reservoir.W_u.weight.detach().clone() - w_u_before_step
             j_change=  self.net.reservoir.J.weight.detach().clone() -j_before_step
@@ -752,35 +756,35 @@ class Trainer:
                             for i in range(len(self.grads_list['M_u'])):
                                 mini_omega_m_u += self.weight_changes_list['M_u'][i] * self.grads_list['M_u'][i] * -1
                                 total_change_m_u += self.weight_changes_list['M_u'][i]
-                            for i in range(len(self.grads_list['M_ro'])):
+                                
                                 mini_omega_m_ro += self.weight_changes_list['M_ro'][i] * self.grads_list['M_ro'][i] * -1
                                 total_change_m_ro += self.weight_changes_list['M_ro'][i]
                             
-                            if self.args.train_parts == ['']:
-                                for i in range(len(self.grads_list['W_u'])):
-                                    
+                                if self.args.train_parts == ['']:
                                     mini_omega_w_u += self.weight_changes_list['W_u'][i] * self.grads_list['W_u'][i] * -1
                                     total_change_w_u += self.weight_changes_list['W_u'][i]
-                                
-                                for i in range(len(self.grads_list['J'])):
                                     mini_omega_j += self.weight_changes_list['J'][i] * self.grads_list['J'][i] * -1
                                     total_change_j += self.weight_changes_list['J'][i]
                     
                             
 
                             max_input_m_u = mini_omega_m_u/(total_change_m_u**2 +self.args.damp_term)
-                            max_input_w_u = mini_omega_w_u/(total_change_w_u**2 + self.args.damp_term)
-                            max_input_j = mini_omega_j/(total_change_j**2 +self.args.damp_term)
-                            
                             max_input_m_ro = mini_omega_m_ro/(total_change_m_ro**2 +self.args.damp_term)
+                            if self.args.train_parts == ['']:
+                                max_input_w_u = mini_omega_w_u/(total_change_w_u**2 + self.args.damp_term)
+                                max_input_j = mini_omega_j/(total_change_j**2 +self.args.damp_term)
+                            
+                            
                             
                             
 
 
-                            task_omega_m_u= torch.maximum(torch.zeros_like(mini_omega_m_u),max_input_m_u )
-                            task_omega_w_u = torch.maximum(torch.zeros_like(mini_omega_w_u), max_input_w_u)
-                            task_omega_j= torch.maximum(torch.zeros_like(mini_omega_j),max_input_j )
+                            task_omega_m_u= torch.maximum(torch.zeros_like(mini_omega_m_u),max_input_m_u)
                             task_omega_m_ro= torch.maximum(torch.zeros_like(mini_omega_m_ro),max_input_m_ro)
+                            if self.args.train_parts == ['']:
+                                task_omega_w_u = torch.maximum(torch.zeros_like(mini_omega_w_u), max_input_w_u)
+                                task_omega_j= torch.maximum(torch.zeros_like(mini_omega_j),max_input_j )
+                            
 
                             #save weights at the end of training this task - right now this is onlu works with weights, when we use biasses we'll go m_u_weight_prev
                             self.m_u_prev =  self.net.M_u.weight.detach().clone()
@@ -793,10 +797,12 @@ class Trainer:
                             self.weight_changes_list = {'M_u':[],'W_u':[],'J':[], 'M_ro':[]}
                             
                             self.omega_m_u += task_omega_m_u
-                            self.omega_w_u +=task_omega_w_u
-                            self.omega_j += task_omega_j
                             self.omega_m_ro += task_omega_m_ro
-                        
+                            if self.args.train_parts == ['']:
+                                self.omega_w_u +=task_omega_w_u
+                                self.omega_j += task_omega_j
+                            
+                            pdb.set_trace()
                         elif self.args.ewc:
                             task_omega_m_u = torch.zeros_like(self.net.M_u.weight).detach()
 
