@@ -267,7 +267,7 @@ class Trainer:
                         else:
                              synaptic_intel_penalty = self.args.stab_strength * (penalty_m_u + penalty_j + penalty_m_ro)
                         
-                        
+
                         synaptic_intel_penalty.backward()
 
                     elif self.args.ewc  and self.train_idx > 0 and ewc_fish_estim == False:
@@ -802,7 +802,7 @@ class Trainer:
                                 self.omega_w_u +=task_omega_w_u
                                 self.omega_j += task_omega_j
                             
-                            pdb.set_trace()
+                        
                         elif self.args.ewc:
                             task_omega_m_u = torch.zeros_like(self.net.M_u.weight).detach()
 
