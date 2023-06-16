@@ -238,17 +238,17 @@ class Trainer:
                         
                 trial_loss += k_loss.detach().item()
                 if training:
-                    if self.args.synaptic_intel and self.train_idx > 0:
+                    if self.args.synaptic_intel:
                         #calculate gradients for loss on current task without SI penalty; save them
 
 
                         k_loss.backward()
                         
-                       
+                        #to do: have code work with biases
                         grads_m_u += self.net.M_u.weight.grad.detach().clone()
                         grads_w_u += self.net.reservoir.W_u.weight.grad.detach().clone()
                         grads_j += self.net.reservoir.J.weight.grad.detach().clone()
-                        grads_m_ro = self.net.M_ro.weight.grad.detach().clone()
+                        grads_m_ro += self.net.M_ro.weight.grad.detach().clone()
                         
                         
                         
@@ -267,7 +267,7 @@ class Trainer:
                         else:
                              synaptic_intel_penalty = self.args.stab_strength * (penalty_m_u + penalty_j + penalty_m_ro)
                         
-
+                        
                         synaptic_intel_penalty.backward()
 
                     elif self.args.ewc  and self.train_idx > 0 and ewc_fish_estim == False:
@@ -791,7 +791,7 @@ class Trainer:
                             self.w_u_prev = self.net.reservoir.W_u.weight.detach().clone()
                             self.j_prev =  self.net.reservoir.J.weight.detach().clone()
                             self.m_ro_prev = self.net.M_ro.weight.detach().clone()
-
+                            
                             #reset objects used to calculate omegas
                             self.grads_list = {'M_u':[],'W_u':[],'J':[], 'M_ro':[]}
                             self.weight_changes_list = {'M_u':[],'W_u':[],'J':[], 'M_ro':[]}
