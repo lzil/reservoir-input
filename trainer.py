@@ -268,8 +268,7 @@ class Trainer:
                         else:
                              synaptic_intel_penalty = self.args.stab_strength * (penalty_m_u + penalty_j + penalty_m_ro)
                         
-                        # if self.train_idx > 0:
-                        #     pdb.set_trace()
+                        
                         synaptic_intel_penalty.backward()
 
                     elif self.args.ewc  and self.train_idx > 0 and ewc_fish_estim == False:
