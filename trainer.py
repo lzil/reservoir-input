@@ -239,6 +239,7 @@ class Trainer:
                 trial_loss += k_loss.detach().item()
                 if training:
                     if self.args.synaptic_intel:
+                        #this code should run even when training first task as it collects gradient info needed to compute the omegas for the penalties(i.e. don't use additional condition self.train_idx>0)
                         #calculate gradients for loss on current task without SI penalty; save them
 
 
@@ -267,7 +268,8 @@ class Trainer:
                         else:
                              synaptic_intel_penalty = self.args.stab_strength * (penalty_m_u + penalty_j + penalty_m_ro)
                         
-                        
+                        # if self.train_idx > 0:
+                        #     pdb.set_trace()
                         synaptic_intel_penalty.backward()
 
                     elif self.args.ewc  and self.train_idx > 0 and ewc_fish_estim == False:
