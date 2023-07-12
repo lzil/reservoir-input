@@ -18,6 +18,9 @@ from tasks import * #can we do wildcard imports?
 def sigmoid(x):
     return 1/(1 + np.exp(-x))
 
+def deriv_tanh(input):
+    return 1 - torch.tanh(input)**2
+
 def get_optimizer(args, train_params):
     op = None
     if args.optimizer == 'adam':

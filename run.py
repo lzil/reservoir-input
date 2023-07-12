@@ -59,6 +59,12 @@ def parse_args():
     parser.add_argument('--out_act', type=str, default='none', help='output activation at the very end of the network')
     parser.add_argument('--net_fb', action='store_true', help='feedback from network output to input')
 
+
+    # RFLO arguments:
+    parser.add_argument('--rflo', action='store_true', help='using random feedback local online learning rule to train trainable weight')
+    parser.add_argument('--M_u_rflo_lr', type=float, default=1e-3)
+    parser.add_argument('--M_ro_rflo_lr', type=float, default=1e-3)
+
     #simultaneous training arguments
     parser.add_argument('--multimodal', action= 'store_true', help = 'multimodal setting: instances from different tasks interleaved and augmented so that many tasks can be learned simultaneously with fixed net architecture')
     parser.add_argument('--one_mod', action='store_true', help= 'train different tasks simultaneuosly through the same set of modalities')

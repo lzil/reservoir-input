@@ -22,7 +22,7 @@ import pandas as pd
 from network import M2Net
 
 from utils import log_this, load_rb, get_config, update_args
-from helpers import get_optimizer, get_scheduler, get_criteria, create_loaders, collater
+from helpers import get_optimizer, get_scheduler, get_criteria, create_loaders, collater, deriv_tanh
 
 # for PCA variances:
 from testers import get_states
@@ -215,10 +215,21 @@ class Trainer:
             grads_j = 0
             grads_m_ro = 0
         
+        if self.args.rflo:
+            tau_reciprocal = 1/self.net.reservoir.tau_x
+            phi_prime = deriv_tanh
+            if self.args.train_parts != ['']:
+                self.m_abqjs= torch.zeros((self.args.D1, self.args.L, self.args.N, x.shape[2]))
+                delta_M_u_time_series = [] # note they're already been scaled by the learning rate
+                delta_M_ro_time_series = []
+
+            
+
 
         for j in range(x.shape[2]):
             net_in = x[:,:,j]
             net_out, etc = self.net(net_in, extras=True)
+            
             outs.append(net_out)
             us.append(etc['u'])
             if not training:
@@ -227,6 +238,50 @@ class Trainer:
                 
             xs.append(etc['x'])
             vs.append(etc['v'])
+            
+            
+            bptt= True
+            if self.args.rflo:
+                bptt = False
+                eps_t = y - net_out
+                # collect the things you need to compute v_js
+                s_t = net_in 
+                if self.args.train_parts != ['']:
+                    with torch.no_grad():
+                        u_t = self.net.M_u(s_t)
+                x_t_minus_1 = xs[j-1]
+                v_rflo = self.net.reservoir.J(x_t_minus_1) + self.net.reservoir.W_u(u_t)
+
+
+                # start computing m_abq  for this time step t (j in this code)
+                if self.args.train_parts != ['']:
+                    for a in range(self.args.D1):
+                        for b in range(self.args.L):
+                            for q in range(self.args.N):
+                                if j  == 0 :
+                                    m_abqj_prev = 0
+                                else:
+                                    m_abqj_prev = self.m_abqjs[a,b,q,j-1]
+                                # compute m_ab^j(t) - which in code is m_ab^q(j):
+                                self.m_abqjs[a,b,q,j] = tau_reciprocal*phi_prime(v_rflo[:,q]) * self.net.reservoir.W_u.weight[q,a].detach()*s_t[:,b] + (1 - tau_reciprocal) * m_abqj_prev 
+                    
+                    # compute delta_M_u(t)
+                    #instantiate and populate:
+                    with torch.no_grad():
+                        delta_M_u_t = torch.zeros(self.net.M_u)
+                    for a in range(self.args.D1):
+                        for b in range(self.args.L):
+                            delta_M_u_t[a,b] = self.args.M_u_rflo_lr * torch.sum( (self.net.B @ eps_t) * self.m_abqjs[a,b,:,j])
+                    
+                    delta_M_u_time_series.append(delta_M_u_t)
+                    
+                    # compute M_ro 
+                    delta_M_ro_t = self.self.args.M_ro_rflo_lr * eps_t @ xs[j].T
+                    delta_M_ro_time_series.append(delta_M_ro_t)
+
+                    
+                            
+            
             # t-BPTT with parameter k
             if (j+1) % k == 0:
                 # the first timestep with which to do BPTT
@@ -237,7 +292,7 @@ class Trainer:
                     
                         
                 trial_loss += k_loss.detach().item()
-                if training:
+                if training and not self.args.rlfo:
                     if self.args.synaptic_intel:
                         #this code should run even when training first task as it collects gradient info needed to compute the omegas for the penalties(i.e. don't use additional condition self.train_idx>0)
                         #calculate gradients for loss on current task without SI penalty; save them
@@ -290,7 +345,7 @@ class Trainer:
                         if 'sp-bce' in self.args.loss:
                             #clip gradients
                             nn.utils.clip_grad_norm_(self.net.parameters(), max_norm=1)
-        if self.args.owm and self.train_idx > 0 and training:
+        if self.args.owm and self.train_idx > 0 and training and not self.args.rflo:
             if self.args.owm:
                 if self.args.train_parts == [''] and self.args.D1 == 0 and self.args.D2 == 0:
                 
