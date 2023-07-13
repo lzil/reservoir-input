@@ -216,12 +216,16 @@ class Trainer:
             grads_m_ro = 0
         
         if self.args.rflo:
-            tau_reciprocal = 1/self.net.reservoir.tau_x
+            tau_reciprocal = torch.tensor(1/self.net.reservoir.tau_x)
             phi_prime = deriv_tanh
             if self.args.train_parts != ['']:
-                self.m_abqjs= torch.zeros((self.args.D1, self.args.L, self.args.N, x.shape[2]))
-                delta_M_u_time_series = [] # note they're already been scaled by the learning rate
+                W_u = self.net.reservoir.W_u.weight.detach()
+                self.m_abqjs= torch.zeros((self.args.D1, self.args.L+self.args.T, self.args.N, x.shape[2]))
+                delta_M_u_time_series = [] # note they've already been scaled by the learning rate
                 delta_M_ro_time_series = []
+
+
+                m_abqj_prev = torch.zeros((self.args.D1, self.args.L+self.args.T, self.args.N, x.shape[2]))
 
             
 
@@ -241,9 +245,10 @@ class Trainer:
             
             
             bptt= True
-            if self.args.rflo:
+            if self.args.rflo and training:
                 bptt = False
-                eps_t = y - net_out
+                with torch.no_grad():
+                    eps_t = y[:,:,j] - net_out
                 # collect the things you need to compute v_js
                 s_t = net_in 
                 if self.args.train_parts != ['']:
@@ -252,32 +257,56 @@ class Trainer:
                 x_t_minus_1 = xs[j-1]
                 v_rflo = self.net.reservoir.J(x_t_minus_1) + self.net.reservoir.W_u(u_t)
 
-
+                
                 # start computing m_abq  for this time step t (j in this code)
                 if self.args.train_parts != ['']:
-                    for a in range(self.args.D1):
-                        for b in range(self.args.L):
-                            for q in range(self.args.N):
-                                if j  == 0 :
-                                    m_abqj_prev = 0
-                                else:
-                                    m_abqj_prev = self.m_abqjs[a,b,q,j-1]
-                                # compute m_ab^j(t) - which in code is m_ab^q(j):
-                                self.m_abqjs[a,b,q,j] = tau_reciprocal*phi_prime(v_rflo[:,q]) * self.net.reservoir.W_u.weight[q,a].detach()*s_t[:,b] + (1 - tau_reciprocal) * m_abqj_prev 
+                    if j == 0: 
+                        m_abqj_prev = torch.zeros((self.args.D1, self.args.L+self.args.T, self.args.N))
+                    else:
+                        m_abqj_prev = self.m_abqjs[:,:,:, j-1]
+                    
+                    #vectorise (reshape and manipulate things to avoid nested for loops):
+                   
+                    v_rflo = v_rflo.unsqueeze(2)
+                    v_rflo = v_rflo.expand(self.args.D1,self.args.N,self.args.L+self.args.T).transpose(-1,-2)
+                    # s_t 
+                    s_t_expanded = s_t.repeat(self.args.D1,1)
+                    s_t_expanded = s_t_expanded.unsqueeze(2)
+                    s_t_expanded = s_t_expanded.repeat(1,1, self.args.N)
+                    # W_u 
+                    W_u_clone = self.net.reservoir.W_u.weight.detach().clone()
+                    W_u_expanded = W_u_clone.T.unsqueeze(1)
+                    W_u_expanded =  W_u_expanded.repeat_interleave(self.args.L+self.args.T, dim=1)
+
+                  
+                    
+                    self.m_abqjs[:,:,:,j] = tau_reciprocal * phi_prime(v_rflo) * W_u_expanded * s_t_expanded + (1-tau_reciprocal)*m_abqj_prev
+
+
+                    # for a in range(self.args.D1):
+                    #     for b in range(self.args.L):
+                    #         for q in range(self.args.N):
+                    #             if j  == 0 :
+                    #                 m_abqj_prev = 0
+                    #             else:
+                    #                 m_abqj_prev = self.m_abqjs[a,b,q,j-1]
+                    #             # compute m_ab^j(t) - which in code is m_ab^q(j):
+                    #             self.m_abqjs[a,b,q,j] = tau_reciprocal*phi_prime(v_rflo[:,q]) * self.net.reservoir.W_u.weight[q,a].detach()*s_t[:,b] + (1 - tau_reciprocal) * m_abqj_prev 
                     
                     # compute delta_M_u(t)
                     #instantiate and populate:
                     with torch.no_grad():
-                        delta_M_u_t = torch.zeros(self.net.M_u)
-                    for a in range(self.args.D1):
-                        for b in range(self.args.L):
-                            delta_M_u_t[a,b] = self.args.M_u_rflo_lr * torch.sum( (self.net.B @ eps_t) * self.m_abqjs[a,b,:,j])
-                    
-                    delta_M_u_time_series.append(delta_M_u_t)
-                    
-                    # compute M_ro 
-                    delta_M_ro_t = self.self.args.M_ro_rflo_lr * eps_t @ xs[j].T
-                    delta_M_ro_time_series.append(delta_M_ro_t)
+                        delta_M_u_t = torch.zeros((self.args.D1, self.args.L+self.args.T))
+                        for a in range(self.args.D1):
+                            for b in range(self.args.L+self.args.T):
+                                
+                                delta_M_u_t[a,b] = self.args.M_u_rflo_lr * torch.sum( (self.net.B @ eps_t[0]) * self.m_abqjs[a,b,:,j]) #note take first and (for now) only batch of errors
+                        delta_M_u_time_series.append(delta_M_u_t)
+                        
+                        # compute M_ro 
+                        
+                        delta_M_ro_t = self.args.M_ro_rflo_lr * eps_t[0].unsqueeze(1) @ xs[j][0].unsqueeze(1).T #turn eps_t[0] from tensor with shape [3] to shape [3,1] 
+                        delta_M_ro_time_series.append(delta_M_ro_t)
 
                     
                             
@@ -289,10 +318,10 @@ class Trainer:
                 k_targets = y[:,:,j+1-k:j+1]
                 for c in self.criteria:
                     k_loss += c(k_outs, k_targets, i=trial, t_ix=j+1-k)
-                    
+
                         
                 trial_loss += k_loss.detach().item()
-                if training and not self.args.rlfo:
+                if training and not self.args.rflo:
                     if self.args.synaptic_intel:
                         #this code should run even when training first task as it collects gradient info needed to compute the omegas for the penalties(i.e. don't use additional condition self.train_idx>0)
                         #calculate gradients for loss on current task without SI penalty; save them
@@ -345,6 +374,9 @@ class Trainer:
                         if 'sp-bce' in self.args.loss:
                             #clip gradients
                             nn.utils.clip_grad_norm_(self.net.parameters(), max_norm=1)
+
+                k_loss = 0.
+                self.net.reservoir.x = self.net.reservoir.x.detach()
         if self.args.owm and self.train_idx > 0 and training and not self.args.rflo:
             if self.args.owm:
                 if self.args.train_parts == [''] and self.args.D1 == 0 and self.args.D2 == 0:
@@ -387,9 +419,10 @@ class Trainer:
                     self.net.M_u.weight.grad =  self.P_u @ self.net.M_u.weight.grad @ self.P_s
                     self.net.M_ro.weight.grad = self.P_z @ self.net.M_ro.weight.grad @ self.P_x
                  
-                            
-                k_loss = 0.
-                self.net.reservoir.x = self.net.reservoir.x.detach()
+        if training and self.args.rflo:
+            self.net.M_u.weight.grad = sum(delta_M_u_time_series)    
+            self.net.M_ro.weight.grad = sum(delta_M_ro_time_series)
+        
                             
                 
 
