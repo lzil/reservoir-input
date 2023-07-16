@@ -249,8 +249,10 @@ class Trainer:
                 bptt = False
                 with torch.no_grad():
                     eps_t = y[:,:,j] - net_out
+                
                 # collect the things you need to compute v_js
                 s_t = net_in 
+
                 if self.args.train_parts != ['']:
                     with torch.no_grad():
                         u_t = self.net.M_u(s_t)
@@ -270,6 +272,8 @@ class Trainer:
                     v_rflo = v_rflo.unsqueeze(2)
                     v_rflo = v_rflo.expand(self.args.D1,self.args.N,self.args.L+self.args.T).transpose(-1,-2)
                     # s_t 
+                    # now according to their rule we need s_t at the previous timestep 
+                    s_t = x[:, :, j-1]
                     s_t_expanded = s_t.repeat(self.args.D1,1)
                     s_t_expanded = s_t_expanded.unsqueeze(2)
                     s_t_expanded = s_t_expanded.repeat(1,1, self.args.N)
@@ -308,7 +312,7 @@ class Trainer:
                         delta_M_ro_t = self.args.M_ro_rflo_lr * eps_t[0].unsqueeze(1) @ xs[j][0].unsqueeze(1).T #turn eps_t[0] from tensor with shape [3] to shape [3,1] 
                         delta_M_ro_time_series.append(delta_M_ro_t)
 
-                    
+                        
                             
             
             # t-BPTT with parameter k
@@ -420,9 +424,9 @@ class Trainer:
                     self.net.M_ro.weight.grad = self.P_z @ self.net.M_ro.weight.grad @ self.P_x
                  
         if training and self.args.rflo:
-            self.net.M_u.weight.grad = sum(delta_M_u_time_series)    
-            self.net.M_ro.weight.grad = sum(delta_M_ro_time_series)
-        
+            self.net.M_u.weight.grad = - 1* sum(delta_M_u_time_series)    
+            self.net.M_ro.weight.grad = -1* sum(delta_M_ro_time_series)
+            
                             
                 
 
