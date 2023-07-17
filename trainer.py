@@ -1116,7 +1116,12 @@ class Trainer:
                             self.log_model(name='model_best.pth')
                     else:
                         running_no_min += self.log_interval
-                    if running_no_min > self.args.patience:
+
+                    if self.args.test_loss_stop and test_loss < self.args.test_threshold:
+                        logging.info(f'test_loss < test_threshold of {self.args.test_threshold}. ending')
+                        ending = True
+
+                    elif running_no_min > self.args.patience:
                         logging.info(f'iteration {ix}: no min for {self.args.patience} samples. ending')
                         ending = True
                 if ending:
@@ -1135,6 +1140,11 @@ class Trainer:
             self.csv_path.close()
 
         logging.info(f'END | iterations: {(ix // self.log_interval) * self.log_interval} | best loss: {running_min_error}')
+        
+        
+       
+        
+        
         # for pca explained variances
         if self.args.pca_vars:
             x,y, trials = next(iter(self.test_loader))

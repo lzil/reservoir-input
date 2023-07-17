@@ -93,7 +93,9 @@ def parse_args():
     parser.add_argument('--same_test', action='store_true', help='use entire dataset for both training and testing')
     parser.add_argument('--seq_iters', type = int, default=0, help="alternative to seq_threshold; train each task for fixed no. of iterations. If 0, then sequential threshold is used")
 
-
+    #stopping criteria
+    parser.add_argument('--test_loss_stop', action = 'store_true', help= 'end training based off test performance - namely test loss being less than a threshold value')
+    parser.add_argument('--test_threshold', type=float, default=1, help='threshold for having solved a task')
 
     # training arguments
     parser.add_argument('--optimizer', choices=['adam', 'sgd', 'rmsprop', 'lbfgs'], default='adam')
