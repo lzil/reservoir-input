@@ -220,12 +220,17 @@ class Trainer:
             phi_prime = deriv_tanh
             if self.args.train_parts != ['']:
                 W_u = self.net.reservoir.W_u.weight.detach()
-                self.m_abqjs= torch.zeros((self.args.D1, self.args.L+self.args.T, self.args.N, x.shape[2]))
+                
                 delta_M_u_time_series = [] # note they've already been scaled by the learning rate
                 delta_M_ro_time_series = []
+                if self.args.batch_size ==1:
 
+                    self.m_abqjs= torch.zeros((self.args.D1, self.args.L+self.args.T, self.args.N, x.shape[2]))
+                    m_abqj_prev = torch.zeros((self.args.D1, self.args.L+self.args.T, self.args.N, x.shape[2]))
 
-                m_abqj_prev = torch.zeros((self.args.D1, self.args.L+self.args.T, self.args.N, x.shape[2]))
+                else:
+                    self.m_abqjs= torch.zeros((self.args.batch_size, self.args.D1, self.args.L+self.args.T, self.args.N, x.shape[2]))
+                    m_abqj_prev = torch.zeros((self.args.batch_size,self.args.D1, self.args.L+self.args.T, self.args.N, x.shape[2]))
 
             
 
@@ -244,75 +249,161 @@ class Trainer:
             vs.append(etc['v'])
             
             
-            bptt= True
+        
             if self.args.rflo and training:
-                bptt = False
-                with torch.no_grad():
-                    eps_t = y[:,:,j] - net_out
-                
-                # collect the things you need to compute v_js
-                s_t = net_in 
 
-                if self.args.train_parts != ['']:
+
+                if self.args.batch_size == 1:
+                    bptt = False
                     with torch.no_grad():
-                        u_t = self.net.M_u(s_t)
-                x_t_minus_1 = xs[j-1]
-                v_rflo = self.net.reservoir.J(x_t_minus_1) + self.net.reservoir.W_u(u_t)
-
-                
-                # start computing m_abq  for this time step t (j in this code)
-                if self.args.train_parts != ['']:
-                    if j == 0: 
-                        m_abqj_prev = torch.zeros((self.args.D1, self.args.L+self.args.T, self.args.N))
-                    else:
-                        m_abqj_prev = self.m_abqjs[:,:,:, j-1]
+                        eps_t = y[:,:,j] - net_out
                     
-                    #vectorise (reshape and manipulate things to avoid nested for loops):
-                   
-                    v_rflo = v_rflo.unsqueeze(2)
-                    v_rflo = v_rflo.expand(self.args.D1,self.args.N,self.args.L+self.args.T).transpose(-1,-2)
-                    # s_t 
-                    # now according to their rule we need s_t at the previous timestep 
-                    s_t = x[:, :, j-1]
-                    s_t_expanded = s_t.repeat(self.args.D1,1)
-                    s_t_expanded = s_t_expanded.unsqueeze(2)
-                    s_t_expanded = s_t_expanded.repeat(1,1, self.args.N)
-                    # W_u 
-                    W_u_clone = self.net.reservoir.W_u.weight.detach().clone()
-                    W_u_expanded = W_u_clone.T.unsqueeze(1)
-                    W_u_expanded =  W_u_expanded.repeat_interleave(self.args.L+self.args.T, dim=1)
+                    # collect the things you need to compute v_js
+                    s_t = net_in 
 
-                  
+                    if self.args.train_parts != ['']:
+                        with torch.no_grad():
+                            u_t = self.net.M_u(s_t)
+                    x_t_minus_1 = xs[j-1]
+                    v_rflo = self.net.reservoir.J(x_t_minus_1) + self.net.reservoir.W_u(u_t) 
+                    # v_rflo is [1,300] at this point
+
                     
-                    self.m_abqjs[:,:,:,j] = tau_reciprocal * phi_prime(v_rflo) * W_u_expanded * s_t_expanded + (1-tau_reciprocal)*m_abqj_prev
+                    # start computing m_abq  for this time step t (j in this code)
+                    if self.args.train_parts != ['']:
+                        if j == 0: 
+                            m_abqj_prev = torch.zeros((self.args.D1, self.args.L+self.args.T, self.args.N))
+                        else:
+                            m_abqj_prev = self.m_abqjs[:,:,:, j-1]
+                        
+                        #vectorise (reshape and manipulate things to avoid nested for loops):
+                        pdb.set_trace()
+                        v_rflo = v_rflo.unsqueeze(2)
+                        v_rflo = v_rflo.expand(self.args.D1,self.args.N,self.args.L+self.args.T).transpose(-1,-2)
+                        # s_t 
+                        # now according to their rule we need s_t at the previous timestep 
+                        s_t = x[:, :, j-1]
+                        s_t_expanded = s_t.repeat(self.args.D1,1)
+                        s_t_expanded = s_t_expanded.unsqueeze(2)
+                        s_t_expanded = s_t_expanded.repeat(1,1, self.args.N)
+                        # W_u 
+                        W_u_clone = self.net.reservoir.W_u.weight.detach().clone()
+                        W_u_expanded = W_u_clone.T.unsqueeze(1)
+                        W_u_expanded =  W_u_expanded.repeat_interleave(self.args.L+self.args.T, dim=1)
 
-
-                    # for a in range(self.args.D1):
-                    #     for b in range(self.args.L):
-                    #         for q in range(self.args.N):
-                    #             if j  == 0 :
-                    #                 m_abqj_prev = 0
-                    #             else:
-                    #                 m_abqj_prev = self.m_abqjs[a,b,q,j-1]
-                    #             # compute m_ab^j(t) - which in code is m_ab^q(j):
-                    #             self.m_abqjs[a,b,q,j] = tau_reciprocal*phi_prime(v_rflo[:,q]) * self.net.reservoir.W_u.weight[q,a].detach()*s_t[:,b] + (1 - tau_reciprocal) * m_abqj_prev 
                     
-                    # compute delta_M_u(t)
-                    #instantiate and populate:
+                        
+                        self.m_abqjs[:,:,:,j] = tau_reciprocal * phi_prime(v_rflo) * W_u_expanded * s_t_expanded + (1-tau_reciprocal)*m_abqj_prev
+
+
+                        # for a in range(self.args.D1):
+                        #     for b in range(self.args.L):
+                        #         for q in range(self.args.N):
+                        #             if j  == 0 :
+                        #                 m_abqj_prev = 0
+                        #             else:
+                        #                 m_abqj_prev = self.m_abqjs[a,b,q,j-1]
+                        #             # compute m_ab^j(t) - which in code is m_ab^q(j):
+                        #             self.m_abqjs[a,b,q,j] = tau_reciprocal*phi_prime(v_rflo[:,q]) * self.net.reservoir.W_u.weight[q,a].detach()*s_t[:,b] + (1 - tau_reciprocal) * m_abqj_prev 
+                        
+                        # compute delta_M_u(t)
+                        #instantiate and populate:
+                        with torch.no_grad():
+                            delta_M_u_t = torch.zeros((self.args.D1, self.args.L+self.args.T))
+                            for a in range(self.args.D1):
+                                for b in range(self.args.L+self.args.T):
+                                    
+                                    delta_M_u_t[a,b] = self.args.M_u_rflo_lr * torch.sum( (self.net.B @ eps_t[0]) * self.m_abqjs[a,b,:,j]) #note take first and (for now) only batch of errors
+                            delta_M_u_time_series.append(delta_M_u_t)
+                            
+                            # compute M_ro 
+                            
+                            delta_M_ro_t = self.args.M_ro_rflo_lr * eps_t[0].unsqueeze(1) @ xs[j][0].unsqueeze(1).T #turn eps_t[0] from tensor with shape [3] to shape [3,1] 
+                            delta_M_ro_time_series.append(delta_M_ro_t)
+                            
+                else:
+                    bptt = False
                     with torch.no_grad():
-                        delta_M_u_t = torch.zeros((self.args.D1, self.args.L+self.args.T))
-                        for a in range(self.args.D1):
-                            for b in range(self.args.L+self.args.T):
-                                
-                                delta_M_u_t[a,b] = self.args.M_u_rflo_lr * torch.sum( (self.net.B @ eps_t[0]) * self.m_abqjs[a,b,:,j]) #note take first and (for now) only batch of errors
-                        delta_M_u_time_series.append(delta_M_u_t)
+                        eps_t = y[:,:,j] - net_out
+                    
+                    # collect the things you need to compute v_js
+                    s_t = net_in 
+
+                    if self.args.train_parts != ['']:
+                        with torch.no_grad():
+                            u_t = self.net.M_u(s_t)
+                    x_t_minus_1 = xs[j-1]
+                    v_rflo = self.net.reservoir.J(x_t_minus_1) + self.net.reservoir.W_u(u_t)
+
+                    
+                    # start computing m_abq  for this time step t (j in this code)
+                    if self.args.train_parts != ['']:
+                        if j == 0: 
+                            m_abqj_prev = torch.zeros((self.args.batch_size, self.args.D1, self.args.L+self.args.T, self.args.N))
+                        else:
+                            m_abqj_prev = self.m_abqjs[:,:,:,:, j-1]
                         
-                        # compute M_ro 
+                        #vectorise (reshape and manipulate things to avoid nested for loops):
                         
-                        delta_M_ro_t = self.args.M_ro_rflo_lr * eps_t[0].unsqueeze(1) @ xs[j][0].unsqueeze(1).T #turn eps_t[0] from tensor with shape [3] to shape [3,1] 
-                        delta_M_ro_time_series.append(delta_M_ro_t)
+                        v_rflo = v_rflo.unsqueeze(2)  # [1,300,1]
+                        v_rflo = v_rflo.unsqueeze(1).transpose(-1,-2)
+                        v_rflo = v_rflo.repeat(1,self.args.D1,self.args.L+self.args.T,1)
+                       
+                        # s_t                       [50,4,300]
+                        # now according to their rule we need s_t at the previous timestep 
+                        s_t = x[:, :, j-1]
+                        s_t_expanded = s_t.unsqueeze(1).repeat(1,self.args.D1,1)
+                        
+                        s_t_expanded = s_t_expanded.unsqueeze(-1).repeat(1,1,1, self.args.N)
+                        
+                        
+                        # W_u 
+                        W_u_clone = self.net.reservoir.W_u.weight.detach().clone()
+                        W_u_expanded = W_u_clone.T.unsqueeze(1)
+                        W_u_expanded = W_u_expanded.unsqueeze(0)
+                        W_u_expanded = W_u_expanded.repeat(self.args.batch_size,1,1,1)
+                        W_u_expanded =  W_u_expanded.repeat_interleave(self.args.L+self.args.T, dim=2)
+                        
+                    
+                        
+                        self.m_abqjs[:,:,:,:,j] = tau_reciprocal * phi_prime(v_rflo) * W_u_expanded * s_t_expanded + (1-tau_reciprocal)*m_abqj_prev
 
                         
+                        # for a in range(self.args.D1):
+                        #     for b in range(self.args.L):
+                        #         for q in range(self.args.N):
+                        #             if j  == 0 :
+                        #                 m_abqj_prev = 0
+                        #             else:
+                        #                 m_abqj_prev = self.m_abqjs[a,b,q,j-1]
+                        #             # compute m_ab^j(t) - which in code is m_ab^q(j):
+                        #             self.m_abqjs[a,b,q,j] = tau_reciprocal*phi_prime(v_rflo[:,q]) * self.net.reservoir.W_u.weight[q,a].detach()*s_t[:,b] + (1 - tau_reciprocal) * m_abqj_prev 
+                        
+                        # compute delta_M_u(t)
+                        #instantiate and populate:
+                        with torch.no_grad():
+                            delta_M_u_t = torch.zeros((self.args.batch_size,self.args.D1, self.args.L+self.args.T))
+                            
+                            
+                            batch_B = self.net.B.unsqueeze(0)
+                            batch_B = batch_B.repeat(self.args.batch_size,1,1)
+                            
+                            eps_t = eps_t.unsqueeze(-1)
+                            B_mul_eps_t = torch.squeeze(torch.bmm(batch_B,eps_t),-1)
+                            
+                            for a in range(self.args.D1):
+                                for b in range(self.args.L+self.args.T):
+                                    
+                                    delta_M_u_t[:, a,b] = self.args.M_u_rflo_lr * torch.sum(B_mul_eps_t * self.m_abqjs[:,a,b,:,j]) #note take first and (for now) only batch of errors
+                            
+                            
+                            delta_M_u_time_series.append(delta_M_u_t)
+                            
+                            # compute M_ro 
+                            xs_transpose_batched = xs[j].unsqueeze(-1).transpose(-1,-2)
+                            eps_mul_by_xs_transpose = torch.bmm(eps_t,xs_transpose_batched).squeeze(-1)
+                            delta_M_ro_t = self.args.M_ro_rflo_lr * eps_mul_by_xs_transpose
+                            delta_M_ro_time_series.append(delta_M_ro_t)
                             
             
             # t-BPTT with parameter k
@@ -424,8 +515,8 @@ class Trainer:
                     self.net.M_ro.weight.grad = self.P_z @ self.net.M_ro.weight.grad @ self.P_x
                  
         if training and self.args.rflo:
-            self.net.M_u.weight.grad = - 1* sum(delta_M_u_time_series)    
-            self.net.M_ro.weight.grad = -1* sum(delta_M_ro_time_series)
+            self.net.M_u.weight.grad = - 1* torch.sum(sum(delta_M_u_time_series),dim=0)/self.args.batch_size 
+            self.net.M_ro.weight.grad = -1* torch.sum(sum(delta_M_ro_time_series), dim=0)/self.args.batch_size 
             
                             
                 
