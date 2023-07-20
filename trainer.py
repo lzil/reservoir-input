@@ -459,7 +459,8 @@ class Trainer:
                         penalty_j = torch.sum(self.omega_j*(self.net.reservoir.J.weight - self.j_prev)**2)
                         penalty_m_ro = torch.sum(self.omega_m_ro * (self.net.M_ro.weight - self.m_ro_prev)**2)
 
-                        if self.args.D1 != 0 and self.args.train_parts == ['']:
+                        if self.args.D1 > 0 and self.args.train_parts == ['']:
+                            pdb.set_trace()
                             ewc_penalty = self.args.stab_strength * (penalty_m_u + penalty_w_u+ penalty_j + penalty_m_ro)
                         else:
                             ewc_penalty = self.args.stab_strength * (penalty_m_u + penalty_j + penalty_m_ro)
@@ -1011,10 +1012,10 @@ class Trainer:
 
                                 task_omega_m_u += torch.square(self.net.M_u.weight.grad).mean(dim=0)/num_batches_ewc # mean averages over no of samples in a single batch, num_of_batches gives average over number of batches 
                                 if self.args.D1 > 0:
-                                    task_omega_w_u = torch.square(self.net.reservoir.W_u.weight.grad).mean(dim=0)/num_batches_ewc
-                                task_omega_j = torch.square(self.net.reservoir.J.weight.grad).mean(dim=0)/num_batches_ewc
+                                    task_omega_w_u += torch.square(self.net.reservoir.W_u.weight.grad).mean(dim=0)/num_batches_ewc
+                                task_omega_j += torch.square(self.net.reservoir.J.weight.grad).mean(dim=0)/num_batches_ewc
                                 
-                                task_omega_m_ro = torch.square(self.net.M_ro.weight.grad).mean(dim=0)/num_batches_ewc
+                                task_omega_m_ro += torch.square(self.net.M_ro.weight.grad).mean(dim=0)/num_batches_ewc
 
                             # theta^(prev)s
                             self.m_u_prev =  self.net.M_u.weight.detach().clone()
