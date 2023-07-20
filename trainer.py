@@ -277,7 +277,7 @@ class Trainer:
                             m_abqj_prev = self.m_abqjs[:,:,:, j-1]
                         
                         #vectorise (reshape and manipulate things to avoid nested for loops):
-                        pdb.set_trace()
+                       
                         v_rflo = v_rflo.unsqueeze(2)
                         v_rflo = v_rflo.expand(self.args.D1,self.args.N,self.args.L+self.args.T).transpose(-1,-2)
                         # s_t 
@@ -515,9 +515,15 @@ class Trainer:
                     self.net.M_ro.weight.grad = self.P_z @ self.net.M_ro.weight.grad @ self.P_x
                  
         if training and self.args.rflo:
-            self.net.M_u.weight.grad = - 1* torch.sum(sum(delta_M_u_time_series),dim=0)/self.args.batch_size 
-            self.net.M_ro.weight.grad = -1* torch.sum(sum(delta_M_ro_time_series), dim=0)/self.args.batch_size 
-            
+            if self.args.batch_size > 1:
+
+                self.net.M_u.weight.grad = - 1* torch.sum(sum(delta_M_u_time_series),dim=0)/self.args.batch_size 
+                self.net.M_ro.weight.grad = -1* torch.sum(sum(delta_M_ro_time_series), dim=0)/self.args.batch_size 
+            else:
+                self.net.M_u.weight.grad = - 1* sum(delta_M_u_time_series)/self.args.batch_size 
+                self.net.M_ro.weight.grad = -1* sum(delta_M_ro_time_series)/self.args.batch_size 
+
+                
                             
                 
 
