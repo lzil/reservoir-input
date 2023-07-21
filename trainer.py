@@ -460,7 +460,7 @@ class Trainer:
                         penalty_m_ro = torch.sum(self.omega_m_ro * (self.net.M_ro.weight - self.m_ro_prev)**2)
 
                         if self.args.D1 > 0 and self.args.train_parts == ['']:
-                            pdb.set_trace()
+                            
                             ewc_penalty = self.args.stab_strength * (penalty_m_u + penalty_w_u+ penalty_j + penalty_m_ro)
                         else:
                             ewc_penalty = self.args.stab_strength * (penalty_m_u + penalty_j + penalty_m_ro)
