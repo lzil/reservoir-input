@@ -30,7 +30,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description='')
     # parser.add_argument('-L', type=int, default=5, help='latent input dimension')
     parser.add_argument('--D1', type=int, default=50, help='u dimension')
-    parser.add_argument('--D2', type=int, default=50, help='v dimension')
+    parser.add_argument('--D2', type=int, default=0, help='v dimension')
     parser.add_argument('-N', type=int, default=300, help='number of neurons in reservoir')
     # parser.add_argument('-Z', type=int, default=5, help='output dimension')
 
@@ -59,23 +59,43 @@ def parse_args():
     parser.add_argument('--out_act', type=str, default='none', help='output activation at the very end of the network')
     parser.add_argument('--net_fb', action='store_true', help='feedback from network output to input')
 
-    #multimodal arguments
+
+    # RFLO arguments:
+    parser.add_argument('--rflo', action='store_true', help='using random feedback local online learning rule to train trainable weight')
+    parser.add_argument('--M_u_rflo_lr', type=float, default=1e-3)
+    parser.add_argument('--M_ro_rflo_lr', type=float, default=1e-3)
+
+    #simultaneous training arguments
     parser.add_argument('--multimodal', action= 'store_true', help = 'multimodal setting: instances from different tasks interleaved and augmented so that many tasks can be learned simultaneously with fixed net architecture')
+    parser.add_argument('--one_mod', action='store_true', help= 'train different tasks simultaneuosly through the same set of modalities')
 
     # dataset arguments
     parser.add_argument('-d', '--dataset', type=str, default=['datasets/rsg-100-150.pkl'], nargs='+', help='dataset(s) to use. >1 means different contexts')
     # parser.add_argument('-a', '--add_tasks', type=str, nargs='+', help='add tasks to previously trained reservoir')
     parser.add_argument('-s', '--sequential', action='store_true', help='sequential training')
+    
     parser.add_argument('--owm', action='store_true', help='use orthogonal weight modification')
-    parser.add_argument('--synaptic_intel', action = 'store_true', help='use synaptic intelligence')
-    parser.add_argument('--damp_term', type=float,default = 0.002, help='damping term' )
-    parser.add_argument('--stabilization', type = float, default = 1, help='strength of regularization/stabilization')
+    parser.add_argument('--alpha_owm', type=float, default=0.001, help = 'regularization and invertibility-ensuring constant for owm')
+    
+    # 
+    parser.add_argument('--synaptic_intel', action='store_true', help='use synaptic_intelligence loss to stabilize weights to those of previous task')
+    parser.add_argument('--ewc', action='store_true', help='use elastic weight consolidation loss to stabilize weights to those of previous task')
+    parser.add_argument('--stab_strength', type=float, default=20, help = 'stabilization strength hyperparameter for synaptic stablization (c in paper)')
+    parser.add_argument('--damp_term', type=float, default=0.01, help = 'damping hyperparameter for synaptic intelligence ')
+    
+    # xdg arguments
+    parser.add_argument('--xdg', action = 'store_true', help = 'use context-dependent gating')
+    parser.add_argument('-X',type=int, default= 80, help= 'percentage of units to gate in each gated layer')
+    parser.add_argument('--gate_layers',choices=['u','v','x', 'uv', 'ux','vx','uvx'], default='uvx')
+
     parser.add_argument('-o', '--train_order', type=int, nargs='+', default=[], help='ids of tasks to train on, in order if sequential flag is enabled. empty for all')
     parser.add_argument('--seq_threshold', type=float, default=5, help='threshold for having solved a task before moving on to next one')
     parser.add_argument('--same_test', action='store_true', help='use entire dataset for both training and testing')
-    # parser.add_argument('--mm', action='store_true', help='multimodal setting: instances from different tasks interleaved and augmented so that many tasks can be learned simultaneously with fixed net architecture')
+    parser.add_argument('--seq_iters', type = int, default=0, help="alternative to seq_threshold; train each task for fixed no. of iterations. If 0, then sequential threshold is used")
 
-
+    #stopping criteria
+    parser.add_argument('--test_loss_stop', action = 'store_true', help= 'end training based off test performance - namely test loss being less than a threshold value')
+    parser.add_argument('--test_threshold', type=float, default=1, help='threshold for having solved a task')
 
     # training arguments
     parser.add_argument('--optimizer', choices=['adam', 'sgd', 'rmsprop', 'lbfgs'], default='adam')
@@ -90,6 +110,13 @@ def parse_args():
     parser.add_argument('--l2_reg', type=float, default=0, help='amount of l2 regularization')
     parser.add_argument('--s_rate', default=None, type=float, help='scheduler rate. dont use for no scheduler')
     parser.add_argument('--loss', type=str, nargs='+', default=['mse'])
+    
+
+    #pca arguments:
+    parser.add_argument('--pca_vars', action = 'store_true', help= 'perform pca on model at end of training and log cumulative explained values')
+    # bce parameters
+    parser.add_argument('--pos_weight', type=float, nargs='+', default=1, help = 'weights for positive examples in bce loss; controls precision/recall tradeoff')
+
 
     # adam lambdas
     parser.add_argument('--l1', type=float, default=1, help='weight of normal loss')
@@ -167,10 +194,19 @@ def adjust_args(args):
     # shortcut for training in designated order
     if args.sequential and len(args.train_order) == 0:
         args.train_order = list(range(len(args.dataset)))
+    if args.multimodal and len(args.train_order)==0:
+        args.train_order = list(range(len(args.dataset)))
+    if args.one_mod:
+        args.train_order = list(range(len(args.dataset)))
 
     # TODO
-    if 'rsg' in args.dataset[0]:
+
+    if  'sp-bce' in args.loss:
+        args.out_act = 'sigmoid'
+
+    elif 'rsg' in args.dataset[0]:
         args.out_act = 'exp'
+    
     else:
         args.out_act = 'none'
 
@@ -194,6 +230,7 @@ def adjust_args(args):
         for ds in args.dataset:
                 #check whether task has a fixation modality
                 config = get_config(ds, ctype='dset', to_bunch=True)
+                
                 task_has_fix = config.has_fix
                 t_type = config.t_type
                 
@@ -298,7 +335,22 @@ if __name__ == '__main__':
     if args.optimizer == 'lbfgs':
         best_loss, n_iters = trainer.optimize_lbfgs()
     elif args.optimizer in ['sgd', 'rmsprop', 'adam']:
-        best_loss, n_iters = trainer.train()
+        
+        if args.multimodal or args.one_mod:
+            if args.pca_vars:
+                best_loss, n_iters, task_losses, pca_variances = trainer.train()
+            else:
+                best_loss, n_iters = trainer.train()
+
+
+        else:
+            if args.pca_vars:
+                best_loss, n_iters, task_losses, pca_variances = trainer.train()
+
+            elif args.sequential:
+                best_loss, n_iters, task_losses, mean_task_loss= trainer.train()
+            else:
+                best_loss, n_iters = trainer.train()
 
     if args.slurm_id is not None:
         # if running many jobs, then we gonna put the results into a csv
@@ -306,15 +358,44 @@ if __name__ == '__main__':
         csv_exists = os.path.exists(csv_path)
         with open(csv_path, 'a') as f:
             writer = csv.writer(f, delimiter=',', quotechar='|', quoting=csv.QUOTE_MINIMAL)
-            labels_csv = ['slurm_id', 'N', 'D1', 'D2', 'seed', 'rseed', 'fp', 'fb', 'mnoise', 'rnoise', 'dset', 'niter', 'tparts', 'loss']
+            labels_csv = ['slurm_id', 'N', 'D1', 'D2', 'seed', 'rseed', 'fp', 'fb', 'mnoise', 'rnoise', 'dset', 'niter', 'tparts', 'stab', 'loss']
             vals_csv = [
                 args.slurm_id, args.N, args.D1, args.D2, args.seed,
                 args.res_seed, args.fixed_pts, args.fixed_beta, args.m_noise, args.res_noise,
-                args.dataset, n_iters, '-'.join(args.train_parts), best_loss
+                args.dataset, n_iters, '-'.join(args.train_parts), args.stab_strength , best_loss
             ]
             if args.optimizer != 'lbfgs':
                 labels_csv.extend(['lr', 'epochs'])
                 vals_csv.extend([args.lr, args.n_epochs])
+            if args.multimodal or args.one_mod or args.sequential:
+                many_tasks_names = [str(t[0]) for t in task_losses]
+                many_tasks_losses = [t[1] for t in task_losses]
+                
+                labels_csv.extend(many_tasks_names)
+                vals_csv.extend(many_tasks_losses)
+            if args.sequential:
+                
+                if args.synaptic_intel:
+                    cl_strategy = 'SI'
+                elif args.ewc:
+                    cl_strategy = 'EWC'
+                elif args.owm:
+                    cl_strategy = 'OWM'
+
+                labels_csv.extend(['cl_strat'])
+                vals_csv.extend([cl_strategy])
+
+                if args.seq_iters == 0: 
+                    labels_csv.extend(['seq_iters'])
+                    vals_csv.extend([args.seq_iters])
+
+                labels_csv.extend(['mean_loss'])
+                vals_csv.extend([mean_task_loss])
+                
+            if args.pca_vars:
+                pcs_labels = ['{}_PCs'.format(i) for i in range(1,len(pca_variances)+1)]
+                labels_csv.extend(pcs_labels)
+                vals_csv.extend(pca_variances)
 
             if not csv_exists:
                 writer.writerow(labels_csv)

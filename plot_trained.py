@@ -30,6 +30,7 @@ parser.add_argument('-x', '--reservoir_x_init', default=None, type=str)
 parser.add_argument('-a', '--test_all', action='store_true')
 parser.add_argument('-n', '--no_plot', action='store_true')
 parser.add_argument('-c', '--config', default=None, help='path to config file if custom')
+parser.add_argument('--xdg_gates_path', type=str, default=None, help = 'path to .pkl file containing the xdg gates')
 args = parser.parse_args()
 
 if args.config is None:
@@ -43,13 +44,28 @@ dsets = config.dataset
 net = load_model_path(args.model, config=config)
 # assuming config is in the same folder as the model
 
+if net.args.xdg:
+    with open(args.xdg_gates_path, 'rb') as f:
+        gates_dict = pickle.load(f)
+
+    net.task_gates_by_contexts = gates_dict
+
 if args.test_all:
-    _, loss = test_model(net, config)
-    print('avg summed loss (all):', loss)
+    if net.args.xdg:
+        _, loss = test_model(net, config, xdg_gates = gates_dict)
+        
+        print('avg summed loss (all):', loss)
+    else:
+        _, loss = test_model(net, config)
+        print('avg summed loss (all):', loss)
 
 if not args.no_plot:
-    data, t_losses = test_model(net, config, n_tests=12)
-    print('avg losses:')
+    if net.args.xdg:
+        data, t_losses = test_model(net, config, n_tests=12, xdg_gates=gates_dict)
+        print('avg losses:')
+    else:
+        data, t_losses = test_model(net, config, n_tests=12)
+        print('avg losses:')
     for t, j in t_losses.items():
         print(t + ': ' + str(j))
     run_id = '/'.join(args.model.split('/')[-3:-1])
@@ -58,6 +74,7 @@ if not args.no_plot:
     for i, ax in enumerate(fig.axes):
         #to delete: o
         context, ix, trial, x, y, z, loss = data[i]
+        
         xr = np.arange(x.shape[-1])
         #for trial get z posititon
 
@@ -84,8 +101,8 @@ if not args.no_plot:
                 ax.plot(xr, z[output_loc+1], color='dodgerblue', lw=2)
 
             elif type(trial) in [RSG, CSG]:
-                ax.plot(xr, y[output_loc], color='coral', alpha=1, lw=1, label='target')
-                ax.plot(xr, z[output_loc], color='cornflowerblue', alpha=1, lw=1.5, label='response')
+                ax.plot(xr, y[0], color='coral', alpha=1, lw=1, label='target')
+                ax.plot(xr, z[0], color='cornflowerblue', alpha=1, lw=1.5, label='response')
             elif 'bce' in config.loss:
                 ax.scatter(xr, y, color='coral', alpha=0.5, s=3, label='target')
                 ax.plot(xr, z, color='cornflowerblue', alpha=1, lw=1.5, label='response')
@@ -191,9 +208,11 @@ if not args.no_plot:
             elif type(trial) in [RSG, CSG]:
                 ax.plot(xr, y[0], color='coral', alpha=1, lw=1, label='target')
                 ax.plot(xr, z[0], color='cornflowerblue', alpha=1, lw=1.5, label='response')
-            elif 'bce' in config.loss:
-                ax.scatter(xr, y, color='coral', alpha=0.5, s=3, label='target')
-                ax.plot(xr, z, color='cornflowerblue', alpha=1, lw=1.5, label='response')
+            elif type(trial) is BinaryRSG:
+                
+                ax.plot(xr, x[0], color='grey', alpha=1, lw=1, label='stimulus')
+                ax.plot(xr, y[0], color='coral', alpha=1, lw=1, label='target')
+                ax.plot(xr, z[0], color='cornflowerblue', alpha=1, lw=1.5, label='response')
 
             elif type(trial) is FlipFlop:
                 for j in range(trial.dim):
