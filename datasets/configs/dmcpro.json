@@ -1,0 +1,23 @@
+{
+  "mode": "create",
+  "name": "dmcpro",
+  "config": null,
+  "t_type": "dmc-pro",
+  "n_trials": 2000,
+  "task_args": [],
+  "intervals": null,
+  "angles": null,
+  "mm": false,
+  "datasets": [
+    "datasets/rsg-100-150.pkl",
+    "datasets/dpro_1.pkl"
+  ],
+  "t_len": 450,
+  "fix_t": 50,
+  "stim_t1": 100,
+  "delay_t1": 50,
+  "stim_t2": 100,
+  "argv": "tasks.py create dmcpro -t dmc-pro",
+  "L": 5,
+  "Z": 3
+}
