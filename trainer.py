@@ -42,11 +42,18 @@ class Trainer:
             self.train_loader = self.train_loaders[self.args.train_order[self.train_idx]]
             self.test_loader = self.test_loaders[self.args.train_order[self.train_idx]]
             
-            #loader for fisher information estimation diagonals after training on each task - batch size is fixed at 256
-            if self.args.ewc:
-                _2, tests_2 = create_loaders(self.args.dataset, self.args, split_test=True, test_size =256)
-                _2, self.ewc_loaders =tests_2
-                self.ewc_loader = self.ewc_loaders[self.args.train_order[self.train_idx]]
+            #loader for fisher information estimation diagonals after training on each task - batch size is fixed at 256 or natural continual learning 
+            if self.args.ewc or self.args.ncl:
+                # make neater combine into one:
+                if self.args.ewc:
+                    _2, tests_2 = create_loaders(self.args.dataset, self.args, split_test=True, test_size =256)
+                    _2, self.ewc_loaders =tests_2
+                    self.ewc_loader = self.ewc_loaders[self.args.train_order[self.train_idx]]
+                else:
+                    _2, tests_2 = create_loaders(self.args.dataset, self.args, split_test=True, test_size =256)
+                    _2, self.ewc_loaders =tests_2
+                    self.ewc_loader = self.ewc_loaders[self.args.train_order[self.train_idx]]
+
         
         elif self.args.multimodal:
             self.train_set, self.train_loader = trains
@@ -82,7 +89,7 @@ class Trainer:
                 logging.info(f'Implementing context-dependent gating. Gating {self.args.X}% of units in layers:')
                 for layer in self.args.gate_layers:
                     logging.info(f'  {layer}')
-                
+            
             
             if self.args.synaptic_intel or self.args.ewc:
                 if self.args.synaptic_intel:
@@ -93,6 +100,10 @@ class Trainer:
                 logging.info(f'  Stabilization strength: {self.args.stab_strength}')
                 if self.args.synaptic_intel:
                     logging.info((f'  Damping term : {self.args.damp_term}'))
+
+            if self.args.ncl:
+                logging.info(f'Implementing natural continual learning with hyperparameter arguments:')
+                logging.info(f'')
         
         # self.net = BasicNetwork(self.args)
         self.net = M2Net(self.args)
@@ -706,6 +717,32 @@ class Trainer:
         return ((k-1)/k) * total_cov + (1/k) * task_cov
     def owm_update_proj(self, total_cov=None):
         return torch.inverse(self.args.alpha_owm**(-1) * total_cov + torch.eye(total_cov.shape[0]))
+    
+
+
+    def ncl_kl_div_kfa(self,A,B,C,D):
+        #computes the Kroncecker product approximation of a the sum of kronecker products defined by A,B,C, D 
+        # i.e. computes X,Y in X * Y approx_eq A*B + C* D
+        
+        # initialize X,Y by scaled additve approximation:
+        pi_opt_sqrd = (torch.trace(B)*torch.trace(C))/ (torch.trace(A) * torch.trace(D))
+        pi_opt = torch.sqrt(pi_opt_sqrd)
+        X = (A + pi_opt*C)
+        Y = (B + (1/pi_opt)*D)
+
+
+        # kl_div approximation 
+        beta = 0.3
+        iters = 100
+        n = A.shape[0]
+        m = B.shape[0]
+        for i in range(iters):
+            X_inv = torch.inverse(X)
+            Y_inv = torch.inverse(Y)
+
+            X = (1-beta)*X + beta/m (torch.trace(B@Y_inv)*A + torch.trace(D@Y_inv)*C)
+            Y = (1-beta)*Y + beta/n (torch.trace(A@X_inv)*C + torch.trace(C@X_inv)*D)
+        return X,Y 
     
     
     def train(self, ix_callback=None):
