@@ -698,18 +698,32 @@ class Trainer:
         return losses
 
 
-
-    def owm_task_cov(self,act_batch= None, already_reshaped=False):
+    # todo: rename activity covariance - it's actually a general purpose function for estimating the covariance of a layer's activity from a batch - used in ncl and owm
+    def owm_task_cov(self,act_batch= None, already_reshaped=False, ncl=False):
         #takes in activity tensor batches with size [batch_size, layer depth, timesteps] and computes covariance of these activities for a single task, averaged over trials and timesteps
         
         #reshape tensor so that all the activities are in the rows, number of rows should be equal to act_acount
-        if not already_reshaped:
-            n = act_batch.shape[0] * act_batch.shape[2] #total number of activities 
-            act_batch_reshaped = act_batch.transpose(1,2).reshape(-1, act_batch.shape[1])
-        #average of outer product of each row with itself
-            return torch.mm(act_batch_reshaped.t(), act_batch_reshaped) # don't divide by n for now 
-        else:
-            return torch.mm(act_batch.t(), act_batch)
+        # ncl option will also return the number of timesteps T needed for calculation of the Fisher matrices in ncl
+
+        if not ncl: 
+            if not already_reshaped:
+                n = act_batch.shape[0] * act_batch.shape[2] #total number of activities 
+                act_batch_reshaped = act_batch.transpose(1,2).reshape(-1, act_batch.shape[1])
+            #average of outer product of each row with itself
+                return torch.mm(act_batch_reshaped.t(), act_batch_reshaped) # don't divide by n for now 
+            else:
+                return torch.mm(act_batch.t(), act_batch)
+        if ncl:
+            if not already_reshaped:
+                T = act_batch.shape[2]
+                n = act_batch.shape[0] * act_batch.shape[2] #total number of activities 
+                act_batch_reshaped = act_batch.transpose(1,2).reshape(-1, act_batch.shape[1])
+            #average of outer product of each row with itself
+                return torch.mm(act_batch_reshaped.t(), act_batch_reshaped)/n, T # don't divide by n for now 
+            else:
+                return torch.mm(act_batch.t(), act_batch)
+
+
     
     # for later:  combineupdate cov and update projections shoul 
     def owm_update_tot_cov(self,total_cov, task_cov=None):
@@ -744,7 +758,21 @@ class Trainer:
             Y = (1-beta)*Y + beta/n (torch.trace(A@X_inv)*C + torch.trace(C@X_inv)*D)
         return X,Y 
     
-    
+
+    def fim_KFA(self,layer_inputs,loss_grad_wrt_layer_outputs):
+        # computes the Kronecker-factored approximation to the Fisher information matrix for a weight matrix
+        # output should be a pair of matrices A,G 
+        # needs to work with batches with shape [batch_size, layer depth, timesteps]
+        
+        input_cov, T = self.owm_task_cov(act_batch=layer_inputs,ncl=True )
+        output_cov, T = self.owm_task_cov(act_batch =loss_grad_wrt_layer_outputs, ncl=True ) 
+
+        #kronecker factors 
+        A = T * input_cov
+        G = output_cov
+        return A, G
+
+
     def train(self, ix_callback=None):
         ix = 0
         # for convergence testing
