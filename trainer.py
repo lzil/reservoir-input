@@ -203,7 +203,7 @@ class Trainer:
             with open(self.plot_checkpoint_path, 'wb') as f:
                 pickle.dump(self.vis_samples, f)
 
-    def run_trial(self, x, y, trial, training=True, extras=False, ewc_fish_estim=False):
+    def run_trial(self, x, y, trial, training=True, extras=False, ewc_fish_estim=False, ncl_fish_estim=False):
         self.net.reset(self.args.res_x_init, device=self.device)
         trial_loss = 0.
         k_loss = 0.
@@ -213,6 +213,11 @@ class Trainer:
             pre_act_xs=[]
         xs = []
         vs = []
+        if ncl_fish_estim: 
+            # collect vectors for covariance/FIM estimation
+            grad_wrt_us = []
+            grad_wrt_xs = []
+            grad_wrt_zs = []
         # setting up k for t-BPTT
         if training and self.args.k != 0:
             k = self.args.k
@@ -248,7 +253,7 @@ class Trainer:
 
         for j in range(x.shape[2]):
             net_in = x[:,:,j]
-            net_out, etc = self.net(net_in, extras=True)
+            net_out, etc = self.net(net_in, extras=True,ncl_fish_estim= ncl_fish_estim)
             
             outs.append(net_out)
             us.append(etc['u'])
@@ -482,6 +487,14 @@ class Trainer:
                             #clip gradients
                             nn.utils.clip_grad_norm_(self.net.parameters(), max_norm=1)
 
+                    if ncl_fish_estim:
+                        if self.args.D1 != 0:
+                            grad_wrt_us.append(etc['grad_l_wrt_u'])
+                        if self.args.train_parts =='all':
+                            grad_wrt_xs.append(etc['grad_l_wrt_x'])
+                        #gradient of output wrt the loss
+                        grad_wrt_zs.append(net_out.grad.detach().clone())
+
                 k_loss = 0.
                 self.net.reservoir.x = self.net.reservoir.x.detach()
         if self.args.owm and self.train_idx > 0 and training and not self.args.rflo:
@@ -555,6 +568,16 @@ class Trainer:
             net_xs = torch.stack(xs, dim =2)
             net_vs = torch.stack(vs, dim=2)
             net_outs = torch.stack(outs, dim=2)
+
+            if ncl_fish_estim:
+                if self.args.D1 != 0:
+                   grad_wrt_us = torch.stack(grad_wrt_us, dim=2)
+                if self.args.train_parts == ['']:
+                    grad_wrt_xs = torch.stack(grad_wrt_xs, dim=2)
+
+                grad_wrt_zs = torch.stack(grad_wrt_zs, dim=2)
+            
+
             if not training:
                 etc = {
                     'outs': net_outs,
@@ -565,12 +588,27 @@ class Trainer:
                 }
                 return trial_loss, etc
             else:
-                etc = {
-                    'outs': net_outs,
-                    'us': net_us,
-                    'xs': net_xs,
-                    'vs': net_vs
-                }
+                if not ncl_fish_estim:
+                    etc = {
+                        'outs': net_outs,
+                        'us': net_us,
+                        'xs': net_xs,
+                        'vs': net_vs
+
+                    }
+                else:
+                    etc = {
+                        'outs': net_outs,
+                        'us': net_us,
+                        'xs': net_xs,
+                        'vs': net_vs,
+                        'grad_wrt_zs': grad_wrt_zs,
+                    }
+                    if self.args.D1 !=0:
+                        etc['grad_wrt_u'] = grad_wrt_us,
+                    if self.args.train_parts == ['']:
+                        etc['grad_wrt_zs'] = grad_wrt_zs
+                        
                 return trial_loss, etc
         
         return trial_loss
