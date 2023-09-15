@@ -66,6 +66,10 @@ class M2Net(nn.Module):
         self.m1_act = get_activation(self.args.m1_act)
         self.m2_act = get_activation(self.args.m2_act)
 
+        if self.args.rflo:
+            self.B = torch.randn(self.args.N, self.args.Z)
+
+
         self._init_vars()
         self.reset()
 
@@ -230,14 +234,43 @@ class M2Net(nn.Module):
         self.M_u.weight.data = torch.cat((M, torch.zeros((M.shape[0],1))), dim=1)
         self.args.T += 1
 
-    def forward(self, o, extras=False):
+
+    #hooks for ncl activity gradients
+    def save_u_grad(self,grad):
+        self.grad_list_u.append(grad)
+    
+    
+
+    def forward(self, o, extras=False, ncl_fish_estim=False):
         # pass through the forward part
         # o should have shape [batch size, self.args.T + self.args.L]
+        # ncl_fish_estim is going to be a list of strings containing the names of the  weights to which ncl is applied
+        # it will add the derivatives of te loss w.r.t the activities (needed for the fish estims) to the extras 
+        
+        if ncl_fish_estim  is not None:
+            
+            
+            self.grad_list_z = []
+
         if hasattr(self.args, 'net_fb') and self.args.net_fb:
             self.z = self.z.expand(o.shape[0], self.z.shape[1])
             oz = torch.cat((o, self.z), dim=1)
             
             u = self.m1_act(self.M_u(oz))
+
+        elif ncl_fish_estim and self.args.D1 != 0:
+            grad_u = None
+            def save_grad_u(grad):
+                nonlocal grad_u 
+                grad_u = grad
+            
+            u_pre_act = self.M_u(o)
+            handle_u = u_pre_act.register_hook(save_grad_u)
+            u = self.m1_act(u_pre_act)
+            # remove hook 
+            handle_u.remove()
+        
+        
         else:
             u = self.m1_act(self.M_u(o))
 
@@ -251,7 +284,7 @@ class M2Net(nn.Module):
             if self.args.xdg and 'x' in self.args.gate_layers:
                 v, etc = self.reservoir(u, extras=True, x_mask = self.x_mask)
             else:
-                v, etc = self.reservoir(u, extras=True)
+                v, etc = self.reservoir(u, extras=True,ncl_fish_estim = ncl_fish_estim)
 
         else: 
             if self.args.xdg and 'x' in self.args.gate_layers:
@@ -269,7 +302,11 @@ class M2Net(nn.Module):
         if not extras:
             return self.z
         elif self.args.use_reservoir:
-            return self.z, {'u': u, 'x': etc['x'],'pre_act_x': etc['pre_act_x'] ,'v': v}
+            if not ncl_fish_estim:
+                return self.z, {'u': u, 'x': etc['x'],'pre_act_x': etc['pre_act_x'] ,'v': v}
+            elif ncl_fish_estim:
+                if self.args.train_parts == ['']:
+                    return self.z, {'u': u, 'x': etc['x'],'pre_act_x': etc['pre_act_x'] ,'v': v, 'grad_l_wrt_x':etc['grad_l_wrt_x'], 'grad_l_wrt_u':grad_u}
             
         else:
             return self.z, {'u': u, 'v': v}
@@ -341,19 +378,41 @@ class M2Reservoir(nn.Module):
             self.x = self.x + delta_x
         self.x.detach_()
 
+    def save_x_grad(self, grad):
+        self.grad_list_x.append(grad)
+
     # extras currently doesn't do anything. maybe add x val, etc.
-    def forward(self, u=None, extras=False, x_mask=None):
+    def forward(self, u=None, extras=False, x_mask=None, ncl_fish_estim=False):
+        
+        
+
         if self.dynamics_mode == 0:
             #gate xs if specified
             
             if u is None:
                 g = self.activation(self.J(self.x))
+
+            elif ncl_fish_estim and self.args.train_parts == ['']:
+                grad_x  = None
+                def save_grad_x(grad):
+                    nonlocal grad_x
+                    grad_x = grad
+                
+                
+                pre_act_x = self.J(self.x) + self.W_u(u)
+                handle_x = pre_act_x.register_hook(self.save_grad_x)
+                handle_x.remove()
+
+                g = self.activation(pre_act_x)
             else:
+                
                 g = self.activation(self.J(self.x) + self.W_u(u))
             # adding any inherent reservoir noise
             if self.args.res_noise > 0:
                 g = g + torch.normal(torch.zeros_like(g), self.args.res_noise)
             delta_x = (-self.x + g) / self.tau_x
+            
+
             pre_act_x = self.x.detach()
             self.x = self.x + delta_x
             
@@ -378,7 +437,10 @@ class M2Reservoir(nn.Module):
             v = self.W_ro(self.r)
 
         if extras:
-            etc = {'x': self.x.detach(), 'pre_act_x': pre_act_x.detach()}
+            if not ncl_fish_estim:
+                etc = {'x': self.x.detach(), 'pre_act_x': pre_act_x.detach()}
+            else:
+                 etc = {'x': self.x.detach(), 'pre_act_x': pre_act_x.detach(), 'grad_l_wrt_x': grad_x}
             return v, etc
         return v
 
