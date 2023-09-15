@@ -50,9 +50,9 @@ class Trainer:
                     _2, self.ewc_loaders =tests_2
                     self.ewc_loader = self.ewc_loaders[self.args.train_order[self.train_idx]]
                 else:
-                    _2, tests_2 = create_loaders(self.args.dataset, self.args, split_test=True, test_size =256)
-                    _2, self.ewc_loaders =tests_2
-                    self.ewc_loader = self.ewc_loaders[self.args.train_order[self.train_idx]]
+                    _2, tests_2 = create_loaders(self.args.dataset, self.args, split_test=True, test_size =2048)
+                    _2, self.ncl_loaders =tests_2
+                    self.ncl_loader = self.ncl_loaders[self.args.train_order[self.train_idx]]
 
         
         elif self.args.multimodal:
@@ -563,8 +563,8 @@ class Trainer:
         if extras:
             
             net_us = torch.stack(us, dim=2)
-            if not training:
-                net_pre_act_xs = torch.stack(xs,dim=2)
+            
+            net_pre_act_xs = torch.stack(xs,dim=2)
             net_xs = torch.stack(xs, dim =2)
             net_vs = torch.stack(vs, dim=2)
             net_outs = torch.stack(outs, dim=2)
@@ -601,14 +601,15 @@ class Trainer:
                         'outs': net_outs,
                         'us': net_us,
                         'xs': net_xs,
+                        'pre_act_xs': net_pre_act_xs,
                         'vs': net_vs,
                         'grad_wrt_zs': grad_wrt_zs,
                     }
                     if self.args.D1 !=0:
                         etc['grad_wrt_u'] = grad_wrt_us,
                     if self.args.train_parts == ['']:
-                        etc['grad_wrt_zs'] = grad_wrt_zs
-                        
+                        etc['grad_wrt_xs'] = grad_wrt_xs
+
                 return trial_loss, etc
         
         return trial_loss
@@ -1134,6 +1135,50 @@ class Trainer:
                             self.omega_j += task_omega_j
                             self.omega_m_ro += task_omega_m_ro
 
+                        
+                        
+                        elif self.args.ncl:
+                            x, y, info = next(iter(self.ncl_loader))
+                            trial_loss , etc = self.run_trial(x,y, info, extras=True, ncl_fish_estim=True)
+
+                            
+
+
+
+                            # update fisher matrix components i.e. the kroncker products A,G for the sets of weights
+                            if self.args.D1 !=0:
+                                # F_M_u is always computed:
+                                s_ins= x
+                                grad_wrt_us = etc['grad_wrt_u']
+                                #kroncker factored of FIM:  F_M_u = A \kron_prod G
+                                A_m_u, G_m_u = self.fim_KFA(s_ins,grad_wrt_us)
+
+                                if self.args.train_parts == '':
+                                    # recurrent inputs
+                                    us = etc['us'] # how do we know that these are preactivation us? check if ncl doesn't work
+                                    rec_xs = etc['pre_act_xs']
+                                    q_xs_us = torch.cat((rec_xs, us), dim =1) 
+                                    # gradients of recurrent outputs 
+                                    grad_xs = etc['grad_wrt_xs']
+                                    # F_W
+                                    A_w, G_w = self.fim_KFA(q_xs_us,grad_xs)
+                            
+                            else:
+                                s_ins= x
+                                rec_xs = etc['pre_act_xs']
+                                q_xs_ins = torch.cat((rec_xs, us), dim =1) 
+                                grad_xs = etc['grad_wrt_xs']
+                                A_w, G_w = self.fim_KFA(q_xs_ins. grad_xs)
+                            
+                            
+
+                                    
+                                # else:
+
+                                
+
+
+                            # c
 
                             
                         
