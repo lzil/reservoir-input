@@ -670,7 +670,7 @@ class Trainer:
                 
                 self.M_m_ro = self.args.ncl_rho*self.M_m_ro + self.net.M_ro.weight.grad + self.G_m_ro @ (self.net.M_ro.weight - self.m_ro_prev) @ self.A_m_ro
                 
-                self.net.M_ro.weight = nn.Parameter(self.net.M_ro.weight.detach().clone() - self.args.ncl_lr * (self.p_scalar**2)*self.P_L_m_ro @ self.M_m_ro @ self.P_R_m_ro)
+                self.net.M_ro.weight.data -= self.args.ncl_lr * (self.p_scalar**2)*self.P_L_m_ro @ self.M_m_ro @ self.P_R_m_ro
                 
                 
 
