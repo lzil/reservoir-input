@@ -74,15 +74,26 @@ def parse_args():
     # parser.add_argument('-a', '--add_tasks', type=str, nargs='+', help='add tasks to previously trained reservoir')
     parser.add_argument('-s', '--sequential', action='store_true', help='sequential training')
     
+    #owm arguments
     parser.add_argument('--owm', action='store_true', help='use orthogonal weight modification')
     parser.add_argument('--alpha_owm', type=float, default=0.001, help = 'regularization and invertibility-ensuring constant for owm')
     
-    # 
+    # synaptic stabilization arguments
     parser.add_argument('--synaptic_intel', action='store_true', help='use synaptic_intelligence loss to stabilize weights to those of previous task')
     parser.add_argument('--ewc', action='store_true', help='use elastic weight consolidation loss to stabilize weights to those of previous task')
     parser.add_argument('--stab_strength', type=float, default=20, help = 'stabilization strength hyperparameter for synaptic stablization (c in paper)')
     parser.add_argument('--damp_term', type=float, default=0.01, help = 'damping hyperparameter for synaptic intelligence ')
     
+    # natural continual learning arguments
+    parser.add_argument('--ncl', action='store_true', help='implements natural continual learning')
+    parser.add_argument('--ncl_alpha', type=float, default=0.003, help = 'scalar for stabilizing matrix inversion of Kroncker factors (A,G) that approximate precision for current task ')
+    parser.add_argument('--ncl_lr', type=float, default=0.003, help = 'learning rate for ncl momentum training ')
+    parser.add_argument('--ncl_rho', type=float, default=0.9, help = 'momentum parameter')
+    parser.add_argument('--ncl_batch_size', type=int, default=32, help='size of minibatch used when doing ncl')
+    parser.add_argument('--ncl_beta', type=float, default=0.3, help = 'hyperparameter for scaled additive approximationfor initializing Kronecker factors')
+    parser.add_argument('--ncl_saas_iters', type=int, default=100, help = 'number of iterations for scaled additive approximations(SAAs) of Kronecker factors')
+    
+
     # xdg arguments
     parser.add_argument('--xdg', action = 'store_true', help = 'use context-dependent gating')
     parser.add_argument('-X',type=int, default= 80, help= 'percentage of units to gate in each gated layer')

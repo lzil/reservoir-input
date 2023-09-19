@@ -256,6 +256,7 @@ class Trainer:
             net_out, etc = self.net(net_in, extras=True,ncl_fish_estim= ncl_fish_estim)
             
             outs.append(net_out)
+            
             us.append(etc['u'])
             if not training:
                 
@@ -493,11 +494,12 @@ class Trainer:
                         if self.args.train_parts =='all':
                             grad_wrt_xs.append(etc['grad_l_wrt_x'])
                         #gradient of output wrt the loss
+                        
                         grad_wrt_zs.append(net_out.grad.detach().clone())
 
                 k_loss = 0.
                 self.net.reservoir.x = self.net.reservoir.x.detach()
-        if self.args.owm and self.train_idx > 0 and training and not self.args.rflo:
+        if self.args.owm  and self.train_idx > 0 and training and not self.args.rflo:
             if self.args.owm:
                 if self.args.train_parts == [''] and self.args.D1 == 0 and self.args.D2 == 0:
                 
@@ -538,6 +540,8 @@ class Trainer:
                 else:
                     self.net.M_u.weight.grad =  self.P_u @ self.net.M_u.weight.grad @ self.P_s
                     self.net.M_ro.weight.grad = self.P_z @ self.net.M_ro.weight.grad @ self.P_x
+
+       
                  
         if training and self.args.rflo:
             if self.args.batch_size > 1:
@@ -659,15 +663,66 @@ class Trainer:
 
             if ix_callback is not None:
                 ix_callback(trial_loss, etc)
-            self.optimizer.step()
+            if not self.args.ncl:
+                self.optimizer.step()
+            else:
+                #build momentum and update weights 
+                
+                self.M_m_ro = self.args.ncl_rho*self.M_m_ro + self.net.M_ro.weight.grad + self.G_m_ro @ (self.net.M_ro.weight - self.m_ro_prev) @ self.A_m_ro
+                
+                self.net.M_ro.weight = nn.Parameter(self.net.M_ro.weight.detach().clone() - self.args.ncl_lr * (self.p_scalar**2)*self.P_L_m_ro @ self.M_m_ro @ self.P_R_m_ro)
+                
+                
 
-            etc = {
-                'ins': x,
-                'goals': y,
-                'us': etc['us'].detach(),
-                'vs': etc['vs'].detach(),
-                'outs': etc['outs'].detach()
-            }
+
+                if self.args.D1 !=0:
+                    self.M_m_u = self.args.ncl_rho*self.M_m_u + self.net.M_u.weight.grad + self.G_m_u @ (self.net.M_u.weight - self.m_u_prev) @ self.A_m_u
+                    self.net.M_u.weight = nn.Parameter(self.net.M_u.weight.detach().clone() - self.args.ncl_lr * (self.p_scalar**2)*self.P_L_m_u @ self.M_m_u @ self.P_R_m_u)
+
+                    if self.args.train_parts == ['']:
+                        
+                        grad_j= self.net.reservoir.J.weight.grad.detach().clone()
+                        grad_w_u = self.net.reservoir.W_u.weight.grad.detach().clone()
+                        grad_w =  torch.cat((grad_j,grad_w_u), dim = 1)
+
+                        w = torch.cat((self.net.reservoir.J.weight,self.net.reservoir.W_u.weight), dim =1 )
+                        w_prev = torch.cat((self.j_prev,self.w_u_prev), dim =1)
+                        
+                        self.M_w = self.args.ncl_rho*self.M_w + grad_w + self.G_w @ (w - w_prev) @ self.A_w
+                        delta_w = self.args.ncl_lr*self.p_scalar*self.P_L_w @ self.M_w @ self.P_R_w
+                        
+                        self.net.W_u.weight=  nn.Parameter(self.net.W_u.weight.detach().clone() - delta_w[:, -self.net.W_u.weight.shape[1]: ])
+                        self.net.W_u.weight = self.net.W_u.weight.contiguous()
+                        
+                        self.net.reservoir.J.weight =  nn.Parameter(self.net.reservoir.J.weight.detach().clone() - delta_w[:, :self.net.reservoir.J.weight.shape[0]])
+                        self.net.reservoir.J.weight= self.net.reservoir.J.weight.contiguous()
+
+
+                else:
+                    grad_j= self.net.reservoir.J.weight.grad.detach().clone()
+                    grad_m_u = self.net.M_u.weight.grad.detach().clone()
+                    grad_w =  torch.cat((grad_j,grad_m_u), dim = 1)
+                    w =  torch.cat((self.net.reservoir.J.weight,self.net.M_u.weight), dim =1 )
+                    w_prev = torch.cat((self.j_prev,self.m_u_prev), dim =1)
+
+                    self.M_w = self.args.ncl_rho*self.M_w + grad_w + self.G_w @ (w - w_prev) @ self.A_w
+                    delta_w = self.args.ncl_lr*(self.p_scalar**2)*self.P_L_w @ self.M_w @ self.P_R_w
+                    
+                    self.net.M_u.weight = nn.Parameter(self.net.M_u.weight.detach().clone() - delta_w[:, -self.net.M_u.weight.shape[1]: ])
+                    self.net.M_u.weight = self.net.M_u.weight.contiguous() # assigning slices to a grad seems to cause a performance issue, contiguous() fixes it in this case
+                    
+                    self.net.reservoir.J.weight = nn.Parameter(self.net.reservoir.J.weight.detach().clone() - delta_w[:, :self.net.reservoir.J.weight.shape[0]])
+                    self.net.reservoir.J.weight = self.net.reservoir.J.weight.contiguous()
+
+            
+            
+            etc = {'ins': x,
+                    'goals': y,
+                    'us': etc['us'].detach(),
+                    'vs': etc['vs'].detach(),
+                    'outs': etc['outs'].detach()
+                }
+
             return trial_loss, etc
 
     def test(self, current_xdg = True, multimodal_rsg=False,task_idx=None):
@@ -792,9 +847,9 @@ class Trainer:
         for i in range(iters):
             X_inv = torch.inverse(X)
             Y_inv = torch.inverse(Y)
-
-            X = (1-beta)*X + beta/m (torch.trace(B@Y_inv)*A + torch.trace(D@Y_inv)*C)
-            Y = (1-beta)*Y + beta/n (torch.trace(A@X_inv)*C + torch.trace(C@X_inv)*D)
+        
+            X = (1-beta)*X + (beta/m) * (torch.trace(B@Y_inv)*A + torch.trace(D@Y_inv)*C)
+            Y = (1-beta)*Y + (beta/n) * (torch.trace(A@X_inv)*B + torch.trace(C@X_inv)*D)
         return X,Y 
     
 
@@ -810,6 +865,10 @@ class Trainer:
         A = T * input_cov
         G = output_cov
         return A, G
+
+
+    def pre_inv_stabilize(self,square_matrix, coeff):
+        return square_matrix + coeff * torch.eye(square_matrix.shape[0])
 
 
     def train(self, ix_callback=None):
@@ -848,7 +907,68 @@ class Trainer:
             rec_xs_post_ac = []
             z_outs = []
             
-        
+        elif self.args.ncl:
+            #initializing kronecker factors for first task
+            if self.args.ncl:
+
+                # initialize previous task thetas:
+                self.m_u_prev =  self.net.M_u.weight.detach().clone()
+                if self.args.D1 != 0:
+                    self.w_u_prev = self.net.reservoir.W_u.weight.detach().clone()
+                self.j_prev =  self.net.reservoir.J.weight.detach().clone()
+                self.m_ro_prev = self.net.M_ro.weight.detach().clone()
+
+                #intialize momentum holders for each paramter:
+                self.M_m_ro = torch.zeros_like(self.m_ro_prev)
+                if self.args.D1 !=0:
+                    self.M_m_u = torch.zeros_like(self.m_u_prev)
+                    if self.args.train_parts == ['']:
+                        self.M_w = torch.zeros((self.args.N, self.args.N + self.args.D1))
+                else:
+                    self.M_w = torch.zeros((self.args.N, self.args.N + self.args.L + self.args.T))
+
+                self.p_scalar =  1/torch.sqrt(torch.tensor(1e7))
+                #1/torch.sqrt(torch.tensor((self.args.batch_size * self.args.seq_iters)))# p^-2  is defined as the number of samples seen when learning task k 
+                
+                # there's always a readout weight matrix and it's always N args.Z by args.N, hence kronecker factors always have the shapes below
+                self.A_m_ro, self.G_m_ro = self.p_scalar * torch.eye(self.args.N), self.p_scalar * torch.eye(self.args.Z)
+                self.A_m_ro_tilde, self.G_m_ro_tilde = self.ncl_kl_div_kfa(self.A_m_ro,self.G_m_ro, self.args.ncl_alpha*torch.eye(self.args.N), self.args.ncl_alpha*torch.eye(self.args.Z))
+                # add ncl_alpha**2 I to matrices before inversions to avoid numerical issues:
+                A_m_ro_tilde_padded, G_m_ro_tilde_padded = self.pre_inv_stabilize(self.A_m_ro_tilde, self.args.ncl_alpha**2), self.pre_inv_stabilize(self.G_m_ro_tilde, self.args.ncl_alpha**2)
+                
+                self.P_L_m_ro, self.P_R_m_ro =torch.inverse(G_m_ro_tilde_padded),  torch.inverse(A_m_ro_tilde_padded) 
+                
+                if self.args.D1 != 0:
+                    self.A_m_u, self.G_m_u = self.p_scalar * torch.eye(self.args.L + self.args.T), self.p_scalar * torch.eye(self.args.D1)
+                    self.A_m_u_tilde, self.G_m_u_tilde = self.ncl_kl_div_kfa(self.A_m_u,self.G_m_u, self.args.ncl_alpha*torch.eye(self.args.L + self.args.T), self.args.ncl_alpha*torch.eye(self.args.D1))
+                    #cushion before inverting 
+                    A_m_u_tilde_padded, G_m_u_tilde_padded = self.pre_inv_stabilize(self.A_m_u_tilde, self.args.ncl_alpha**2), self.pre_inv_stabilize(self.G_m_u_tilde, self.args.ncl_alpha**2)
+                    
+                    self.P_L_m_u, self.P_R_m_u = torch.inverse(G_m_u_tilde_padded), torch.inverse(A_m_u_tilde_padded) 
+
+                    
+                    if self.args.train_parts == ['']:
+                        self.A_w, self.G_w = self.p_scalar * torch.eye(self.args.N + self.args.D1), self.p_scalar* torch.eye(self.args.N)
+                        self.A_w_tilde, self.G_w_tilde = self.ncl_kl_div_kfa(self.A_w,self.G_w, self.args.ncl_alpha*torch.eye(self.args.N + self.args.D1), self.args.ncl_alpha*torch.eye(self.args.N))
+
+
+                        A_w_tilde_padded, G_w_tilde_padded = self.pre_inv_stabilize(self.A_w_tilde, self.args.ncl_alpha**2), self.pre_inv_stabilize(self.G_w_tilde, self.args.ncl_alpha**2)
+
+                        self.P_L_w, self.P_R_w = torch.inveres(G_w_tilde_padded), torch.inverse(A_w_tilde_padded)
+
+
+                else:
+                    self.A_w, self.G_w = self.p_scalar * torch.eye(self.args.N+ self.args.L+self.args.T), self.p_scalar * torch.eye(self.args.N)
+                    self.A_w_tilde, self.G_w_tilde = self.ncl_kl_div_kfa(self.A_w,self.G_w, self.args.ncl_alpha*torch.eye(self.args.N+ self.args.L+self.args.T), self.args.ncl_alpha*torch.eye(self.args.N))
+
+                    A_w_tilde_padded, G_w_tilde_padded = self.pre_inv_stabilize(self.A_w_tilde, self.args.ncl_alpha**2), self.pre_inv_stabilize(self.G_w_tilde, self.args.ncl_alpha**2)
+
+                    self.P_L_w, self.P_R_w = torch.inverse(G_w_tilde_padded), torch.inverse(A_w_tilde_padded)
+
+
+
+                
+
 
 
         if self.args.synaptic_intel:
@@ -1141,17 +1261,31 @@ class Trainer:
                             x, y, info = next(iter(self.ncl_loader))
                             trial_loss , etc = self.run_trial(x,y, info, extras=True, ncl_fish_estim=True)
 
-                            
-
-
-
                             # update fisher matrix components i.e. the kroncker products A,G for the sets of weights
+                            # compute task components A_k, G_k which we use to update the aggregate components A_theta, G_theta
+
+                            A_m_ro_k, G_m_ro_k = self.fim_FKA(etc['xs'], etc['grad_wrt_zs'])
+                            self.A_m_ro, self.G_m_ro = self.ncl_kl_div_kfa(self.A_m_ro,self.G_m_ro, A_m_ro_k, G_m_ro_k)
+
+                            # 
+                            self.A_m_ro_tilde, self.G_m_ro_tilde = self.ncl_kl_div_kfa(self.A_m_ro,self.G_m_ro, self.args.ncl_alpha*torch.eye(self.args.N), self.args.ncl_alpha*torch.eye(self.args.Z))
+
+                            A_m_ro_tilde_padded, G_m_ro_tilde_padded = self.pre_inv_stabilize(self.A_m_ro_tilde, self.args.ncl_alpha**2), self.pre_inv_stabilize(self.G_m_ro_tilde, self.args.ncl_alpha**2)
+                            self.P_L_m_ro, self.P_R_m_ro = torch.inverse(A_m_ro_tilde_padded), torch.inverse(G_m_ro_tilde_padded)
+
                             if self.args.D1 !=0:
                                 # F_M_u is always computed:
                                 s_ins= x
                                 grad_wrt_us = etc['grad_wrt_u']
                                 #kroncker factored of FIM:  F_M_u = A \kron_prod G
-                                A_m_u, G_m_u = self.fim_KFA(s_ins,grad_wrt_us)
+                                A_m_u_k, G_m_u_k = self.fim_KFA(s_ins,grad_wrt_us)
+
+                                #update projection matrices 
+                                self.A_m_u, self.G_m_u = self.ncl_kl_div_kfa(self.A_m_u,self.G_m_u, A_m_u_k, G_m_u_k)
+                                self.A_m_u_tilde, self.G_m_u_tilde = self.ncl_kl_div_kfa(self.A_m_u,self.G_m_u, self.args.ncl_alpha*torch.eye(self.args.L + self.args.T), self.args.ncl_alpha*torch.eye(self.args.D1))
+                                A_m_u_tilde_padded, G_m_u_tilde_padded = self.pre_inv_stabilize(self.A_m_u_tilde, self.args.ncl_alpha**2), self.pre_inv_stabilize(self.G_m_u_tilde, self.args.ncl_alpha**2)
+                                self.P_L_m_u, self.P_R_m_u = torch.inverse(A_m_u_tilde_padded), torch.inverse(G_m_u_tilde_padded)
+
 
                                 if self.args.train_parts == '':
                                     # recurrent inputs
@@ -1161,24 +1295,37 @@ class Trainer:
                                     # gradients of recurrent outputs 
                                     grad_xs = etc['grad_wrt_xs']
                                     # F_W
-                                    A_w, G_w = self.fim_KFA(q_xs_us,grad_xs)
-                            
+                                    A_w_k, G_w_k = self.fim_KFA(q_xs_us,grad_xs)
+                                    self.A_w, self.G_w= self.ncl_kl_div_kfa(self.A_w,self.G_w, A_w_k, G_w_k)
+                                    self.A_w_tilde, self.G_w_tilde = self.ncl_kl_div_kfa(self.A_w,self.G_w, self.args.ncl_alpha*torch.eye(self.args.N + self.args.D1), self.args.ncl_alpha*torch.eye(self.args.N))
+
+
+                                    A_w_tilde_padded, G_w_tilde_padded = self.pre_inv_stabilize(self.A_w_tilde, self.args.ncl_alpha**2), self.pre_inv_stabilize(self.G_w_tilde, self.args.ncl_alpha**2)
+
+                                    self.P_L_w, self.P_R_w = torch.inverse(A_w_tilde_padded, G_w_tilde_padded)
+
+
+                        
                             else:
                                 s_ins= x
                                 rec_xs = etc['pre_act_xs']
                                 q_xs_ins = torch.cat((rec_xs, us), dim =1) 
                                 grad_xs = etc['grad_wrt_xs']
-                                A_w, G_w = self.fim_KFA(q_xs_ins. grad_xs)
+                                A_w_k, G_w_k = self.fim_KFA(q_xs_ins. grad_xs)
+
+                                self.A_w_tilde, self.G_w_tilde = self.ncl_kl_div_kfa(self.A_w,self.G_w, self.args.ncl_alpha*torch.eye(self.args.N+ self.args.L+self.args.T), self.args.ncl_alpha*torch.eye(self.args.N))
+
+                                A_w_tilde_padded, G_w_tilde_padded = self.pre_inv_stabilize(self.A_w_tilde, self.args.ncl_alpha**2), self.pre_inv_stabilize(self.G_w_tilde, self.args.ncl_alpha**2)
+
+                                self.P_L_w, self.P_R_w = torch.inverse(A_w_tilde_padded, G_w_tilde_padded)
+
+                            # update theta_{k-1}s before moving onto task k 
+                            self.m_u_prev =  self.net.M_u.weight.detach().clone()
+                            self.w_u_prev = self.net.reservoir.W_u.weight.detach().clone()
+                            self.j_prev =  self.net.reservoir.J.weight.detach().clone()
+                            self.m_ro_prev = self.net.M_ro.weight.detach().clone()
                             
                             
-
-                                    
-                                # else:
-
-                                
-
-
-                            # c
 
                             
                         
