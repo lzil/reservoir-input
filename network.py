@@ -247,9 +247,7 @@ class M2Net(nn.Module):
         # ncl_fish_estim is going to be a list of strings containing the names of the  weights to which ncl is applied
         # it will add the derivatives of te loss w.r.t the activities (needed for the fish estims) to the extras 
         
-        if ncl_fish_estim  is not None:
-            
-            
+        if ncl_fish_estim:
             self.grad_list_z = []
 
         if hasattr(self.args, 'net_fb') and self.args.net_fb:
@@ -305,9 +303,14 @@ class M2Net(nn.Module):
             if not ncl_fish_estim:
                 return self.z, {'u': u, 'x': etc['x'],'pre_act_x': etc['pre_act_x'] ,'v': v}
             elif ncl_fish_estim:
+                self.z.retain_grad()
                 if self.args.train_parts == ['']:
-                    return self.z, {'u': u, 'x': etc['x'],'pre_act_x': etc['pre_act_x'] ,'v': v, 'grad_l_wrt_x':etc['grad_l_wrt_x'], 'grad_l_wrt_u':grad_u}
-            
+                    if self.args.D1 != 0:
+                        return self.z, {'u': u, 'x': etc['x'],'pre_act_x': etc['pre_act_x'] ,'v': v, 'grad_l_wrt_x':etc['grad_l_wrt_x'], 'grad_l_wrt_u':grad_u}
+                    else:
+                        return self.z, {'u': u, 'x': etc['x'],'pre_act_x': etc['pre_act_x'] ,'v': v, 'grad_l_wrt_x':etc['grad_l_wrt_x']}
+                else:
+                    return self.z, {'u': u, 'x': etc['x'],'pre_act_x': etc['pre_act_x'] ,'v': v, 'grad_l_wrt_u':grad_u}
         else:
             return self.z, {'u': u, 'v': v}
 
@@ -400,7 +403,7 @@ class M2Reservoir(nn.Module):
                 
                 
                 pre_act_x = self.J(self.x) + self.W_u(u)
-                handle_x = pre_act_x.register_hook(self.save_grad_x)
+                handle_x = pre_act_x.register_hook(save_grad_x)
                 handle_x.remove()
 
                 g = self.activation(pre_act_x)
@@ -440,7 +443,11 @@ class M2Reservoir(nn.Module):
             if not ncl_fish_estim:
                 etc = {'x': self.x.detach(), 'pre_act_x': pre_act_x.detach()}
             else:
-                 etc = {'x': self.x.detach(), 'pre_act_x': pre_act_x.detach(), 'grad_l_wrt_x': grad_x}
+                if self.args.train_parts == ['']:
+                    etc = {'x': self.x.detach(), 'pre_act_x': pre_act_x.detach(), 'grad_l_wrt_x': grad_x}
+                else:
+                     etc = {'x': self.x.detach(), 'pre_act_x': pre_act_x.detach()}
+            
             return v, etc
         return v
 
