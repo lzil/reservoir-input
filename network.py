@@ -68,7 +68,9 @@ class M2Net(nn.Module):
 
         if self.args.rflo:
             self.B = torch.randn(self.args.N, self.args.Z)
-
+        
+        if self.args.ncl:
+            self.grad_u = 0
 
         self._init_vars()
         self.reset()
@@ -237,7 +239,7 @@ class M2Net(nn.Module):
 
     #hooks for ncl activity gradients
     def save_u_grad(self,grad):
-        self.grad_list_u.append(grad)
+        self.grad_u = grad.detach().clone()
     
     
 
@@ -248,6 +250,7 @@ class M2Net(nn.Module):
         # it will add the derivatives of te loss w.r.t the activities (needed for the fish estims) to the extras 
         
         if ncl_fish_estim:
+            
             self.grad_list_z = []
 
         if hasattr(self.args, 'net_fb') and self.args.net_fb:
@@ -303,12 +306,12 @@ class M2Net(nn.Module):
             if not ncl_fish_estim:
                 return self.z, {'u': u, 'x': etc['x'],'pre_act_x': etc['pre_act_x'] ,'v': v}
             elif ncl_fish_estim:
-                self.z.retain_grad()
+                self.z.retain_grad() 
                 if self.args.train_parts == ['']:
                     if self.args.D1 != 0:
                         return self.z, {'u': u, 'x': etc['x'],'pre_act_x': etc['pre_act_x'] ,'v': v, 'grad_l_wrt_x':etc['grad_l_wrt_x'], 'grad_l_wrt_u':grad_u}
                     else:
-                        return self.z, {'u': u, 'x': etc['x'],'pre_act_x': etc['pre_act_x'] ,'v': v, 'grad_l_wrt_x':etc['grad_l_wrt_x']}
+                        return self.z, {'u': u, 'x': etc['x'],'pre_act_x': etc['pre_act_x'] ,'v': v, 'grad_l_wrt_x': etc['grad_l_wrt_x']}
                 else:
                     return self.z, {'u': u, 'x': etc['x'],'pre_act_x': etc['pre_act_x'] ,'v': v, 'grad_l_wrt_u':grad_u}
         else:
@@ -334,7 +337,8 @@ class M2Reservoir(nn.Module):
 
         # use second set of dynamics equations as in jazayeri papers
         self.dynamics_mode = 0
-
+        # storage variable for gradient of loss wrt to hidden units before act. func applied
+        self.grad_x = 0
         self._init_vars()
         self.reset()
 
@@ -381,8 +385,8 @@ class M2Reservoir(nn.Module):
             self.x = self.x + delta_x
         self.x.detach_()
 
-    def save_x_grad(self, grad):
-        self.grad_list_x.append(grad)
+    def save_grad_x(self,grad):
+        self.grad_x = grad.detach().clone()
 
     # extras currently doesn't do anything. maybe add x val, etc.
     def forward(self, u=None, extras=False, x_mask=None, ncl_fish_estim=False):
@@ -396,16 +400,8 @@ class M2Reservoir(nn.Module):
                 g = self.activation(self.J(self.x))
 
             elif ncl_fish_estim and self.args.train_parts == ['']:
-                grad_x  = None
-                def save_grad_x(grad):
-                    nonlocal grad_x
-                    grad_x = grad
-                
-                
                 pre_act_x = self.J(self.x) + self.W_u(u)
-                handle_x = pre_act_x.register_hook(save_grad_x)
-                handle_x.remove()
-
+                pre_act_x.register_hook(self.save_grad_x)
                 g = self.activation(pre_act_x)
             else:
                 
@@ -415,8 +411,9 @@ class M2Reservoir(nn.Module):
                 g = g + torch.normal(torch.zeros_like(g), self.args.res_noise)
             delta_x = (-self.x + g) / self.tau_x
             
-
-            pre_act_x = self.x.detach()
+            if not ncl_fish_estim: 
+                pre_act_x = self.x.detach()
+            
             self.x = self.x + delta_x
             
             if self.args.xdg and ('x' in self.args.gate_layers):
@@ -444,7 +441,8 @@ class M2Reservoir(nn.Module):
                 etc = {'x': self.x.detach(), 'pre_act_x': pre_act_x.detach()}
             else:
                 if self.args.train_parts == ['']:
-                    etc = {'x': self.x.detach(), 'pre_act_x': pre_act_x.detach(), 'grad_l_wrt_x': grad_x}
+                    
+                    etc = {'x': self.x.detach(), 'pre_act_x': pre_act_x.detach(), 'grad_l_wrt_x': self.grad_x}
                 else:
                      etc = {'x': self.x.detach(), 'pre_act_x': pre_act_x.detach()}
             

@@ -253,8 +253,12 @@ class Trainer:
 
         for j in range(x.shape[2]):
             net_in = x[:,:,j]
-            net_out, etc = self.net(net_in, extras=True,ncl_fish_estim= ncl_fish_estim)
             
+            net_out, etc = self.net(net_in, extras=True, ncl_fish_estim= ncl_fish_estim)
+
+            # if ncl_fish_estim:
+            #     pdb.set_trace()
+
             outs.append(net_out)
             
             us.append(etc['u'])
@@ -426,6 +430,7 @@ class Trainer:
             # t-BPTT with parameter k
             if (j+1) % k == 0:
                 # the first timestep with which to do BPTT
+                
                 k_outs = torch.stack(outs[-k:], dim=2)
                 k_targets = y[:,:,j+1-k:j+1]
                 for c in self.criteria:
@@ -488,14 +493,15 @@ class Trainer:
                             #clip gradients
                             nn.utils.clip_grad_norm_(self.net.parameters(), max_norm=1)
 
-                    if ncl_fish_estim:
-                        if self.args.D1 != 0:
-                            grad_wrt_us.append(etc['grad_l_wrt_u'])
-                        if self.args.train_parts =='all':
-                            grad_wrt_xs.append(etc['grad_l_wrt_x'])
-                        #gradient of output wrt the loss
-                        
-                        grad_wrt_zs.append(net_out.grad.detach().clone())
+                        if ncl_fish_estim:
+                            if self.args.D1 != 0:
+                                grad_wrt_us.append(self.net.grad_u)
+                            if self.args.train_parts == ['']:
+                                
+                                grad_wrt_xs.append(self.net.reservoir.grad_x)
+                            #gradient of output wrt the loss
+                            
+                            grad_wrt_zs.append(net_out.grad.detach().clone())
 
                 k_loss = 0.
                 self.net.reservoir.x = self.net.reservoir.x.detach()
@@ -577,7 +583,9 @@ class Trainer:
                 if self.args.D1 != 0:
                    grad_wrt_us = torch.stack(grad_wrt_us, dim=2)
                 if self.args.train_parts == ['']:
+                    
                     grad_wrt_xs = torch.stack(grad_wrt_xs, dim=2)
+
 
                 grad_wrt_zs = torch.stack(grad_wrt_zs, dim=2)
             
@@ -612,8 +620,9 @@ class Trainer:
                     if self.args.D1 !=0:
                         etc['grad_wrt_u'] = grad_wrt_us,
                     if self.args.train_parts == ['']:
+                        
                         etc['grad_wrt_xs'] = grad_wrt_xs
-
+                    
                 return trial_loss, etc
         
         return trial_loss
@@ -1259,19 +1268,20 @@ class Trainer:
                         
                         elif self.args.ncl:
                             x, y, info = next(iter(self.ncl_loader))
+                            
                             trial_loss , etc = self.run_trial(x,y, info, extras=True, ncl_fish_estim=True)
 
                             # update fisher matrix components i.e. the kroncker products A,G for the sets of weights
                             # compute task components A_k, G_k which we use to update the aggregate components A_theta, G_theta
 
-                            A_m_ro_k, G_m_ro_k = self.fim_FKA(etc['xs'], etc['grad_wrt_zs'])
+                            A_m_ro_k, G_m_ro_k = self.fim_KFA(etc['xs'], etc['grad_wrt_zs'])
                             self.A_m_ro, self.G_m_ro = self.ncl_kl_div_kfa(self.A_m_ro,self.G_m_ro, A_m_ro_k, G_m_ro_k)
 
                             # 
                             self.A_m_ro_tilde, self.G_m_ro_tilde = self.ncl_kl_div_kfa(self.A_m_ro,self.G_m_ro, self.args.ncl_alpha*torch.eye(self.args.N), self.args.ncl_alpha*torch.eye(self.args.Z))
 
                             A_m_ro_tilde_padded, G_m_ro_tilde_padded = self.pre_inv_stabilize(self.A_m_ro_tilde, self.args.ncl_alpha**2), self.pre_inv_stabilize(self.G_m_ro_tilde, self.args.ncl_alpha**2)
-                            self.P_L_m_ro, self.P_R_m_ro = torch.inverse(A_m_ro_tilde_padded), torch.inverse(G_m_ro_tilde_padded)
+                            self.P_L_m_ro, self.P_R_m_ro =  torch.inverse(G_m_ro_tilde_padded), torch.inverse(A_m_ro_tilde_padded)
 
                             if self.args.D1 !=0:
                                 # F_M_u is always computed:
@@ -1284,10 +1294,10 @@ class Trainer:
                                 self.A_m_u, self.G_m_u = self.ncl_kl_div_kfa(self.A_m_u,self.G_m_u, A_m_u_k, G_m_u_k)
                                 self.A_m_u_tilde, self.G_m_u_tilde = self.ncl_kl_div_kfa(self.A_m_u,self.G_m_u, self.args.ncl_alpha*torch.eye(self.args.L + self.args.T), self.args.ncl_alpha*torch.eye(self.args.D1))
                                 A_m_u_tilde_padded, G_m_u_tilde_padded = self.pre_inv_stabilize(self.A_m_u_tilde, self.args.ncl_alpha**2), self.pre_inv_stabilize(self.G_m_u_tilde, self.args.ncl_alpha**2)
-                                self.P_L_m_u, self.P_R_m_u = torch.inverse(A_m_u_tilde_padded), torch.inverse(G_m_u_tilde_padded)
+                                self.P_L_m_u, self.P_R_m_u = torch.inverse(G_m_u_tilde_padded), torch.inverse(A_m_u_tilde_padded)
 
 
-                                if self.args.train_parts == '':
+                                if self.args.train_parts == ['']:
                                     # recurrent inputs
                                     us = etc['us'] # how do we know that these are preactivation us? check if ncl doesn't work
                                     rec_xs = etc['pre_act_xs']
@@ -1302,26 +1312,27 @@ class Trainer:
 
                                     A_w_tilde_padded, G_w_tilde_padded = self.pre_inv_stabilize(self.A_w_tilde, self.args.ncl_alpha**2), self.pre_inv_stabilize(self.G_w_tilde, self.args.ncl_alpha**2)
 
-                                    self.P_L_w, self.P_R_w = torch.inverse(A_w_tilde_padded, G_w_tilde_padded)
+                                    self.P_L_w, self.P_R_w = torch.inverse(G_w_tilde_padded), torch.inverse(A_w_tilde_padded)
 
 
                         
                             else:
                                 s_ins= x
                                 rec_xs = etc['pre_act_xs']
-                                q_xs_ins = torch.cat((rec_xs, us), dim =1) 
+                                q_xs_ins = torch.cat((rec_xs, s_ins), dim =1) 
                                 grad_xs = etc['grad_wrt_xs']
-                                A_w_k, G_w_k = self.fim_KFA(q_xs_ins. grad_xs)
+                                A_w_k, G_w_k = self.fim_KFA(q_xs_ins, grad_xs)
 
                                 self.A_w_tilde, self.G_w_tilde = self.ncl_kl_div_kfa(self.A_w,self.G_w, self.args.ncl_alpha*torch.eye(self.args.N+ self.args.L+self.args.T), self.args.ncl_alpha*torch.eye(self.args.N))
 
                                 A_w_tilde_padded, G_w_tilde_padded = self.pre_inv_stabilize(self.A_w_tilde, self.args.ncl_alpha**2), self.pre_inv_stabilize(self.G_w_tilde, self.args.ncl_alpha**2)
 
-                                self.P_L_w, self.P_R_w = torch.inverse(A_w_tilde_padded, G_w_tilde_padded)
+                                self.P_L_w, self.P_R_w = torch.inverse(G_w_tilde_padded), torch.inverse(A_w_tilde_padded)
 
                             # update theta_{k-1}s before moving onto task k 
                             self.m_u_prev =  self.net.M_u.weight.detach().clone()
-                            self.w_u_prev = self.net.reservoir.W_u.weight.detach().clone()
+                            if self.args.D1 > 0:
+                                self.w_u_prev = self.net.reservoir.W_u.weight.detach().clone()
                             self.j_prev =  self.net.reservoir.J.weight.detach().clone()
                             self.m_ro_prev = self.net.M_ro.weight.detach().clone()
                             
