@@ -81,6 +81,29 @@ class Trainer:
         for ds in self.args.dataset:
             logging.info(f'  {ds}')
 
+        if self.args.node_pert:
+            if self.args.node_pert_parts == all:
+                self.args.node_pert_parts == ['M_u,W_u,J,M_ro']  # perturbation is precisely the same for W_u and J
+
+            # instantiate distributions from which to draw noises here once, rather than every time run trial is called
+            for tp in self.args.node_pert_parts:
+                if  tp == 'M_u':
+                    mean = torch.zeros(self.args.D1)
+                    cov = self.args.np_var_noise_u* torch.eye(self.args.D1)
+                    self.u_noise_mvn = torch.distributions.MultivariateNormal(mean,cov)
+                elif tp == 'W_u' or 'J':
+                    mean = torch.zeros(self.args.N)
+                    cov = self.args.np_var_noise_x* torch.eye(self.args.N)
+                    self.x_noise_mvn = torch.distributions.MultivariateNormal(mean,cov)
+                elif tp == 'M_ro':
+                    mean = torch.zeros(self.args.N)
+                    cov = self.args.np_var_noise_z* torch.eye(self.args.N)
+                    self.z_noise_mvn = torch.distributions.MultivariateNormal(mean,cov)
+                
+
+            
+
+
         if self.args.sequential:
             logging.info(f'Sequential training. Starting with task {self.train_idx}')
 
@@ -248,7 +271,9 @@ class Trainer:
                     self.m_abqjs= torch.zeros((self.args.batch_size, self.args.D1, self.args.L+self.args.T, self.args.N, x.shape[2]))
                     m_abqj_prev = torch.zeros((self.args.batch_size,self.args.D1, self.args.L+self.args.T, self.args.N, x.shape[2]))
 
-            
+        
+        # sample al noises for each timestep of trial here
+        node_pert_noises =self.node_pert_noise_sampler(self.x.shape[2])
 
 
         for j in range(x.shape[2]):
@@ -269,10 +294,21 @@ class Trainer:
             xs.append(etc['x'])
             vs.append(etc['v'])
             
-            
+            if self.args.node_pert and training:
+                node_pert_noises_timestep_j = {}
+                for key in node_pert_noises.keys():
+                    node_pert_noises_timestep_j[key] = node_pert_noises[key][j]
+                with torch.no_grad(): 
+                    net_out_noise = net_out, etc = self.net(net_in, extras=True, ncl_fish_estim= ncl_fish_estim, node_pert_noises = node_pert_noises_timestep_j)
+                if self.args.batch_size ==1:
+                    error_noiseless = self.criteria[0](net_out,y[:,:,j])
+
+                
+                else:
+                    raise NotImplementedError
         
             if self.args.rflo and training:
-
+                noiseless_error  =  torch.nn.MSE_
 
                 if self.args.batch_size == 1:
                     bptt = False
@@ -836,7 +872,7 @@ class Trainer:
         return torch.inverse(self.args.alpha_owm**(-1) * total_cov + torch.eye(total_cov.shape[0]))
     
 
-
+    # ncl helper functions
     def ncl_kl_div_kfa(self,A,B,C,D):
         #computes the Kroncecker product approximation of a the sum of kronecker products defined by A,B,C, D 
         # i.e. computes X,Y in X * Y approx_eq A*B + C* D
@@ -878,7 +914,25 @@ class Trainer:
 
     def pre_inv_stabilize(self,square_matrix, coeff):
         return square_matrix + coeff * torch.eye(square_matrix.shape[0])
-
+    
+    # node pertubation helper functions
+    def node_pert_noise_sampler(self,timesteps):
+        # returns a dictionary of node pertubations for each timestep of a single trial
+        # for now compatible in online setting 
+        # perturbations for each timesteps are stored in rows i.e. timestep is the row index
+        node_pert_noises = {}
+        for tp in self.args.node_pert_parts:
+            if tp == 'M_u':
+                node_pert_noises[tp] = self.u_noise_mvn.sample(sample_shape=(timesteps,))
+            elif tp == 'W_u' or tp == 'J':
+                node_pert_noises[tp] = self.x_noise_mvn.sample(sample_shape=(timesteps,))
+            elif tp == 'M_ro':
+                node_pert_noises[tp] = self.z_noise_mvn.sample(sample_shape=(timesteps,))
+        
+        return node_pert_noises
+            
+    
+            
 
     def train(self, ix_callback=None):
         ix = 0
