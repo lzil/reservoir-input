@@ -271,7 +271,7 @@ class M2Net(nn.Module):
             # remove hook 
             handle_u.remove()
 
-        elif self.args.node_pert:
+        elif node_pert_noises is not None and 'M_u' in node_pert_noises.keys() :
             u = self.m1_act(self.M_u(o) + node_pert_noises['M_u'])
         
         
@@ -299,8 +299,8 @@ class M2Net(nn.Module):
         if self.args.xdg and ('v' in self.args.gate_layers):
                 v = v * self.v_mask
         
-        if  self.args.node_pert and ('M_ro'in self.args.node_pert_parts):
-            z = self.M_ro(self.m2_act(v)+node_pert_noises['M_ro'])
+        if  node_pert_noises is not None  and ('M_ro'in node_pert_noises.keys()):
+            z = self.M_ro(self.m2_act(v)) +node_pert_noises['M_ro']
         else:
             z = self.M_ro(self.m2_act(v))
         
@@ -409,7 +409,8 @@ class M2Reservoir(nn.Module):
                 pre_act_x = self.J(self.x) + self.W_u(u)
                 pre_act_x.register_hook(self.save_grad_x)
                 g = self.activation(pre_act_x)
-            elif self.args.node_pert_parts and ('W_u'in self.args.node_pert_parts or 'J' in self.args.node_pert_parts):
+            
+            elif node_pert_noises is not None and ('W_u'in node_pert_noises.keys() or 'J' in node_pert_noises.keys()):
                 if 'W_u' in self.args.node_pert_parts:
                     x_pert = node_pert_noises['W_u']
                 else:
