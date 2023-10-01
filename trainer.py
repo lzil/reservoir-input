@@ -288,7 +288,6 @@ class Trainer:
 
         for j in range(x.shape[2]):
             net_in = x[:,:,j]
-            
             net_out, etc = self.net(net_in, extras=True, ncl_fish_estim= ncl_fish_estim)
 
             # if ncl_fish_estim:
@@ -305,7 +304,7 @@ class Trainer:
             vs.append(etc['v'])
             
             if self.args.node_pert and training:
-
+                
                 # get the perturbations, for all batch elements,for a single timestep
                 node_pert_noises_timestep_j = {}
                 for key in node_pert_noises.keys():
@@ -326,19 +325,43 @@ class Trainer:
                 for tp in self.args.node_pert_parts:
                     with torch.no_grad():
                         if tp == 'M_u':
-                            # let's see if we can use einstein notation here... batched outer prods (turn out to be mat vec multiplications ) then sum over batches. unsqueeze to faciliate matrix multiplication
-                           
-                            self.net.M_u.weight.data = self.net.M_u.weight.data - (self.args.node_pert_lr_M_u/self.args.node_pert_var_noise_u) * pert_effect * torch.einsum('bij,bkj -> ij', node_pert_noises_timestep_j[tp].unsqueeze(2), net_in.unsqueeze(2)) / self.args.batch_size
+                            # let's see if we can use einstein notation here... batched outer prods (turn out to be mat vec multiplications ) then sum over batches. unsqueeze to faciliate matrix multiplication i.e. so that we have a batch of 2d arrays instead of a batch of 1D arrays 
+                            
+                            net_in_transposed = torch.einsum('bij->bji',net_in.unsqueeze(2))
+                            
+                            perf_effect_M_u = pert_effect.unsqueeze(1).unsqueeze(2).expand(self.args.batch_size,self.args.D1,self.args.L+self.args.T)
+                            
+                            update_batch_M_u = - (self.args.node_pert_lr_M_u/self.args.node_pert_var_noise_u) * perf_effect_M_u * torch.einsum('bij,bkj -> bij', node_pert_noises_timestep_j[tp].unsqueeze(2), net_in_transposed)
+                            average_update_over_batches = torch.einsum('bij->ij',update_batch_M_u) / self.args.batch_size
+                            
+                            self.net.M_u.weight.data = self.net.M_u.weight.data + average_update_over_batches
                         
                         elif tp == 'W_u':
-                            self.net.reservoir.W_u.weight.data = self.net.reservoir.W_u.weight.data - (self.args.node_pert_lr_W_u/self.args.node_pert_var_noise_x) * pert_effect * torch.einsum('bij,bkj -> ij', node_pert_noises_timestep_j[tp].unsqueeze(2), us[j].unsqueeze(2)) / self.args.batch_size
+                            
+                            us_transposed = torch.einsum('bij,bji',us[j].unsqueeze(2))
+                            perf_effect_W_u = pert_effect.unsqueeze(1).unsqueeze(2).expand(self.args.batch_size,self.args.N,self.args.D1)
+                            update_batch_W_u = -(self.args.node_pert_lr_W_u/self.args.node_pert_var_noise_x) * pert_effect * torch.einsum('bij,bkj -> bij', node_pert_noises_timestep_j[tp].unsqueeze(2), us_transposed)
+                            average_update_over_batches = torch.einsum('bij->ij',update_batch_W_u) / self.args.batch_size
+
+                            self.net.reservoir.W_u.weight.data = self.net.reservoir.W_u.weight.data - average_update_over_batches
                         
                         elif tp =='J':
-                            self.net.reservoir.J,weight.data = self.net.reservoir.J,weight.data -  (self.args.node_pert_lr_J/self.args.node_pert_var_noise_x) * pert_effect * torch.einsum('bij,bkj -> ij', node_pert_noises_timestep_j[tp].unsqueeze(2), pre_act_xs[j].unsqueeze(2)) / self.args.batch_size
-
+                            pre_act_xs_transposed = torch.einsum('bij,bji',pre_act_xs[j].unsqueeze(2))
+                            perf_effect_J = pert_effect.unsqueeze(1).unsqueeze(2).expand(self.args.batch_size,self.args.N,self.args.N)
+                            
+                            update_batch_J = - (self.args.node_pert_lr_J/self.args.node_pert_var_noise_x) * pert_effect * torch.einsum('bij,bkj -> bij', node_pert_noises_timestep_j[tp].unsqueeze(2),pre_act_xs_transposed) 
+                            average_update_over_batches = torch.einsum('bij->ij',update_batch_J) / self.args.batch_size
+                            
+                            self.net.reservoir.J.weight.data = self.net.reservoir.J.weight.data - average_update_over_batches
                         elif tp == 'M_ro': 
-                            self.net.M_ro.weight.data  = self.net.M_ro.weight.data - (self.args.node_pert_lr_M_ro/self.args.node_pert_var_noise_z) * pert_effect * torch.einsum('bij,bkj -> ij', node_pert_noises_timestep_j[tp].unsqueeze(2), xs[j].unsqueeze(2)) / self.args.batch_size
+                            
+                            xs_transposed = torch.einsum('bij->bji',xs[j].unsqueeze(2))
+                            pert_effect_M_ro = pert_effect.unsqueeze(1).unsqueeze(2).expand(self.args.batch_size,self.args.Z,self.args.N)
+                            update_batch_M_ro = -(self.args.node_pert_lr_M_ro/self.args.node_pert_var_noise_z) *  pert_effect_M_ro * torch.einsum('bij,bkj -> bij', node_pert_noises_timestep_j[tp].unsqueeze(2),xs_transposed)
+                            average_update_over_batches = torch.einsum('bij->ij',update_batch_M_ro) / self.args.batch_size
 
+                            self.net.M_ro.weight.data  = self.net.M_ro.weight.data + average_update_over_batches
+                     
                 
 
                 

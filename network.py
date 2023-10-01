@@ -276,6 +276,7 @@ class M2Net(nn.Module):
         
         
         else:
+            
             u = self.m1_act(self.M_u(o))
 
         if self.args.xdg and ('u' in self.args.gate_layers):

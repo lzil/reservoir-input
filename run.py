@@ -69,10 +69,10 @@ def parse_args():
     parser.add_argument('--node_pert', action='store_true', help='use node pertubtation to train weights in node_pert_parts; not yet compatible with v layer')
     parser.add_argument('--node_pert_parts', type=str, nargs='+', default=['M_u', 'M_ro'], help = 'parts to be trained with node perturbation; specify "all" to apply to all trainable parts')
 
-    parser.add_argument('--node_pert_lr_M_u', type=float, default=1e-8, help='learning rate M_u')
-    parser.add_argument('--node_pert_lr_W_u', type=float, default=1e-8)
-    parser.add_argument('--node_pert_lr_J', type=float, default=1e-8)
-    parser.add_argument('--node_pert_lr_M_ro', type=float, default=1e-8)
+    parser.add_argument('--node_pert_lr_M_u', type=float, default=1e-3, help='learning rate M_u')
+    parser.add_argument('--node_pert_lr_W_u', type=float, default=1e-3)
+    parser.add_argument('--node_pert_lr_J', type=float, default=1e-3)
+    parser.add_argument('--node_pert_lr_M_ro', type=float, default=1e-3)
     
     parser.add_argument('--node_pert_var_noise_u', type=float, default=0.1, help='variance of entries in u input node pertubation; input as in input to the node')
     parser.add_argument('--node_pert_var_noise_z', type=float, default=0.1, help='variance of entries in z(final layer) input node pertubation')
