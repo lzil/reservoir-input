@@ -90,16 +90,20 @@ class Trainer:
                 
                 if tp == 'M_ro':
                     mean = torch.zeros(self.args.Z)
+                    # scale noise variance by number of units in layer
+                    self.args.node_pert_var_noise_z /= self.args.Z
                     cov = self.args.node_pert_var_noise_z* torch.eye(self.args.Z)
                     self.z_noise_mvn = torch.distributions.MultivariateNormal(mean,cov)
 
                 elif  tp == 'M_u':
                     mean = torch.zeros(self.args.D1)
+                    self.args.node_pert_var_noise_u /= self.args.D1 
                     cov = self.args.node_pert_var_noise_u* torch.eye(self.args.D1)
                     self.u_noise_mvn = torch.distributions.MultivariateNormal(mean,cov)
                     
                 elif tp == 'W_u' or 'J':
                     mean = torch.zeros(self.args.N)
+                    self.args.node_pert_var_noise_x /= self.args.N
                     cov = self.args.node_pert_var_noise_x* torch.eye(self.args.N)
                     self.x_noise_mvn = torch.distributions.MultivariateNormal(mean,cov)
 
@@ -348,7 +352,7 @@ class Trainer:
                         elif tp =='J':
                             pre_act_xs_transposed = torch.einsum('bij,bji',pre_act_xs[j].unsqueeze(2))
                             perf_effect_J = pert_effect.unsqueeze(1).unsqueeze(2).expand(self.args.batch_size,self.args.N,self.args.N)
-                            
+
                             update_batch_J = - (self.args.node_pert_lr_J/self.args.node_pert_var_noise_x) * pert_effect * torch.einsum('bij,bkj -> bij', node_pert_noises_timestep_j[tp].unsqueeze(2),pre_act_xs_transposed) 
                             average_update_over_batches = torch.einsum('bij->ij',update_batch_J) / self.args.batch_size
                             
