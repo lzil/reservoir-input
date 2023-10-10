@@ -68,15 +68,17 @@ def parse_args():
     # node perturbation arguments
     parser.add_argument('--node_pert', action='store_true', help='use node pertubtation to train weights in node_pert_parts; not yet compatible with v layer')
     parser.add_argument('--node_pert_parts', type=str, nargs='+', default=['M_u', 'M_ro'], help = 'parts to be trained with node perturbation; specify "all" to apply to all trainable parts')
+    parser.add_argument('--manual_node_pert', action='store_true', help='use node perturbation without the Adam optimizer is used by default)')
+
 
     parser.add_argument('--node_pert_lr_M_u', type=float, default=1e-3, help='learning rate M_u')
     parser.add_argument('--node_pert_lr_W_u', type=float, default=1e-3)
     parser.add_argument('--node_pert_lr_J', type=float, default=1e-3)
     parser.add_argument('--node_pert_lr_M_ro', type=float, default=1e-3)
     
-    parser.add_argument('--node_pert_var_noise_u', type=float, default=0.1, help='variance of entries in u input node pertubation; input as in input to the node')
-    parser.add_argument('--node_pert_var_noise_z', type=float, default=0.1, help='variance of entries in z(final layer) input node pertubation')
-    parser.add_argument('--node_pert_var_noise_x', type=float, default=0.1, help='variance of entries in x input node pertubation')
+    parser.add_argument('--node_pert_var_noise_u', type=float, default=1e-5, help='unscaled variance, to be divided by the no. units in u layer, of entries in u input node pertubation; input as in input to the node')
+    parser.add_argument('--node_pert_var_noise_z', type=float, default=1e-3, help='unscaled variance of entries in z(final layer) input node pertubation')
+    parser.add_argument('--node_pert_var_noise_x', type=float, default=1e-5, help='unscaled variance of entries in x input node pertubation')
 
     #simultaneous training arguments
     parser.add_argument('--multimodal', action= 'store_true', help = 'multimodal setting: instances from different tasks interleaved and augmented so that many tasks can be learned simultaneously with fixed net architecture')

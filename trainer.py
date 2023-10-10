@@ -85,25 +85,36 @@ class Trainer:
             if self.args.node_pert_parts == all:
                 self.args.node_pert_parts == ['M_u,W_u,J,M_ro']  # perturbation is precisely the same for W_u and J
 
+            # if using a standard optimizer like adam, set node_pert learning rate for each weight to 1
+            if not self.args.manual_node_pert:
+                self.args.node_pert_lr_M_u = 1.
+                self.args.node_pert_lr_W_u = 1.
+                self.args.node_pert_lr_J = 1.
+                self.args.node_pert_lr_M_ro = 1.
+
+
             # instantiate distributions from which to draw noises here once, rather than every time run trial is called
             for tp in self.args.node_pert_parts:
+
+                # NP variance should scale with the number of units in the entire network
+                unit_count = self.args.D1+self.args.Z+self.args.L+self.args.T + self.args.D2
                 
                 if tp == 'M_ro':
                     mean = torch.zeros(self.args.Z)
                     # scale noise variance by number of units in layer
-                    self.args.node_pert_var_noise_z /= self.args.Z
+                    self.args.node_pert_var_noise_z /= unit_count
                     cov = self.args.node_pert_var_noise_z* torch.eye(self.args.Z)
                     self.z_noise_mvn = torch.distributions.MultivariateNormal(mean,cov)
 
                 elif  tp == 'M_u':
                     mean = torch.zeros(self.args.D1)
-                    self.args.node_pert_var_noise_u /= self.args.D1 
+                    self.args.node_pert_var_noise_u /= unit_count
                     cov = self.args.node_pert_var_noise_u* torch.eye(self.args.D1)
                     self.u_noise_mvn = torch.distributions.MultivariateNormal(mean,cov)
                     
                 elif tp == 'W_u' or 'J':
                     mean = torch.zeros(self.args.N)
-                    self.args.node_pert_var_noise_x /= self.args.N
+                    self.args.node_pert_var_noise_x /= unit_count
                     cov = self.args.node_pert_var_noise_x* torch.eye(self.args.N)
                     self.x_noise_mvn = torch.distributions.MultivariateNormal(mean,cov)
 
@@ -338,7 +349,12 @@ class Trainer:
                             update_batch_M_u = - (self.args.node_pert_lr_M_u/self.args.node_pert_var_noise_u) * perf_effect_M_u * torch.einsum('bij,bkj -> bij', node_pert_noises_timestep_j[tp].unsqueeze(2), net_in_transposed)
                             average_update_over_batches = torch.einsum('bij->ij',update_batch_M_u) / self.args.batch_size
                             
-                            self.net.M_u.weight.data = self.net.M_u.weight.data + average_update_over_batches
+                            if self.args.manual_node_pert:
+                                self.net.M_u.weight.data = self.net.M_u.weight.data + average_update_over_batches
+
+                            #pass the 'gradient' to the optimizer 
+                            else:
+                                self.net.M_u.weight.grad = -1 * average_update_over_batches
                         
                         elif tp == 'W_u':
                             
@@ -346,8 +362,10 @@ class Trainer:
                             perf_effect_W_u = pert_effect.unsqueeze(1).unsqueeze(2).expand(self.args.batch_size,self.args.N,self.args.D1)
                             update_batch_W_u = -(self.args.node_pert_lr_W_u/self.args.node_pert_var_noise_x) * pert_effect * torch.einsum('bij,bkj -> bij', node_pert_noises_timestep_j[tp].unsqueeze(2), us_transposed)
                             average_update_over_batches = torch.einsum('bij->ij',update_batch_W_u) / self.args.batch_size
-
-                            self.net.reservoir.W_u.weight.data = self.net.reservoir.W_u.weight.data - average_update_over_batches
+                            if self.args.manual_node_pert:
+                                self.net.reservoir.W_u.weight.data = self.net.reservoir.W_u.weight.data + average_update_over_batches
+                            else:
+                                self.reservoir.W_u.weight.grad = -1 * average_update_over_batches
                         
                         elif tp =='J':
                             pre_act_xs_transposed = torch.einsum('bij,bji',pre_act_xs[j].unsqueeze(2))
@@ -356,7 +374,11 @@ class Trainer:
                             update_batch_J = - (self.args.node_pert_lr_J/self.args.node_pert_var_noise_x) * pert_effect * torch.einsum('bij,bkj -> bij', node_pert_noises_timestep_j[tp].unsqueeze(2),pre_act_xs_transposed) 
                             average_update_over_batches = torch.einsum('bij->ij',update_batch_J) / self.args.batch_size
                             
-                            self.net.reservoir.J.weight.data = self.net.reservoir.J.weight.data - average_update_over_batches
+                            if self.args.manual_node_pert:
+                                self.net.reservoir.J.weight.data = self.net.reservoir.J.weight.data  + average_update_over_batches
+                            else:
+                                self.net.reservoir.J.grad = -1 * average_update_over_batches
+
                         elif tp == 'M_ro': 
                             
                             xs_transposed = torch.einsum('bij->bji',xs[j].unsqueeze(2))
@@ -364,8 +386,12 @@ class Trainer:
                             update_batch_M_ro = -(self.args.node_pert_lr_M_ro/self.args.node_pert_var_noise_z) *  pert_effect_M_ro * torch.einsum('bij,bkj -> bij', node_pert_noises_timestep_j[tp].unsqueeze(2),xs_transposed)
                             average_update_over_batches = torch.einsum('bij->ij',update_batch_M_ro) / self.args.batch_size
 
-                            self.net.M_ro.weight.data  = self.net.M_ro.weight.data + average_update_over_batches
-                     
+                            
+
+                            if self.args.manual_node_pert:
+                                self.net.M_ro.weight.data  = self.net.M_ro.weight.data + average_update_over_batches
+                            else:
+                                self.net.M_ro.weight.grad = -1 * average_update_over_batches
                 
 
                 
@@ -773,6 +799,7 @@ class Trainer:
             if ix_callback is not None:
                 ix_callback(trial_loss, etc)
             if not self.args.ncl:
+                
                 self.optimizer.step()
             else:
                 #build momentum and update weights 
