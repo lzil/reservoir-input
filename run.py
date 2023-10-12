@@ -69,6 +69,8 @@ def parse_args():
     parser.add_argument('--node_pert', action='store_true', help='use node pertubtation to train weights in node_pert_parts; not yet compatible with v layer')
     parser.add_argument('--node_pert_parts', type=str, nargs='+', default=['M_u', 'M_ro'], help = 'parts to be trained with node perturbation; specify "all" to apply to all trainable parts')
     parser.add_argument('--manual_node_pert', action='store_true', help='use node perturbation without the Adam optimizer is used by default)')
+    parser.add_argument('--node_pert_online', action='store_true')
+    parser.add_argument('--dynamic_pert', action='store_true',help='for any layer whose nodes are to be perturbed, sample a new perturbation for each timestep; else keep perturbation fixed throughout trial')
 
 
     parser.add_argument('--node_pert_lr_M_u', type=float, default=1e-3, help='learning rate M_u')
