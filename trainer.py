@@ -86,7 +86,7 @@ class Trainer:
                 self.args.node_pert_parts == ['M_u,W_u,J,M_ro']  # perturbation is precisely the same for W_u and J
 
             # if using a standard optimizer like adam, set node_pert learning rate for each weight to 1
-            if not self.args.manual_node_pert:
+            if self.args.manual_node_pert:
                 self.args.node_pert_lr_M_u = 1.
                 self.args.node_pert_lr_W_u = 1.
                 self.args.node_pert_lr_J = 1.
@@ -374,7 +374,7 @@ class Trainer:
 
                                 #pass the 'gradient' to the optimizer 
                                 else:
-                                    self.net.M_u.weight.grad = -1 * average_update_over_batches
+                                    self.net.M_u.weight.grad = -1* average_update_over_batches
                         
                         elif tp == 'W_u':
                             
@@ -1118,7 +1118,7 @@ class Trainer:
         return node_pert_noises
             
     
-            
+    
 
     def train(self, ix_callback=None):
         ix = 0
