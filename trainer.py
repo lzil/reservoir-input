@@ -88,6 +88,7 @@ class Trainer:
 
                 # NP variance should scale with the number of units in the entire network
                 unit_count = self.args.D1+self.args.Z+self.args.L+self.args.T + self.args.D2
+                unit_count =1 
                 
                 if tp == 'M_ro':
                     mean = torch.zeros(self.args.Z)

@@ -78,9 +78,9 @@ def parse_args():
     parser.add_argument('--node_pert_lr_J', type=float, default=1e-3)
     parser.add_argument('--node_pert_lr_M_ro', type=float, default=1e-5)
     
-    parser.add_argument('--node_pert_var_noise_u', type=float, default=1, help='unscaled variance, to be divided by the no. units in u layer, of entries in u input node pertubation; input as in input to the node')
+    parser.add_argument('--node_pert_var_noise_u', type=float, default=1e-3, help='unscaled variance, to be divided by the no. units in u layer, of entries in u input node pertubation; input as in input to the node')
     parser.add_argument('--node_pert_var_noise_x', type=float, default=1, help='unscaled variance of entries in x input node pertubation')
-    parser.add_argument('--node_pert_var_noise_z', type=float, default=1, help='unscaled variance of entries in z(final layer) input node pertubation')
+    parser.add_argument('--node_pert_var_noise_z', type=float, default=1e-3, help='unscaled variance of entries in z(final layer) input node pertubation')
 
     #simultaneous training arguments
     parser.add_argument('--multimodal', action= 'store_true', help = 'multimodal setting: instances from different tasks interleaved and augmented so that many tasks can be learned simultaneously with fixed net architecture')
