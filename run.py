@@ -68,19 +68,19 @@ def parse_args():
     # node perturbation arguments
     parser.add_argument('--node_pert', action='store_true', help='use node pertubtation to train weights in node_pert_parts; not yet compatible with v layer')
     parser.add_argument('--node_pert_parts', type=str, nargs='+', default=['M_u', 'M_ro'], help = 'parts to be trained with node perturbation; specify "all" to apply to all trainable parts')
-    parser.add_argument('--manual_node_pert', action='store_true', help='use node perturbation without the Adam optimizer is used by default)')
+    parser.add_argument('--manual_node_pert', action='store_true', help='use node perturbation without the an optimizer; Adam is used by default)')
     parser.add_argument('--node_pert_online', action='store_true')
     parser.add_argument('--dynamic_pert', action='store_true',help='for any layer whose nodes are to be perturbed, sample a new perturbation for each timestep; else keep perturbation fixed throughout trial')
 
 
-    parser.add_argument('--node_pert_lr_M_u', type=float, default=1e-3, help='learning rate M_u')
+    parser.add_argument('--node_pert_lr_M_u', type=float, default=1e-5, help='learning rate M_u')
     parser.add_argument('--node_pert_lr_W_u', type=float, default=1e-3)
     parser.add_argument('--node_pert_lr_J', type=float, default=1e-3)
-    parser.add_argument('--node_pert_lr_M_ro', type=float, default=1e-3)
+    parser.add_argument('--node_pert_lr_M_ro', type=float, default=1e-5)
     
-    parser.add_argument('--node_pert_var_noise_u', type=float, default=1e-3, help='unscaled variance, to be divided by the no. units in u layer, of entries in u input node pertubation; input as in input to the node')
-    parser.add_argument('--node_pert_var_noise_z', type=float, default=1e-3, help='unscaled variance of entries in z(final layer) input node pertubation')
-    parser.add_argument('--node_pert_var_noise_x', type=float, default=1e-5, help='unscaled variance of entries in x input node pertubation')
+    parser.add_argument('--node_pert_var_noise_u', type=float, default=1, help='unscaled variance, to be divided by the no. units in u layer, of entries in u input node pertubation; input as in input to the node')
+    parser.add_argument('--node_pert_var_noise_x', type=float, default=1, help='unscaled variance of entries in x input node pertubation')
+    parser.add_argument('--node_pert_var_noise_z', type=float, default=1, help='unscaled variance of entries in z(final layer) input node pertubation')
 
     #simultaneous training arguments
     parser.add_argument('--multimodal', action= 'store_true', help = 'multimodal setting: instances from different tasks interleaved and augmented so that many tasks can be learned simultaneously with fixed net architecture')
@@ -91,31 +91,8 @@ def parse_args():
     # parser.add_argument('-a', '--add_tasks', type=str, nargs='+', help='add tasks to previously trained reservoir')
     parser.add_argument('-s', '--sequential', action='store_true', help='sequential training')
     
-    #owm arguments
-    parser.add_argument('--owm', action='store_true', help='use orthogonal weight modification')
-    parser.add_argument('--alpha_owm', type=float, default=0.001, help = 'regularization and invertibility-ensuring constant for owm')
-    
-    # synaptic stabilization arguments
-    parser.add_argument('--synaptic_intel', action='store_true', help='use synaptic_intelligence loss to stabilize weights to those of previous task')
-    parser.add_argument('--ewc', action='store_true', help='use elastic weight consolidation loss to stabilize weights to those of previous task')
-    parser.add_argument('--stab_strength', type=float, default=20, help = 'stabilization strength hyperparameter for synaptic stablization (c in paper)')
-    parser.add_argument('--damp_term', type=float, default=0.01, help = 'damping hyperparameter for synaptic intelligence ')
-    
-    # natural continual learning arguments
-    parser.add_argument('--ncl', action='store_true', help='implements natural continual learning')
-    parser.add_argument('--ncl_alpha', type=float, default=0.003, help = 'scalar for stabilizing matrix inversion of Kroncker factors (A,G) that approximate precision for current task ')
-    parser.add_argument('--ncl_lr', type=float, default=0.003, help = 'learning rate for ncl momentum training ')
-    parser.add_argument('--ncl_rho', type=float, default=0.9, help = 'momentum parameter')
-    parser.add_argument('--ncl_batch_size', type=int, default=32, help='size of minibatch used when doing ncl')
-    parser.add_argument('--ncl_beta', type=float, default=0.3, help = 'hyperparameter for scaled additive approximationfor initializing Kronecker factors')
-    parser.add_argument('--ncl_saas_iters', type=int, default=100, help = 'number of iterations for scaled additive approximations(SAAs) of Kronecker factors')
-    
-
-    # xdg arguments
-    parser.add_argument('--xdg', action = 'store_true', help = 'use context-dependent gating')
-    parser.add_argument('-X',type=int, default= 80, help= 'percentage of units to gate in each gated layer')
-    parser.add_argument('--gate_layers',choices=['u','v','x', 'uv', 'ux','vx','uvx'], default='uvx')
-
+   
+    # sequential training arguments
     parser.add_argument('-o', '--train_order', type=int, nargs='+', default=[], help='ids of tasks to train on, in order if sequential flag is enabled. empty for all')
     parser.add_argument('--seq_threshold', type=float, default=5, help='threshold for having solved a task before moving on to next one')
     parser.add_argument('--same_test', action='store_true', help='use entire dataset for both training and testing')

@@ -21,7 +21,7 @@ Without the `--no_log` option, logs will be generated in a custom manner in the 
 Once the code above works, try `python run.py -d datasets/rsg-100-150.pkl --name test_run --n_epochs 2 --batch_size 5 -N 100`.
 
 ### to train using node perturbation
-Start with `python run.py -d datasets/rsg-100-150.pkl --node_pert --D2 0 --node_pert_manual`
+Start with `python run.py -d datasets/rsg-100-150.pkl --node_pert --D2 0 --node_pert_manual --dynamic_pert --node_pert_online`
 By default, this will train the feedforward weight matrices M_u, and M_ro while leaving the rest of the weight matrices fixed throughout training.
 This is because the argument for node_pert_parts - which the weight matrices to which node perturbation will be applied - has a default argument of ['M_u', 'M_ro'].
 `node_pert_parts` can be any nonempty subset of `['M_u','W_u','J','M_ro']`. Weight matrices not in the subset will be left fixed throughout training.
