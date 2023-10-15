@@ -25,7 +25,8 @@ Start with `python run.py -d datasets/rsg-100-150.pkl --node_pert --D2 0 --node_
 By default, this will train the feedforward weight matrices M_u, and M_ro while leaving the rest of the weight matrices fixed throughout training.
 This is because the argument for node_pert_parts - which the weight matrices to which node perturbation will be applied - has a default argument of ['M_u', 'M_ro'].
 `node_pert_parts` can be any nonempty subset of `['M_u','W_u','J','M_ro']`. Weight matrices not in the subset will be left fixed throughout training.
-Using `--node_pert_manual` means that the standard node perturbation update will be implemented instead of being passed to an optimizer (e.g. Adam).
+Using `--node_pert_manual` means that the standard node perturbation update will be implemented instead of the update being passed to an optimizer (e.g. Adam). 
+--node_pert_mode_online 
 
 
 Each trainable weight has noise variance and a learning rate hyperparameters. Together these determine the step size of the NP update.

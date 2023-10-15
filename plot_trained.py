@@ -301,24 +301,24 @@ if not args.no_plot:
                     ax.plot(xr, z[2], color='turquoise', lw=2, ls='-')
 
 
-        elif type(trial) is DelayDMProAnti:
-            ax.plot(xr, x[0], color='grey', lw=.5, ls='--', alpha=.4)
-            if trial.g1 > trial.g2:
-                mod1_width = 1.5
-                mod2_width = 0.5
-            else:
-                mod1_width = 0.5
-                mod2_width = 1.5
-            ax.plot(xr, x[1], color='salmon', lw=mod1_width, ls='--', alpha=.4)
-            ax.plot(xr, x[2], color='dodgerblue', lw=mod1_width, ls='--', alpha=.7)
-            ax.plot(xr, x[4], color='magenta', lw=mod2_width, ls='--', alpha=.7)
-            ax.plot(xr, x[5], color='lime', lw=mod2_width, ls='--', alpha=.7)
-            ax.plot(xr, y[0], color='grey', lw=1.5, ls=':')
-            ax.plot(xr, y[1], color='magenta', lw=1.5, ls=':')
-            ax.plot(xr, y[2], color='lime', lw=1.5, ls=':')
-            ax.plot(xr, z[0], color='grey', lw=2, ls='-')
-            ax.plot(xr, z[1], color='magenta', lw=2, ls='-')
-            ax.plot(xr, z[2], color='lime', lw=2, ls='-')
+            elif type(trial) is DelayDMProAnti:
+                ax.plot(xr, x[0], color='grey', lw=.5, ls='--', alpha=.4)
+                if trial.g1 > trial.g2:
+                    mod1_width = 1.5
+                    mod2_width = 0.5
+                else:
+                    mod1_width = 0.5
+                    mod2_width = 1.5
+                ax.plot(xr, x[1], color='salmon', lw=mod1_width, ls='--', alpha=.4)
+                ax.plot(xr, x[2], color='dodgerblue', lw=mod1_width, ls='--', alpha=.7)
+                ax.plot(xr, x[4], color='magenta', lw=mod2_width, ls='--', alpha=.7)
+                ax.plot(xr, x[5], color='lime', lw=mod2_width, ls='--', alpha=.7)
+                ax.plot(xr, y[0], color='grey', lw=1.5, ls=':')
+                ax.plot(xr, y[1], color='magenta', lw=1.5, ls=':')
+                ax.plot(xr, y[2], color='lime', lw=1.5, ls=':')
+                ax.plot(xr, z[0], color='grey', lw=2, ls='-')
+                ax.plot(xr, z[1], color='magenta', lw=2, ls='-')
+                ax.plot(xr, z[2], color='lime', lw=2, ls='-')
 
         ax.tick_params(axis='both', color='white', labelsize=8)
         ax.set_title(f'ctx {context}, trial {ix}, loss {np.round(float(loss), 2)}', size=8)

@@ -81,44 +81,7 @@ class Trainer:
         for ds in self.args.dataset:
             logging.info(f'  {ds}')
 
-        if self.args.node_pert:
-            if self.args.node_pert_parts == all:
-                self.args.node_pert_parts == ['M_u,W_u,J,M_ro']  # perturbation is precisely the same for W_u and J
-
-            # if using a standard optimizer like adam, set node_pert learning rate for each weight to 1
-            if self.args.manual_node_pert:
-                self.args.node_pert_lr_M_u = 1.
-                self.args.node_pert_lr_W_u = 1.
-                self.args.node_pert_lr_J = 1.
-                self.args.node_pert_lr_M_ro = 1.
-
-
-            # instantiate distributions from which to draw noises here once, rather than every time run trial is called
-            for tp in self.args.node_pert_parts:
-
-                # NP variance should scale with the number of units in the entire network
-                unit_count = self.args.D1+self.args.Z+self.args.L+self.args.T + self.args.D2
-                
-                if tp == 'M_ro':
-                    mean = torch.zeros(self.args.Z)
-                    # scale noise variance by number of units in layer
-                    self.args.node_pert_var_noise_z /= unit_count
-                    cov = self.args.node_pert_var_noise_z* torch.eye(self.args.Z)
-                    self.z_noise_mvn = torch.distributions.MultivariateNormal(mean,cov)
-
-                elif  tp == 'M_u':
-                    mean = torch.zeros(self.args.D1)
-                    self.args.node_pert_var_noise_u /= unit_count
-                    cov = self.args.node_pert_var_noise_u* torch.eye(self.args.D1)
-                    self.u_noise_mvn = torch.distributions.MultivariateNormal(mean,cov)
-                    
-                elif tp == 'W_u' or 'J':
-                    mean = torch.zeros(self.args.N)
-                    self.args.node_pert_var_noise_x /= unit_count
-                    cov = self.args.node_pert_var_noise_x* torch.eye(self.args.N)
-                    self.x_noise_mvn = torch.distributions.MultivariateNormal(mean,cov)
-
-                
+        
                 
         
             
@@ -128,11 +91,14 @@ class Trainer:
             logging.info(f'Sequential training. Starting with task {self.train_idx}')
 
             
+
+            
+
             if self.args.xdg:
                 logging.info(f'Implementing context-dependent gating. Gating {self.args.X}% of units in layers:')
                 for layer in self.args.gate_layers:
                     logging.info(f'  {layer}')
-            
+
             
             if self.args.synaptic_intel or self.args.ewc:
                 if self.args.synaptic_intel:
@@ -183,7 +149,7 @@ class Trainer:
         
         for k in self.not_train_params:
             logging.info(f'  {k}')
-
+        
         self.criteria = get_criteria(self.args)
         self.optimizer = get_optimizer(self.args, self.train_params)
         self.scheduler = get_scheduler(self.args, self.optimizer)
@@ -275,316 +241,22 @@ class Trainer:
             grads_j = 0
             grads_m_ro = 0
         
-        if self.args.rflo:
-            tau_reciprocal = torch.tensor(1/self.net.reservoir.tau_x)
-            phi_prime = deriv_tanh
-            if self.args.train_parts != ['']:
-                W_u = self.net.reservoir.W_u.weight.detach()
-                
-                delta_M_u_time_series = [] # note they've already been scaled by the learning rate
-                delta_M_ro_time_series = []
-                if self.args.batch_size ==1:
-
-                    self.m_abqjs= torch.zeros((self.args.D1, self.args.L+self.args.T, self.args.N, x.shape[2]))
-                    m_abqj_prev = torch.zeros((self.args.D1, self.args.L+self.args.T, self.args.N, x.shape[2]))
-
-                else:
-                    self.m_abqjs= torch.zeros((self.args.batch_size, self.args.D1, self.args.L+self.args.T, self.args.N, x.shape[2]))
-                    m_abqj_prev = torch.zeros((self.args.batch_size,self.args.D1, self.args.L+self.args.T, self.args.N, x.shape[2]))
-
         
         
-        if self.args.node_pert:
-            # sample al noises for each timestep of trial here
-            node_pert_noises =self.node_pert_noise_sampler(x.shape[2])
-            if not self.args.node_pert_online:
-                for tp in self.args.node_pert_parts:
-                    if tp == 'M_ro':
-                        time_sum_delta_M_ro = 0  #sum of the (batch of) node perturbation updates hat would be made at each step for the trial 
-
-                    elif  tp == 'M_u':
-                        time_sum_delta_M_u = 0
-                        
-                        
-                    elif tp == 'W_u' :
-                        time_sum_delta_W_u = 0 
-                    else:
-                        time_sum_delta_J = 0 
-                        
-            
-            
-
-
-
         for j in range(x.shape[2]):
             net_in = x[:,:,j]
             net_out, etc = self.net(net_in, extras=True, ncl_fish_estim= ncl_fish_estim)
 
-            # if ncl_fish_estim:
-            #     pdb.set_trace()
+           
 
             outs.append(net_out)
-            
             us.append(etc['u'])
-            if not training or (self.args.node_pert and 'J'in self.args.node_pert_parts):
-                
-                pre_act_xs.append(etc['pre_act_x'])
-                
+            pre_act_xs.append(etc['pre_act_x'])
             xs.append(etc['x'])
             vs.append(etc['v'])
             
-            if self.args.node_pert and training:
+           
                 
-                # get the perturbations, for all batch elements,for a single timestep
-                node_pert_noises_timestep_j = {}
-                for key in node_pert_noises.keys():
-                    node_pert_noises_timestep_j[key] = node_pert_noises[key][:,:,j]
-                # noisy output for a single batch
-                with torch.no_grad(): 
-                    net_out_noise, etc = self.net(net_in, extras=True, ncl_fish_estim= ncl_fish_estim, node_pert_noises = node_pert_noises_timestep_j)
-                    # noisy_outs.append(net_out_noise)
-                # compute the effect of the node perturbation on loss # note you don't want the average loss over batches; you want the loss for each batch
-                # so that we can calculate an average node_pert update over batches to get an average node_pert_update for this timestep
-                
-                error_noiseless = torch.nn.functional.mse_loss(net_out, y[:,:,j], reduction ='none').mean(dim=1) # should be of shape [batch_size]
-                error_noise = torch.nn.functional.mse_loss(net_out_noise, y[:,:,j], reduction= 'none').mean(dim=1)
-
-
-                pert_effect = error_noise - error_noiseless
-                
-              
-                for tp in self.args.node_pert_parts:
-                    with torch.no_grad():
-                        if tp == 'M_u':
-                            # let's see if we can use einstein notation here... batched outer prods (turn out to be mat vec multiplications ) then sum over batches. unsqueeze to faciliate matrix multiplication i.e. so that we have a batch of 2d arrays instead of a batch of 1D arrays 
-                            
-                            net_in_transposed = torch.einsum('bij->bji',net_in.unsqueeze(2))
-                            
-                            perf_effect_M_u = pert_effect.unsqueeze(1).unsqueeze(2).expand(self.args.batch_size,self.args.D1,self.args.L+self.args.T)
-                            
-                            update_batch_M_u = - (self.args.node_pert_lr_M_u/self.args.node_pert_var_noise_u) * perf_effect_M_u * torch.einsum('bij,bkj -> bij', node_pert_noises_timestep_j[tp].unsqueeze(2), net_in_transposed)
-
-                            if not self.args.node_pert_online:
-                                time_sum_delta_M_u += update_batch_M_u
-                            else:
-                                average_update_over_batches = torch.einsum('bij->ij',update_batch_M_u) / self.args.batch_size
-                                
-                                if self.args.manual_node_pert:
-                                    self.net.M_u.weight.data = self.net.M_u.weight.data + average_update_over_batches
-
-                                #pass the 'gradient' to the optimizer 
-                                else:
-                                    self.net.M_u.weight.grad = -1* average_update_over_batches
-                        
-                        elif tp == 'W_u':
-                            
-                            us_transposed = torch.einsum('bij,bji',us[j].unsqueeze(2))
-                            perf_effect_W_u = pert_effect.unsqueeze(1).unsqueeze(2).expand(self.args.batch_size,self.args.N,self.args.D1)
-                            update_batch_W_u = -(self.args.node_pert_lr_W_u/self.args.node_pert_var_noise_x) * pert_effect * torch.einsum('bij,bkj -> bij', node_pert_noises_timestep_j[tp].unsqueeze(2), us_transposed)
-
-                            if not self.args.node_pert_online:
-                                time_sum_delta_W_u += update_batch_W_u
-
-                            else:
-                                average_update_over_batches = torch.einsum('bij->ij',update_batch_W_u) / self.args.batch_size
-                                if self.args.manual_node_pert:
-                                    self.net.reservoir.W_u.weight.data = self.net.reservoir.W_u.weight.data + average_update_over_batches
-                                else:
-                                    self.reservoir.W_u.weight.grad = -1 * average_update_over_batches
-                        
-                        elif tp =='J':
-                            pre_act_xs_transposed = torch.einsum('bij,bji',pre_act_xs[j].unsqueeze(2))
-                            perf_effect_J = pert_effect.unsqueeze(1).unsqueeze(2).expand(self.args.batch_size,self.args.N,self.args.N)
-
-                            update_batch_J = - (self.args.node_pert_lr_J/self.args.node_pert_var_noise_x) * pert_effect * torch.einsum('bij,bkj -> bij', node_pert_noises_timestep_j[tp].unsqueeze(2),pre_act_xs_transposed) 
-
-                            if not self.args.node_pert_online:
-                                time_sum_delta_J += update_batch_J
-                            else:
-                                average_update_over_batches = torch.einsum('bij->ij',update_batch_J) / self.args.batch_size
-                                
-                                if self.args.manual_node_pert:
-                                    self.net.reservoir.J.weight.data = self.net.reservoir.J.weight.data  + average_update_over_batches
-                                else:
-                                    self.net.reservoir.J.grad = -1 * average_update_over_batches
-
-                        elif tp == 'M_ro': 
-                            
-                            xs_transposed = torch.einsum('bij->bji',xs[j].unsqueeze(2))
-                            pert_effect_M_ro = pert_effect.unsqueeze(1).unsqueeze(2).expand(self.args.batch_size,self.args.Z,self.args.N)
-                            update_batch_M_ro = -(self.args.node_pert_lr_M_ro/self.args.node_pert_var_noise_z) *  pert_effect_M_ro * torch.einsum('bij,bkj -> bij', node_pert_noises_timestep_j[tp].unsqueeze(2),xs_transposed)
-                            
-                            if not self.args.node_pert_online:
-                                time_sum_delta_M_ro += update_batch_M_ro
-
-                            else:
-                                average_update_over_batches = torch.einsum('bij->ij',update_batch_M_ro) / self.args.batch_size
-
-                                
-
-                                if self.args.manual_node_pert:
-                                    self.net.M_ro.weight.data  = self.net.M_ro.weight.data + average_update_over_batches
-                                else:
-                                    self.net.M_ro.weight.grad = -1 * average_update_over_batches
-                    
-
-                
-                
-        
-            if self.args.rflo and training:
-                
-
-                if self.args.batch_size == 1:
-                    bptt = False
-                    with torch.no_grad():
-                        eps_t = y[:,:,j] - net_out
-                    
-                    # collect the things you need to compute v_js
-                    s_t = net_in 
-
-                    if self.args.train_parts != ['']:
-                        with torch.no_grad():
-                            u_t = self.net.M_u(s_t)
-                    x_t_minus_1 = xs[j-1]
-                    v_rflo = self.net.reservoir.J(x_t_minus_1) + self.net.reservoir.W_u(u_t) 
-                    # v_rflo is [1,300] at this point
-
-                    
-                    # start computing m_abq  for this time step t (j in this code)
-                    if self.args.train_parts != ['']:
-                        if j == 0: 
-                            m_abqj_prev = torch.zeros((self.args.D1, self.args.L+self.args.T, self.args.N))
-                        else:
-                            m_abqj_prev = self.m_abqjs[:,:,:, j-1]
-                        
-                        #vectorise (reshape and manipulate things to avoid nested for loops):
-                       
-                        v_rflo = v_rflo.unsqueeze(2)
-                        v_rflo = v_rflo.expand(self.args.D1,self.args.N,self.args.L+self.args.T).transpose(-1,-2)
-                        # s_t 
-                        # now according to their rule we need s_t at the previous timestep 
-                        s_t = x[:, :, j-1]
-                        s_t_expanded = s_t.repeat(self.args.D1,1)
-                        s_t_expanded = s_t_expanded.unsqueeze(2)
-                        s_t_expanded = s_t_expanded.repeat(1,1, self.args.N)
-                        # W_u 
-                        W_u_clone = self.net.reservoir.W_u.weight.detach().clone()
-                        W_u_expanded = W_u_clone.T.unsqueeze(1)
-                        W_u_expanded =  W_u_expanded.repeat_interleave(self.args.L+self.args.T, dim=1)
-
-                    
-                        
-                        self.m_abqjs[:,:,:,j] = tau_reciprocal * phi_prime(v_rflo) * W_u_expanded * s_t_expanded + (1-tau_reciprocal)*m_abqj_prev
-
-
-                        # for a in range(self.args.D1):
-                        #     for b in range(self.args.L):
-                        #         for q in range(self.args.N):
-                        #             if j  == 0 :
-                        #                 m_abqj_prev = 0
-                        #             else:
-                        #                 m_abqj_prev = self.m_abqjs[a,b,q,j-1]
-                        #             # compute m_ab^j(t) - which in code is m_ab^q(j):
-                        #             self.m_abqjs[a,b,q,j] = tau_reciprocal*phi_prime(v_rflo[:,q]) * self.net.reservoir.W_u.weight[q,a].detach()*s_t[:,b] + (1 - tau_reciprocal) * m_abqj_prev 
-                        
-                        # compute delta_M_u(t)
-                        #instantiate and populate:
-                        with torch.no_grad():
-                            delta_M_u_t = torch.zeros((self.args.D1, self.args.L+self.args.T))
-                            for a in range(self.args.D1):
-                                for b in range(self.args.L+self.args.T):
-                                    
-                                    delta_M_u_t[a,b] = self.args.M_u_rflo_lr * torch.sum( (self.net.B @ eps_t[0]) * self.m_abqjs[a,b,:,j]) #note take first and (for now) only batch of errors
-                            delta_M_u_time_series.append(delta_M_u_t)
-                            
-                            # compute M_ro 
-                            
-                            delta_M_ro_t = self.args.M_ro_rflo_lr * eps_t[0].unsqueeze(1) @ xs[j][0].unsqueeze(1).T #turn eps_t[0] from tensor with shape [3] to shape [3,1] 
-                            delta_M_ro_time_series.append(delta_M_ro_t)
-                            
-                else:
-                    bptt = False
-                    with torch.no_grad():
-                        eps_t = y[:,:,j] - net_out
-                    
-                    # collect the things you need to compute v_js
-                    s_t = net_in 
-
-                    if self.args.train_parts != ['']:
-                        with torch.no_grad():
-                            u_t = self.net.M_u(s_t)
-                    x_t_minus_1 = xs[j-1]
-                    v_rflo = self.net.reservoir.J(x_t_minus_1) + self.net.reservoir.W_u(u_t)
-
-                    
-                    # start computing m_abq  for this time step t (j in this code)
-                    if self.args.train_parts != ['']:
-                        if j == 0: 
-                            m_abqj_prev = torch.zeros((self.args.batch_size, self.args.D1, self.args.L+self.args.T, self.args.N))
-                        else:
-                            m_abqj_prev = self.m_abqjs[:,:,:,:, j-1]
-                        
-                        #vectorise (reshape and manipulate things to avoid nested for loops):
-                        
-                        v_rflo = v_rflo.unsqueeze(2)  # [1,300,1]
-                        v_rflo = v_rflo.unsqueeze(1).transpose(-1,-2)
-                        v_rflo = v_rflo.repeat(1,self.args.D1,self.args.L+self.args.T,1)
-                       
-                        # s_t                       [50,4,300]
-                        # now according to their rule we need s_t at the previous timestep 
-                        s_t = x[:, :, j-1]
-                        s_t_expanded = s_t.unsqueeze(1).repeat(1,self.args.D1,1)
-                        
-                        s_t_expanded = s_t_expanded.unsqueeze(-1).repeat(1,1,1, self.args.N)
-                        
-                        
-                        # W_u 
-                        W_u_clone = self.net.reservoir.W_u.weight.detach().clone()
-                        W_u_expanded = W_u_clone.T.unsqueeze(1)
-                        W_u_expanded = W_u_expanded.unsqueeze(0)
-                        W_u_expanded = W_u_expanded.repeat(self.args.batch_size,1,1,1)
-                        W_u_expanded =  W_u_expanded.repeat_interleave(self.args.L+self.args.T, dim=2)
-                        
-                    
-                        
-                        self.m_abqjs[:,:,:,:,j] = tau_reciprocal * phi_prime(v_rflo) * W_u_expanded * s_t_expanded + (1-tau_reciprocal)*m_abqj_prev
-
-                        
-                        # for a in range(self.args.D1):
-                        #     for b in range(self.args.L):
-                        #         for q in range(self.args.N):
-                        #             if j  == 0 :
-                        #                 m_abqj_prev = 0
-                        #             else:
-                        #                 m_abqj_prev = self.m_abqjs[a,b,q,j-1]
-                        #             # compute m_ab^j(t) - which in code is m_ab^q(j):
-                        #             self.m_abqjs[a,b,q,j] = tau_reciprocal*phi_prime(v_rflo[:,q]) * self.net.reservoir.W_u.weight[q,a].detach()*s_t[:,b] + (1 - tau_reciprocal) * m_abqj_prev 
-                        
-                        # compute delta_M_u(t)
-                        #instantiate and populate:
-                        with torch.no_grad():
-                            delta_M_u_t = torch.zeros((self.args.batch_size,self.args.D1, self.args.L+self.args.T))
-                            
-                            
-                            batch_B = self.net.B.unsqueeze(0)
-                            batch_B = batch_B.repeat(self.args.batch_size,1,1)
-                            
-                            eps_t = eps_t.unsqueeze(-1)
-                            B_mul_eps_t = torch.squeeze(torch.bmm(batch_B,eps_t),-1)
-                            
-                            for a in range(self.args.D1):
-                                for b in range(self.args.L+self.args.T):
-                                    
-                                    delta_M_u_t[:, a,b] = self.args.M_u_rflo_lr * torch.sum(B_mul_eps_t * self.m_abqjs[:,a,b,:,j]) #note take first and (for now) only batch of errors
-                            
-                            
-                            delta_M_u_time_series.append(delta_M_u_t)
-                            
-                            # compute M_ro 
-                            xs_transpose_batched = xs[j].unsqueeze(-1).transpose(-1,-2)
-                            eps_mul_by_xs_transpose = torch.bmm(eps_t,xs_transpose_batched).squeeze(-1)
-                            delta_M_ro_t = self.args.M_ro_rflo_lr * eps_mul_by_xs_transpose
-                            delta_M_ro_time_series.append(delta_M_ro_t)
                             
             
             # t-BPTT with parameter k
@@ -598,7 +270,7 @@ class Trainer:
 
                         
                 trial_loss += k_loss.detach().item()
-                if training and not self.args.rflo and not self.args.node_pert:
+                if training:
                     if self.args.synaptic_intel:
                         #this code should run even when training first task as it collects gradient info needed to compute the omegas for the penalties(i.e. don't use additional condition self.train_idx>0)
                         #calculate gradients for loss on current task without SI penalty; save them
@@ -662,37 +334,14 @@ class Trainer:
                             #gradient of output wrt the loss
                             
                             grad_wrt_zs.append(net_out.grad.detach().clone())
-                if training and self.args.node_pert and not self.args.node_pert_online:
-                    if not self.args.node_pert_online:
-                        for tp in self.args.node_pert_parts:
-                            if tp == 'M_ro':
-                                time_sum_delta_M_ro /= x.shape[2]  #time_sum_delta_M holds the sum of the NP updates that would have been made at each timestep/ sum and and divide by t
-                                average_update_over_batches = torch.einsum('bij->ij',update_batch_M_ro) / self.args.batch_size
-                                self.net.M_ro.weight.data = self.net.M_ro.weight.data + average_update_over_batches
-
-
-                            elif  tp == 'M_u':
-                                time_sum_delta_M_u /= x.shape[2]
-                                average_update_over_batches = torch.einsum('bij->ij',update_batch_M_u) / self.args.batch_size
-                                self.net.M_u.weight.data = self.net.M_u.weight.data + average_update_over_batches
-                                
-                            elif tp == 'W_u' :
-                                time_sum_delta_W_u /= x.shape[2]
-                                
-                                average_update_over_batches = torch.einsum('bij->ij',update_batch_W_u) / self.args.batch_size
-                                self.net.reservoir.W_u.weight.data = self.net.reservoir.W_u.weight.data + average_update_over_batches
-                            else:
-                                time_sum_delta_J /= x.shape[2]
-                                
-                                average_update_over_batches = torch.einsum('bij->ij',update_batch_J) / self.args.batch_size
-                                self.net.reservoir.J.weight.data =self.net.reservoir.J.weight.data + average_update_over_batches
+                
                         
 
 
 
                 k_loss = 0.
                 self.net.reservoir.x = self.net.reservoir.x.detach()
-        if self.args.owm  and self.train_idx > 0 and training and not self.args.rflo and not self.args.node_pert:
+        if self.args.owm  and self.train_idx > 0 and training:
             if self.args.owm:
                 if self.args.train_parts == [''] and self.args.D1 == 0 and self.args.D2 == 0:
                 
@@ -735,16 +384,6 @@ class Trainer:
                     self.net.M_ro.weight.grad = self.P_z @ self.net.M_ro.weight.grad @ self.P_x
 
        
-                 
-        if training and self.args.rflo:
-            if self.args.batch_size > 1:
-
-                self.net.M_u.weight.grad = - 1* torch.sum(sum(delta_M_u_time_series),dim=0)/self.args.batch_size 
-                self.net.M_ro.weight.grad = -1* torch.sum(sum(delta_M_ro_time_series), dim=0)/self.args.batch_size 
-            else:
-                self.net.M_u.weight.grad = - 1* sum(delta_M_u_time_series)/self.args.batch_size 
-                self.net.M_ro.weight.grad = -1* sum(delta_M_ro_time_series)/self.args.batch_size 
-
                 
                             
                 
@@ -1067,56 +706,7 @@ class Trainer:
     def pre_inv_stabilize(self,square_matrix, coeff):
         return square_matrix + coeff * torch.eye(square_matrix.shape[0])
     
-    # node pertubation helper functions
-    def node_pert_noise_sampler(self,timesteps):
-        # returns a dictionary of node pertubations for each timestep of a single trial 
-        # keys are weight names, values are batches of perturbations i.e. tensors of shape [batch_size, layer_size, timesteps]
-        # perturbations for each timesteps are stored in rows i.e. timestep is the row index
-        node_pert_noises = {}
-        
-        # fixed perturbation throughout the trial
-        if not self.args.dynamic_pert:
-            
-            # perturbation fixed throughout all trials (i.e. constant wrt to time and batch index) - this should reduce variance in the estimate of the gradient for that perturbation
-            
-            for tp in self.args.node_pert_parts:
-                if tp == 'M_u':
-                    u_noise = self.u_noise_mvn.sample()
-                    u_noise = u_noise.view(1,self.args.D1,1).expand(self.args.batch_size, self.args.D1, timesteps)
-                    node_pert_noises[tp] = u_noise
-                elif tp == 'W_u' or tp == 'J':
-                    x_noise = self.x_noise_mvn.sample()
-                    x_noise = x_noise.view(1,self.args.N,1).expand(self.args.batch_sizes, self.args.N, timesteps)
-                    node_pert_noises[tp] = x_noise
-                elif tp == 'M_ro':
-                    z_noise = self.z_noise_mvn.sample()
-                    z_noise = z_noise.view(1,self.args.Z,1).expand(self.args.batch_size,self.args.Z, timesteps)
-                    node_pert_noises[tp] = z_noise
-
-
-            # perturbation fixed throughout trial but varies over batches
-            # for tp in self.args.node_pert_parts:
-            #     if tp == 'M_u':
-            #         u_noise = self.u_noise_mvn.sample(sample_shape=(self.args.batch_size,))
-            #         node_pert_noises[tp] = torch.stack([u_noise for t in range(timesteps)],dim=2)
-            #     elif tp == 'W_u' or tp == 'J':
-            #         x_noise = self.x_noise_mvn.sample(sample_shape=(self.args.batch_size,))
-            #         node_pert_noises[tp] = torch.stack([x_noise for t in range(timesteps)],dim=2)
-            #     elif tp == 'M_ro':
-            #         z_noise = self.z_noise_mvn.sample(sample_shape=(self.args.batch_size,))
-            #         node_pert_noises[tp] = torch.stack([z_noise for t in range(timesteps)],dim=2)
-       
-        else:
-            for tp in self.args.node_pert_parts:
-                if tp == 'M_u':
-                    node_pert_noises[tp] = torch.stack([self.u_noise_mvn.sample(sample_shape=(self.args.batch_size,)) for t in range(timesteps)],dim=2)
-                elif tp == 'W_u' or tp == 'J':
-                    node_pert_noises[tp] = torch.stack([self.x_noise_mvn.sample(sample_shape=(self.args.batch_size,)) for t in range(timesteps)],dim=2)
-                elif tp == 'M_ro':
-                    node_pert_noises[tp] = torch.stack([self.z_noise_mvn.sample(sample_shape=(self.args.batch_size,)) for t in range(timesteps)],dim=2)
-    
-        return node_pert_noises
-            
+    #
     
     
 
