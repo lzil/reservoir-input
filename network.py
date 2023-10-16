@@ -66,8 +66,7 @@ class M2Net(nn.Module):
         self.m1_act = get_activation(self.args.m1_act)
         self.m2_act = get_activation(self.args.m2_act)
 
-        if self.args.rflo:
-            self.B = torch.randn(self.args.N, self.args.Z)
+        
         
         if self.args.ncl:
             self.grad_u = 0

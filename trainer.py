@@ -251,7 +251,8 @@ class Trainer:
 
             outs.append(net_out)
             us.append(etc['u'])
-            pre_act_xs.append(etc['pre_act_x'])
+            if not training:
+                pre_act_xs.append(etc['pre_act_x'])
             xs.append(etc['x'])
             vs.append(etc['v'])
             
