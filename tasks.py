@@ -202,14 +202,14 @@ class DelayProAnti(Task):
         
         self.stim = self.fix + args.stim_t
         #stim_t is duration of stimulus period after fixation period
-         #when the stimulus period ends and fixation drops to zero and go period begins
+        # when the stimulus period ends and fixation drops to zero and go period begins
 
         self.L = 3
         self.Z = 3
 
     def get_x(self, args=None):
         x = np.zeros((3, self.t_len))
-        # 0 is fixation, the remainder are stimulus
+        # 0 is fixation, the remaining channels are the directional stimulus
         x[0,:self.stim] = 1
         #up to but not including self.stim, fixate
         x[1,self.fix:] = self.stimulus[0]
@@ -265,6 +265,53 @@ class MemoryProAnti(Task):
         if self.t_type.endswith('anti'):
             y[1:,] = -y[1:,]
         return y
+    
+# fixation input never goes off and network should respond as soon as the stimulus appears (for now it's the 
+class RTProAnti(Task):
+    def __init__(self, args, dset_id=None, n=None):
+        super().__init__(args.t_len, dset_id, n)
+        self.has_fix= True 
+        if args.angles is None:
+            theta = np.random.random() * 2 * np.pi
+        else:
+            theta = np.random.choice(args.angles) * np.pi / 180
+        stimulus = [np.cos(theta), np.sin(theta)]
+
+        self.t_type = args.t_type
+        assert self.t_type in ['rt-pro', 'rt-anti']
+        self.stimulus = stimulus
+        self.fix = args.fix_t 
+        self.rt_buffer = args.react_t # amount of time between whent then fixation appears and when the stimulus appears
+        
+        self.stim = self.fix + self.rt_buffer # when the stimulus appears 
+        #stim_t is duration of stimulus period after fixation period
+        #so that stim is when the stimulus period ends and fixation drops to zero and go period begins
+
+        self.L = 3
+        self.Z = 3
+
+    def get_x(self, args=None):
+        x = np.zeros((3, self.t_len))
+        # fixation input never goes off 
+        x[0,self.fix:] = 1
+        #up to but not including self.stim, fixate
+        x[1,self.stim:] = self.stimulus[0]
+        #from and including self.fix time show stimulus until end
+        x[2,self.stim:] = self.stimulus[1]
+        #from
+        return x
+
+    def get_y(self, args=None):
+        y = np.zeros((3, self.t_len))
+        y[0,self.fix:] = 1
+        #when stimulus period ends (at t=self.stim), input stimulus on the output channels
+        y[1,self.stim:] = self.stimulus[0]
+        y[2,self.stim:] = self.stimulus[1]
+        if self.t_type.endswith('anti'):
+            y[1:,] = -y[1:,] 
+            
+        return y
+
 
 class DelayCopy(Task):
     def __init__(self, args, dset_id=None, n=None):
@@ -684,6 +731,9 @@ class DMCProAnti(Task):
 
             
         return y
+    
+
+
 
 
 
@@ -724,6 +774,9 @@ def create_dataset(args):
     elif t_type == 'memory-pro' or t_type == 'memory-anti':
         assert args.fix_t + args.stim_t + args.memory_t < args.t_len
         TaskObj = MemoryProAnti
+    elif t_type == 'rt-pro' or t_type == 'rt-anti':
+        assert args.fix_t + args.stim_t < args.t_len
+        TaskObj = RTProAnti
     elif t_type == 'dur-disc':
         assert args.tau + args.max_d <= args.sep_t
         assert args.sep_t + args.tau + args.max_d <= args.cue_t
@@ -798,6 +851,13 @@ def get_task_args(args):
         targs.has_fix= get_tval(tarr,'has_fix',True, bool)
         targs.t_len = get_tval(tarr, 'l', 300, int)
         targs.fix_t = get_tval(tarr, 'fix', 50, int)
+        targs.stim_t = get_tval(tarr, 'stim', 150, int)
+
+    elif args.t_type == 'rt-pro' or args.t_type == 'rt-anti':
+        targs.has_fix= get_tval(tarr,'has_fix',True, bool)
+        targs.t_len = get_tval(tarr, 'l', 300, int)
+        targs.fix_t = get_tval(tarr, 'fix', 50, int)
+        targs.react_t = get_tval(tarr,'react',20, int) #time in between fix_t and stimulus onset
         targs.stim_t = get_tval(tarr, 'stim', 150, int)
 
     elif args.t_type == 'memory-pro' or args.t_type == 'memory-anti':
@@ -1049,7 +1109,7 @@ if __name__ == '__main__':
                     ax.plot(xr, trial_x[j], color=cols[j], lw=.5, ls='--', alpha=.9)
                     ax.plot(xr, trial_y[j], color=cols[j], lw=1)
 
-            elif t_type in [DelayProAnti, MemoryProAnti]:
+            elif t_type in [DelayProAnti, MemoryProAnti, RTProAnti]:
                 ax.plot(xr, trial_x[0], color='grey', lw=1, ls='--', alpha=.6)
                 ax.plot(xr, trial_x[1], color='salmon', lw=1, ls='--', alpha=.6)
                 ax.plot(xr, trial_x[2], color='dodgerblue', lw=1, ls='--', alpha=.6)
