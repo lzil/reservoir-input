@@ -477,7 +477,7 @@ class DM1ProAnti(Task):
 
 
 
-        self.L = 7
+        self.L = 13
         self.Z = 3
     
     def get_x(self,args=None):
@@ -576,7 +576,7 @@ class DM2ProAnti(Task):
 
 
 
-        self.L = 7
+        self.L = 13
         self.Z = 3
     
     def get_x(self,args=None):
@@ -633,7 +633,105 @@ class DM2ProAnti(Task):
         return y
 
 
+class CtxDM1(Task):
+    def __init__(self, args, dset_id=None, n=None):
+        super().__init__(args.t_len, dset_id, n)
+        self.has_fix= True 
+        #stimulus_1
+        if args.angles is None:
+            theta_1=np.random.random()*2*np.pi
+        else:
+            theta_1 = np.random.choice(args.angles)*np.pi/180
+            #randomly sammple a value from 0 to arg.angles and convert from degrees to radians
+        
+        self.stimulus_1=[np.cos(theta_1),np.sin(theta_1)]
 
+        #stimulus 2
+        theta_2= np.random.uniform(low=theta_1 + np.pi * 0.5,high= theta_1 + np.pi*1.5)
+        self.stimulus_2= [np.cos(theta_2),np.sin(theta_2)]
+        #check 1(delete once checked): angles are what they're supposed to be
+
+        self.t_type = args.t_type
+        assert self.t_type in ['dm2-pro', 'dm2-anti']
+
+
+        gamma_mean = np.random.uniform(.8, 1.2)
+        coherence_arr= [-0.08, -0.04, -0.02, -0.01, 0.01, 0.02, 0.04, 0.08]
+        
+        coherence=np.random.choice(coherence_arr)
+        coherence=np.random.choice(coherence_arr)
+        
+        self.g1 = gamma_mean + coherence
+        self.g2 = gamma_mean - coherence
+
+        #duration of stimulus 1
+        self.fix = args.fix_t # fixaton duration and self.fix can also be point when self.fix ends
+    
+        #stim_t= random.choice([400, 800, 1600])
+        #used fixed stim_t
+        self.stim = self.fix + args.stim_t
+
+        
+
+        
+
+
+
+        self.L = 7
+        self.Z = 3
+    
+    def get_x(self,args=None):
+        x=np.zeros((13,self.t_len))
+        
+        x[0, :self.stim]=1
+        
+        
+        # modality 1: x[1: .. ], ... x[6:] are just zero rows
+
+        # modality 2
+        #stimulus 1
+        x[7, :]=self.stimulus_1[0]
+        x[8, :] = self.stimulus_1[1]
+        x[9, :] =self.g1
+        #stimulus 2
+        x[10, :]=self.stimulus_2[0]
+        x[11, :] =self.stimulus_2[1]
+        x[12, :] =self.g2
+
+
+       
+        
+        
+        return x 
+
+
+    def get_y(self,args=None):
+        y=np.zeros((3,self.t_len))
+        
+        y[0,:self.stim]= 1
+        #fixate until stim period ends (i.e until when go period begins)
+
+        if self.g1 > self.g2:
+            y[1,self.stim:] = self.stimulus_1[0]
+            y[2,self.stim:] = self.stimulus_1[1]
+        
+        elif self.g1 < self.g2:
+            y[1,self.stim:] = self.stimulus_2[0]
+            y[2,self.stim:] =self.stimulus_2[1]
+
+
+
+        
+        if self.t_type.endswith('anti'):
+            if self.g1 > self.g2:
+                y[1,self.stim:] = self.stimulus_2[0]
+                y[2,self.stim:] = self.stimulus_2[1]
+        
+            elif self.g1 < self.g2:
+                y[1,self.stim:] = self.stimulus_1[0]
+                y[2,self.stim:] =self.stimulus_1[1]
+            
+        return y
 
 
 
