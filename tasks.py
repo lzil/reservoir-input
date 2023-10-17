@@ -982,6 +982,8 @@ class DMProAnti(Task):
 
 class DelayDM(Task):
     def __init__(self, args, dset_id=None, n=None):
+        
+        
         super().__init__(args.t_len, dset_id, n)
         #stimulus_1
         self.has_fix= True 
@@ -1167,6 +1169,124 @@ class DelayDM2(DelayDM):
         return y 
 
 
+class CtxDelayDM(Task):
+    def __init__(self, args, dset_id=None, n=None):
+        super().__init__(args.t_len, dset_id, n)
+        
+        self.L = 13
+        self.Z = 3
+        self.has_fix= True 
+        #stimulus_1
+        if args.angles is None:
+            theta_1=np.random.random()*2*np.pi
+        else:
+            theta_1 = np.random.choice(args.angles)*np.pi/180
+            #randomly sammple a value from 0 to arg.angles and convert from degrees to radians
+        
+        self.stimulus_1=[np.cos(theta_1),np.sin(theta_1)]
+
+        #stimulus 2
+        theta_2= np.random.uniform(low=theta_1 + np.pi * 0.5,high= theta_1 + np.pi*1.5)
+        self.stimulus_2= [np.cos(theta_2),np.sin(theta_2)]
+        #check 1(delete once checked): angles are what they're supposed to be
+
+        self.t_type = args.t_type
+        
+
+
+        
+        coherence_arr= [-0.08, -0.04, -0.02, -0.01, 0.01, 0.02, 0.04, 0.08]
+        
+
+        gamma_mean_1_mod_1= np.random.uniform(.8, 1.2) 
+        gamma_mean_1_mod_2= np.random.uniform(.8, 1.2) 
+
+        gamma_mean_2_mod_1= np.random.uniform(.8, 1.2) 
+        gamma_mean_2_mod_2= np.random.uniform(.8, 1.2) 
+
+        
+        
+        coherence_mod_1 =np.random.choice(coherence_arr)
+        coherence_mod_2 =np.random.choice(coherence_arr)
+        
+        self.g1_mod_1= gamma_mean_1_mod_1 + coherence_mod_1  #g1 as in stimulus 1
+        self.g1_mod_2= gamma_mean_1_mod_2 + coherence_mod_2 
+
+        self.g2_mod_1= gamma_mean_2_mod_1 + coherence_mod_1  
+        self.g2_mod_2= gamma_mean_2_mod_2 + coherence_mod_2
+
+        # duration of stimulus 1
+        self.fix = args.fix_t # fixaton duration and self.fix can also be point when self.fix ends
+    
+        
+        
+
+        self.stim1= args.stim_t1 #we'll define args.stim_t1
+        #we show stimulus 1 up until this point self.stim_1
+        self.delay1=self.stim1+args.delay_t1
+        self.stim_2=self.delay1+args.stim_t2 
+        #note:delay_t1 is the length of the delay self.delay1 is when the first delay ends in the trial
+
+        self.stim=self.stim_2+args.delay_t2
+
+    
+    def get_x(self,args=None):
+        x=np.zeros((13,self.t_len))
+        
+        x[0, :self.stim]=1
+        # modality 1
+
+        #stimulus 1
+        x[1, :self.stim1]=self.stimulus_1[0]
+        x[2, :self.stim1] = self.stimulus_1[1]
+        x[3, :self.stim1] = self.g1_mod_1
+
+        #stimulus 2
+
+        x[4,self.delay1 :self.stim_2]=self.stimulus_2[0]
+        x[5,self.delay1 :self.stim_2] =self.stimulus_2[1]
+        x[6, self.delay1:self.stim_2] = self.g2_mod_1
+
+
+        # modality 2
+
+        #stimulus 1
+
+        x[7, :self.stim1]=self.stimulus_1[0]
+        x[8, :self.stim1] = self.stimulus_1[1]
+        x[9, :self.stim1] =self.g1_mod_2
+
+        #stimulus 2
+        x[10, self.delay1:self.stim_2]=self.stimulus_2[0]
+        x[11, self.delay1:self.stim_2] =self.stimulus_2[1]
+        x[12, self.delay1:self.stim_2] =self.g2_mod_2
+        return x 
+
+
+    def get_y(self,args=None):
+        y=np.zeros((3,self.t_len))
+        
+        y[0,:self.stim]= 1
+        #fixate until stim period ends (i.e until when go period begins)
+        if self.t_type.endswith('1'):
+            if self.g1_mod_1 > self.g2_mod_1:
+                y[1,self.stim:] = self.stimulus_1[0]
+                y[2,self.stim:] = self.stimulus_1[1]
+            
+            elif self.g1_mod_1 < self.g2_mod_1:
+                y[1,self.stim:] = self.stimulus_2[0]
+                y[2,self.stim:] =self.stimulus_2[1]
+
+        elif self.t_type.endswith('2'):
+            if self.g1_mod_2 > self.g2_mod_2:
+                y[1,self.stim:] = self.stimulus_1[0]
+                y[2,self.stim:] = self.stimulus_1[1]
+        
+            elif self.g1_mod_2  < self.g2_mod_2:
+                y[1,self.stim:] = self.stimulus_2[0]
+                y[2,self.stim:] =self.stimulus_2[1]
+            
+        return y
 
 #DMC stands for delay match to category , DMS delay match to stimuli (bc same direction) N stands for not - we'll use pro for match and anti for not match 
 
@@ -1318,7 +1438,8 @@ def create_dataset(args):
     elif t_type == 'rt-pro' or t_type == 'rt-anti':
         assert args.fix_t + args.stim_t < args.t_len
         TaskObj = RTProAnti
-    
+    elif t_type == 'ctx-delay-dm1' or 'ctx-delay-dm2':
+        TaskObj = CtxDelayDM
     elif t_type == 'delay-dm1':
         TaskObj = DelayDM1
     elif t_type == 'delay-dm2':
@@ -1466,7 +1587,7 @@ def get_task_args(args):
         targs.stim_t = get_tval(tarr, 'stim', 100, int)
         targs.has_fix = get_tval(tarr, 'has_fix', True, bool)
     
-    elif args.t_type == 'delay-dm' or args.t_type =='delay-dm1' or args.t_type == 'delay-dm2':
+    elif args.t_type == 'delay-dm' or args.t_type =='delay-dm1' or args.t_type == 'delay-dm2' or args.t_type =='ctx-delay-dm1' or args.t_type == 'ctx-delay-dm2':
         targs.has_fix= get_tval(tarr,'has_fix',True, bool)
         targs.t_len = get_tval(tarr, 'l', 300, int)
         #default value of t_len is 300 according to this but doesn't do anything atm
@@ -1879,7 +2000,7 @@ if __name__ == '__main__':
 
 
 
-            elif t_type is CtxDM:
+            elif t_type is CtxDM or t_type is CtxDelayDM:
                 xr=np.arange(trial.t_len)
                 ax.plot(xr, trial_x[0], color='grey', lw=1, ls='--', alpha=.6)
                 #stimulus 1
