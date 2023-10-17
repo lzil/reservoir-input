@@ -980,7 +980,7 @@ class DMProAnti(Task):
 
 
 
-class DelayDMProAnti(Task):
+class DelayDM(Task):
     def __init__(self, args, dset_id=None, n=None):
         super().__init__(args.t_len, dset_id, n)
         #stimulus_1
@@ -999,7 +999,7 @@ class DelayDMProAnti(Task):
         #check 1(delete once checked): angles are what they're supposed to be
 
         self.t_type = args.t_type
-        assert self.t_type in ['delay-dm-pro', 'delay-dm-anti']
+        
 
 
         gamma_mean = np.random.uniform(.8, 1.2)
@@ -1049,6 +1049,57 @@ class DelayDMProAnti(Task):
         x[6, self.delay1:self.stim_2] =self.g2
         
         #I think  I have a way to update the matrices if a new task modality added that keeps the old weights and keeps them in the right position and still keeps the dimension D1 the same.
+        
+        return x 
+
+
+    def get_y(self,args=None):
+        y=np.zeros((3,self.t_len))
+        
+        y[0,:self.stim]= 1
+        #fixate until stim period ends (i.e until when go period begins
+        
+        if self.g1 > self.g2:
+            y[1,self.stim:] = self.stimulus_1[0]
+            y[2,self.stim:] = self.stimulus_1[1]
+        
+        elif self.g1 < self.g2:
+            y[1,self.stim:] = self.stimulus_2[0]
+            y[2,self.stim:] =self.stimulus_2[1]
+
+
+
+        
+        
+            
+        return y
+
+
+
+class DelayDM1(DelayDM):
+    def __init__(self, args, dset_id=None, n=None):
+        super().__init__(args, dset_id, n)
+        self.L = 13 #  two modalities 
+        self.Z = 3
+    
+    
+    def get_x(self,args =None):
+        
+        
+        x=np.zeros((13,self.t_len))
+        
+        
+        
+        #stimulus 1
+
+        x[1, :self.stim1]=self.stimulus_1[0]
+        x[2, :self.stim1] = self.stimulus_1[1]
+        x[3, :self.stim1] =self.g1
+        #stimulus 2
+        x[4, self.delay1:self.stim_2]=self.stimulus_2[0]
+        x[5, self.delay1:self.stim_2:] =self.stimulus_2[1]
+        x[6, self.delay1:self.stim_2] =self.g2
+        
         return x 
 
 
@@ -1059,28 +1110,62 @@ class DelayDMProAnti(Task):
         #fixate until stim period ends (i.e until when go period begins)
 
 
-        if self.t_type.endswith('pro'):
-            if self.g1 > self.g2:
-                y[1,self.stim:] = self.stimulus_1[0]
-                y[2,self.stim:] = self.stimulus_1[1]
-            
-            elif self.g1 < self.g2:
-                y[1,self.stim:] = self.stimulus_2[0]
-                y[2,self.stim:] =self.stimulus_2[1]
-
-
-
+       
+        if self.g1 > self.g2:
+            y[1,self.stim:] = self.stimulus_1[0]
+            y[2,self.stim:] = self.stimulus_1[1]
         
-        if self.t_type.endswith('anti'):
-            if self.g1 <self.g2:
-                y[1,self.stim:] = self.stimulus_1[0]
-                y[2,self.stim:] = self.stimulus_1[1]
-            
-            elif self.g1 > self.g2:
-                y[1,self.stim:] = self.stimulus_2[0]
-                y[2,self.stim:] =self.stimulus_2[1] 
-            
-        return y
+        elif self.g1 < self.g2:
+            y[1,self.stim:] = self.stimulus_2[0]
+            y[2,self.stim:] =self.stimulus_2[1]
+
+        return y 
+
+class DelayDM2(DelayDM):
+    def __init__(self, args, dset_id=None, n=None):
+        super().__init__(args, dset_id, n)
+        self.L = 13 #  two modalities 
+        self.Z = 3
+    
+    
+    def get_x(self,args =None):
+        
+        
+        x=np.zeros((13,self.t_len))
+        
+        
+        
+        #stimulus 1
+
+        x[1+6, :self.stim1]=self.stimulus_1[0]
+        x[2+6, :self.stim1] = self.stimulus_1[1]
+        x[3+6, :self.stim1] =self.g1
+        #stimulus 2
+        x[4+6, self.delay1:self.stim_2]=self.stimulus_2[0]
+        x[5+6, self.delay1:self.stim_2:] =self.stimulus_2[1]
+        x[6+6, self.delay1:self.stim_2] =self.g2
+
+        return x 
+
+
+    def get_y(self,args=None):
+        y=np.zeros((3,self.t_len))
+        
+        y[0,:self.stim]= 1
+        #fixate until stim period ends (i.e until when go period begins)
+
+
+       
+        if self.g1 > self.g2:
+            y[1,self.stim:] = self.stimulus_1[0]
+            y[2,self.stim:] = self.stimulus_1[1]
+        
+        elif self.g1 < self.g2:
+            y[1,self.stim:] = self.stimulus_2[0]
+            y[2,self.stim:] =self.stimulus_2[1]
+
+        return y 
+
 
 
 #DMC stands for delay match to category , DMS delay match to stimuli (bc same direction) N stands for not - we'll use pro for match and anti for not match 
@@ -1233,17 +1318,27 @@ def create_dataset(args):
     elif t_type == 'rt-pro' or t_type == 'rt-anti':
         assert args.fix_t + args.stim_t < args.t_len
         TaskObj = RTProAnti
-
+    
+    elif t_type == 'delay-dm1':
+        TaskObj = DelayDM1
+    elif t_type == 'delay-dm2':
+        TaskObj = DelayDM2
+    elif t_type == 'delay-dm':
+        TaskObj = DelayDM
+    
+    elif t_type == 'dm-pro' or 'dm-anti':
+        TaskObj = DMProAnti
     elif t_type =='multisen-dm':
         TaskObj = MultiSenDM
+    
     elif t_type == 'ctx-dm1' or 'ctx-dm2':
         TaskObj = CtxDM
     elif t_type == 'dm1-pro' or 'dm1-anti':
         TaskObj =DM1ProAnti
     elif t_type == 'dm2-pro' or 'dm2-anti':
         TaskObj =DM2ProAnti
-    elif t_type == 'dm-pro' or 'dm-anti':
-        TaskObj = DMProAnti
+    
+    
     
     elif t_type == 'dur-disc':
         assert args.tau + args.max_d <= args.sep_t
@@ -1370,6 +1465,19 @@ def get_task_args(args):
         targs.fix_t = get_tval(tarr, 'fix', 50, int)
         targs.stim_t = get_tval(tarr, 'stim', 100, int)
         targs.has_fix = get_tval(tarr, 'has_fix', True, bool)
+    
+    elif args.t_type == 'delay-dm' or args.t_type =='delay-dm1' or args.t_type == 'delay-dm2':
+        targs.has_fix= get_tval(tarr,'has_fix',True, bool)
+        targs.t_len = get_tval(tarr, 'l', 300, int)
+        #default value of t_len is 300 according to this but doesn't do anything atm
+        #bc for now t_len in dm is determined by stimulus duration
+        targs.fix_t = get_tval(tarr, 'fix', 33, int)
+        targs.stim_t1 = get_tval(tarr, 'stimt1', 75, int)
+        targs.delay_t1=get_tval(tarr,'delayl1',15, int)
+        targs.stim_t2 = get_tval(tarr, 'stimt2', 75, int)
+        targs.delay_t2=get_tval(tarr,'delayl1', 15, int)
+        targs.has_fix = get_tval(tarr, 'has_fix', True, bool)
+
 
     elif args.t_type == 'ctx-dm1' or args.t_type == 'ctx-dm2':
         targs.has_fix= get_tval(tarr,'has_fix',True, bool)
@@ -1388,17 +1496,7 @@ def get_task_args(args):
         targs.stim_t = get_tval(tarr, 'stim', 100, int)
         targs.has_fix = get_tval(tarr, 'has_fix', True, bool)
 
-    elif args.t_type == 'delay-dm-pro' or args.t_type == 'delay-dm-anti':
-        targs.has_fix= get_tval(tarr,'has_fix',True, bool)
-        targs.t_len = get_tval(tarr, 'l', 300, int)
-        #default value of t_len is 300 according to this but doesn't do anything atm
-        #bc for now t_len in dm is determined by stimulus duration
-        targs.fix_t = get_tval(tarr, 'fix', 33, int)
-        targs.stim_t1 = get_tval(tarr, 'stimt1', 75, int)
-        targs.delay_t1=get_tval(tarr,'delayl1',15, int)
-        targs.stim_t2 = get_tval(tarr, 'stimt2', 75, int)
-        targs.delay_t2=get_tval(tarr,'delayl1', 15, int)
-        targs.has_fix = get_tval(tarr, 'has_fix', True, bool)
+
 
     elif args.t_type == 'dmc-pro' or args.t_type == 'dmc-anti':
         targs.has_fix= get_tval(tarr,'has_fix',True, bool)
@@ -1923,57 +2021,41 @@ if __name__ == '__main__':
                     
 
 
-            elif t_type is DelayDMProAnti:
+            elif t_type is DelayDM or t_type is DelayDM1 or t_type is DelayDM2:
                 xr=np.arange(trial.t_len)
                 ax.plot(xr, trial_x[0], color='grey', lw=1, ls='--', alpha=.6)
                 #stimulus 1
-                if trial.t_type.endswith('pro'):
-                    if trial.g1 > trial.g2:
-                        ax.plot(xr, trial_x[1], color='salmon', lw=1*trial.g1, ls='--', alpha=.6)
-                        ax.plot(xr, trial_x[2], color='dodgerblue', lw=1*trial.g1, ls='--', alpha=.6)
-                        #stimulus 2
-                        ax.plot(xr, trial_x[4], color='magenta', lw=1*trial.g2, ls='dotted', alpha=.6)
-                        ax.plot(xr, trial_x[5], color='lime', lw=1*trial.g2, ls='dotted', alpha=.6)
+                
+                # takes us to modality 2 
+                if trial.t_type.endswith('2'):
+                    g = 6 
+                else:
+                    g=0
+                
+                if trial.g1 > trial.g2:
+                    ax.plot(xr, trial_x[1+g], color='salmon', lw=1*trial.g1, ls='--', alpha=.6)
+                    ax.plot(xr, trial_x[2+g], color='dodgerblue', lw=1*trial.g1, ls='--', alpha=.6)
+                    #stimulus 2
+                    ax.plot(xr, trial_x[4+g], color='magenta', lw=1*trial.g2, ls='dotted', alpha=.6)
+                    ax.plot(xr, trial_x[5+g], color='lime', lw=1*trial.g2, ls='dotted', alpha=.6)
 
-                        ax.plot(xr, trial_y[0], color='grey', lw=1.5)
-                        ax.plot(xr, trial_y[1], color='salmon', lw=1.5)
-                        ax.plot(xr, trial_y[2], color='dodgerblue', lw=1.5)
-
-
-                    elif trial.g1 < trial.g2:
-                        ax.plot(xr, trial_x[1], color='salmon', lw=1*trial.g1, ls='dotted', alpha=.6)
-                        ax.plot(xr, trial_x[2], color='dodgerblue', lw=1*trial.g1, ls='dotted', alpha=.6)
-                        #stimulus 2
-                        ax.plot(xr, trial_x[4], color='magenta', lw=1*trial.g2, ls='--', alpha=.6)
-                        ax.plot(xr, trial_x[5], color='lime', lw=1*trial.g2, ls='--', alpha=.6)
-
-                        ax.plot(xr, trial_y[0], color='grey', lw=1.5)
-                        ax.plot(xr, trial_y[1], color='magenta', lw=1.5)
-                        ax.plot(xr, trial_y[2], color='lime', lw=1.5)
-
-                elif trial.t_type.endswith('anti'):
-                    if trial.g1 > trial.g2:
-                        ax.plot(xr, trial_x[1], color='salmon', lw=1*trial.g1, ls='--', alpha=.6)
-                        ax.plot(xr, trial_x[2], color='dodgerblue', lw=1*trial.g1, ls='--', alpha=.6)
-                        #stimulus 2
-                        ax.plot(xr, trial_x[4], color='magenta', lw=1*trial.g2, ls='dotted', alpha=.6)
-                        ax.plot(xr, trial_x[5], color='lime', lw=1*trial.g2, ls='dotted', alpha=.6)
-
-                        ax.plot(xr, trial_y[0], color='grey', lw=1.5)
-                        ax.plot(xr, trial_y[1], color='magenta', lw=1.5)
-                        ax.plot(xr, trial_y[2], color='lime', lw=1.5)
-
-                    elif trial.g1 < trial.g2:
-                        ax.plot(xr, trial_x[1], color='salmon', lw=1*trial.g1, ls='dotted', alpha=.6)
-                        ax.plot(xr, trial_x[2], color='dodgerblue', lw=1*trial.g1, ls='dotted', alpha=.6)
-                        #stimulus 2
-                        ax.plot(xr, trial_x[4], color='magenta', lw=1*trial.g2, ls='--', alpha=.6)
-                        ax.plot(xr, trial_x[5], color='lime', lw=1*trial.g2, ls='--', alpha=.6)
+                    ax.plot(xr, trial_y[0], color='grey', lw=1.5)
+                    ax.plot(xr, trial_y[1], color='salmon', lw=1.5)
+                    ax.plot(xr, trial_y[2], color='dodgerblue', lw=1.5)
 
 
-                        ax.plot(xr, trial_y[0], color='grey', lw=1.5)
-                        ax.plot(xr, trial_y[1], color='salmon', lw=1.5)
-                        ax.plot(xr, trial_y[2], color='dodgerblue', lw=1.5)
+                elif trial.g1 < trial.g2:
+                    ax.plot(xr, trial_x[1+g], color='salmon', lw=1*trial.g1, ls='dotted', alpha=.6)
+                    ax.plot(xr, trial_x[2+g], color='dodgerblue', lw=1*trial.g1, ls='dotted', alpha=.6)
+                    #stimulus 2
+                    ax.plot(xr, trial_x[4+g], color='magenta', lw=1*trial.g2, ls='--', alpha=.6)
+                    ax.plot(xr, trial_x[5+g], color='lime', lw=1*trial.g2, ls='--', alpha=.6)
+
+                    ax.plot(xr, trial_y[0], color='grey', lw=1.5)
+                    ax.plot(xr, trial_y[1], color='magenta', lw=1.5)
+                    ax.plot(xr, trial_y[2], color='lime', lw=1.5)
+
+                
 
 
             elif t_type is DurationDisc:
