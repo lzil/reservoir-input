@@ -78,6 +78,10 @@ The following task arguments (like '`rsg`' above) can be used to create datasets
 - Matching family:
     - `dmc-pro` : DMC (delay-match-to-category; two directional stimuli shown one at a time with a delay period betwen them - respond in same direction as second stimulus if stimuli point towards the same hemicircle; fixate otherwise)
     - `dmc-anti`: DNMC (respond in direction same direction of second stimulus, if stimuli don't fall in same category; fixate otherwise)
+    (DMS has been omitted as an exact match for continuous random directions is highly improbable.)
+
+
+
 
 
 
