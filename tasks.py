@@ -632,8 +632,10 @@ class DM2ProAnti(Task):
             
         return y
 
-
-class CtxDM1(Task):
+# combines two DM inputs so two modalities (two random dot motion screens)
+# if CtxDM1  task is to ignore what happens in the second screen (hence the '1' in 'CtxDM1'), respond in 
+#direction of motion with greater coherence in modality 1, ignore modality 2 
+class CtxDM(Task):
     def __init__(self, args, dset_id=None, n=None):
         super().__init__(args.t_len, dset_id, n)
         self.has_fix= True 
@@ -652,17 +654,34 @@ class CtxDM1(Task):
         #check 1(delete once checked): angles are what they're supposed to be
 
         self.t_type = args.t_type
-        assert self.t_type in ['dm2-pro', 'dm2-anti']
+        
 
 
-        gamma_mean = np.random.uniform(.8, 1.2)
+        
         coherence_arr= [-0.08, -0.04, -0.02, -0.01, 0.01, 0.02, 0.04, 0.08]
         
-        coherence=np.random.choice(coherence_arr)
-        coherence=np.random.choice(coherence_arr)
+
+        gamma_mean_1_mod_1= np.random.uniform(.8, 1.2) 
+        gamma_mean_1_mod_2= np.random.uniform(.8, 1.2) 
+
+        gamma_mean_2_mod_1= np.random.uniform(.8, 1.2) 
+        gamma_mean_2_mod_2= np.random.uniform(.8, 1.2) 
+
         
-        self.g1 = gamma_mean + coherence
-        self.g2 = gamma_mean - coherence
+        
+        coherence_mod_1 =np.random.choice(coherence_arr)
+        coherence_mod_2 =np.random.choice(coherence_arr)
+        
+        self.g1_mod_1= gamma_mean_1_mod_1 + coherence_mod_1  #g1 as in stimulus 1
+        self.g1_mod_2= gamma_mean_1_mod_2 + coherence_mod_2 
+
+        self.g2_mod_1= gamma_mean_2_mod_1 + coherence_mod_1  
+        self.g2_mod_2= gamma_mean_2_mod_2 + coherence_mod_2
+
+
+       
+
+
 
         #duration of stimulus 1
         self.fix = args.fix_t # fixaton duration and self.fix can also be point when self.fix ends
@@ -677,31 +696,39 @@ class CtxDM1(Task):
 
 
 
-        self.L = 7
+        self.L = 13
         self.Z = 3
     
     def get_x(self,args=None):
         x=np.zeros((13,self.t_len))
         
         x[0, :self.stim]=1
-        
-        
-        # modality 1: x[1: .. ], ... x[6:] are just zero rows
+        # modality 1
+
+        #stimulus 1
+        x[1, :]=self.stimulus_1[0]
+        x[2, :] = self.stimulus_1[1]
+        x[3, :] = self.g1_mod_1
+
+        #stimulus 2
+
+        x[4, :]=self.stimulus_2[0]
+        x[5, :] =self.stimulus_2[1]
+        x[6, :] = self.g2_mod_1
+
 
         # modality 2
+
         #stimulus 1
+
         x[7, :]=self.stimulus_1[0]
         x[8, :] = self.stimulus_1[1]
-        x[9, :] =self.g1
+        x[9, :] =self.g1_mod_2
+
         #stimulus 2
         x[10, :]=self.stimulus_2[0]
         x[11, :] =self.stimulus_2[1]
-        x[12, :] =self.g2
-
-
-       
-        
-        
+        x[12, :] =self.g2_mod_2
         return x 
 
 
@@ -710,26 +737,23 @@ class CtxDM1(Task):
         
         y[0,:self.stim]= 1
         #fixate until stim period ends (i.e until when go period begins)
-
-        if self.g1 > self.g2:
-            y[1,self.stim:] = self.stimulus_1[0]
-            y[2,self.stim:] = self.stimulus_1[1]
-        
-        elif self.g1 < self.g2:
-            y[1,self.stim:] = self.stimulus_2[0]
-            y[2,self.stim:] =self.stimulus_2[1]
-
-
-
-        
-        if self.t_type.endswith('anti'):
-            if self.g1 > self.g2:
-                y[1,self.stim:] = self.stimulus_2[0]
-                y[2,self.stim:] = self.stimulus_2[1]
-        
-            elif self.g1 < self.g2:
+        if self.t_type.endswith('1'):
+            if self.g1_mod_1 > self.g2_mod_1:
                 y[1,self.stim:] = self.stimulus_1[0]
-                y[2,self.stim:] =self.stimulus_1[1]
+                y[2,self.stim:] = self.stimulus_1[1]
+            
+            elif self.g1_mod_1 < self.g2_mod_1:
+                y[1,self.stim:] = self.stimulus_2[0]
+                y[2,self.stim:] =self.stimulus_2[1]
+
+        elif self.t_type.endswith('2'):
+            if self.g1_mod_2 > self.g2_mod_2:
+                y[1,self.stim:] = self.stimulus_1[0]
+                y[2,self.stim:] = self.stimulus_1[1]
+        
+            elif self.g1_mod_2  < self.g2_mod_2:
+                y[1,self.stim:] = self.stimulus_2[0]
+                y[2,self.stim:] =self.stimulus_2[1]
             
         return y
 
@@ -1061,7 +1085,7 @@ def shift_x(x, m_noise, t_p):
 def create_dataset(args):
     t_type = args.t_type
     n_trials = args.n_trials
-
+    
     if t_type == 'binary-rsg':
         assert args.max_ready + args.max_t + int(args.max_t * args.gain) < args.t_len
         TaskObj = BinaryRSG
@@ -1083,12 +1107,15 @@ def create_dataset(args):
     elif t_type == 'rt-pro' or t_type == 'rt-anti':
         assert args.fix_t + args.stim_t < args.t_len
         TaskObj = RTProAnti
+    elif t_type == 'ctx-dm1' or 'ctx-dm2':
+        TaskObj = CtxDM
     elif t_type == 'dm1-pro' or 'dm1-anti':
         TaskObj =DM1ProAnti
     elif t_type == 'dm2-pro' or 'dm2-anti':
         TaskObj =DM2ProAnti
     elif t_type == 'dm-pro' or 'dm-anti':
         TaskObj = DMProAnti
+    
     elif t_type == 'dur-disc':
         assert args.tau + args.max_d <= args.sep_t
         assert args.sep_t + args.tau + args.max_d <= args.cue_t
@@ -1211,6 +1238,14 @@ def get_task_args(args):
         targs.t_len = get_tval(tarr, 'l', 300, int)
         #default value of t_len is 300 according to this but doesn't do anything atm
         #bc for now t_len in dm is determined by stimulus duration
+        targs.fix_t = get_tval(tarr, 'fix', 50, int)
+        targs.stim_t = get_tval(tarr, 'stim', 100, int)
+        targs.has_fix = get_tval(tarr, 'has_fix', True, bool)
+
+    elif args.t_type == 'ctx-dm1' or args.t_type == 'ctx-dm2':
+        targs.has_fix= get_tval(tarr,'has_fix',True, bool)
+        targs.t_len = get_tval(tarr, 'l', 300, int)
+        
         targs.fix_t = get_tval(tarr, 'fix', 50, int)
         targs.stim_t = get_tval(tarr, 'stim', 100, int)
         targs.has_fix = get_tval(tarr, 'has_fix', True, bool)
@@ -1600,6 +1635,60 @@ if __name__ == '__main__':
                         #stimulus 2
                         ax.plot(xr, trial_x[10], color='magenta', lw=1*trial.g2, ls='--', alpha=.6)
                         ax.plot(xr, trial_x[11], color='lime', lw=1*trial.g2, ls='--', alpha=.6)
+
+
+                        ax.plot(xr, trial_y[0], color='grey', lw=1.5)
+                        ax.plot(xr, trial_y[1], color='salmon', lw=1.5)
+                        ax.plot(xr, trial_y[2], color='dodgerblue', lw=1.5)
+
+
+
+            elif t_type is CtxDM:
+                xr=np.arange(trial.t_len)
+                ax.plot(xr, trial_x[0], color='grey', lw=1, ls='--', alpha=.6)
+                #stimulus 1
+                if trial.t_type.endswith('1'):
+                    if trial.g1_mod_1 > trial.g2_mod_1:
+                        # FOR later: currently not plotting input modality 2 as in CtxDM1, task is to ignore what happens in mod 2
+                        #  - as there is stuff happening in modality 2 - should we plot it as well?
+                        ax.plot(xr, trial_x[1], color='salmon', lw=1*trial.g1_mod_1, ls='--', alpha=.6)
+                        ax.plot(xr, trial_x[2], color='dodgerblue', lw=1*trial.g1_mod_1, ls='--', alpha=.6)
+                        #stimulus 2
+                        ax.plot(xr, trial_x[4], color='magenta', lw=1*trial.g2_mod_1, ls='dotted', alpha=.6)
+                        ax.plot(xr, trial_x[5], color='lime', lw=1*trial.g2_mod_1, ls='dotted', alpha=.6)
+
+                        ax.plot(xr, trial_y[0], color='grey', lw=1.5)
+                        ax.plot(xr, trial_y[1], color='salmon', lw=1.5)
+                        ax.plot(xr, trial_y[2], color='dodgerblue', lw=1.5)
+
+                    elif trial.g1_mod_1 < trial.g2_mod_1:
+                        ax.plot(xr, trial_x[1], color='salmon', lw=1*trial.g1_mod_1, ls='dotted', alpha=.6)
+                        ax.plot(xr, trial_x[2], color='dodgerblue', lw=1*trial.g1_mod_1, ls='dotted', alpha=.6)
+                        #stimulus 2
+                        ax.plot(xr, trial_x[4], color='magenta', lw=1*trial.g2_mod_1, ls='--', alpha=.6)
+                        ax.plot(xr, trial_x[5], color='lime', lw=1*trial.g2_mod_1, ls='--', alpha=.6)
+
+                        ax.plot(xr, trial_y[0], color='grey', lw=1.5)
+                        ax.plot(xr, trial_y[1], color='magenta', lw=1.5)
+                        ax.plot(xr, trial_y[2], color='lime', lw=1.5)
+                elif trial.t_type.endswith('2'):
+                    if trial.g1_mod_2 > trial.g2_mod_2:
+                        ax.plot(xr, trial_x[7], color='salmon', lw=1*trial.g1_mod_2, ls='--', alpha=.6)
+                        ax.plot(xr, trial_x[8], color='dodgerblue', lw=1*trial.g1_mod_2, ls='--', alpha=.6)
+                        #stimulus 2
+                        ax.plot(xr, trial_x[10], color='magenta', lw=1*trial.g2_mod_2, ls='dotted', alpha=.6)
+                        ax.plot(xr, trial_x[11], color='lime', lw=1*trial.g2_mod_2, ls='dotted', alpha=.6)
+
+                        ax.plot(xr, trial_y[0], color='grey', lw=1.5)
+                        ax.plot(xr, trial_y[1], color='magenta', lw=1.5)
+                        ax.plot(xr, trial_y[2], color='lime', lw=1.5)
+
+                    elif trial.g1_mod_2 < trial.g2_mod_2:
+                        ax.plot(xr, trial_x[7], color='salmon', lw=1*trial.g1_mod_2, ls='dotted', alpha=.6)
+                        ax.plot(xr, trial_x[8], color='dodgerblue', lw=1*trial.g1_mod_2, ls='dotted', alpha=.6)
+                        #stimulus 2
+                        ax.plot(xr, trial_x[10], color='magenta', lw=1*trial.g2_mod_2, ls='--', alpha=.6)
+                        ax.plot(xr, trial_x[11], color='lime', lw=1*trial.g2_mod_2, ls='--', alpha=.6)
 
 
                         ax.plot(xr, trial_y[0], color='grey', lw=1.5)
