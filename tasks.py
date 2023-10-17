@@ -758,6 +758,132 @@ class CtxDM(Task):
         return y
 
 
+# mutlisensory integration task
+class MultiSenDM(Task):
+    def __init__(self, args, dset_id=None, n=None):
+        super().__init__(args.t_len, dset_id, n)
+        self.has_fix= True 
+        #stimulus_1
+        if args.angles is None:
+            theta_1=np.random.random()*2*np.pi
+        else:
+            theta_1 = np.random.choice(args.angles)*np.pi/180
+            #randomly sammple a value from 0 to arg.angles and convert from degrees to radians
+        
+        self.stimulus_1=[np.cos(theta_1),np.sin(theta_1)]
+
+        #stimulus 2
+        theta_2= np.random.uniform(low=theta_1 + np.pi * 0.5,high= theta_1 + np.pi*1.5)
+        self.stimulus_2= [np.cos(theta_2),np.sin(theta_2)]
+        #check 1(delete once checked): angles are what they're supposed to be
+
+        self.t_type = args.t_type
+        
+
+
+        
+        coherence_arr= [-0.08, -0.04, -0.02, -0.01, 0.01, 0.02, 0.04, 0.08]
+        
+
+        gamma = np.random.uniform(.8, 1.2) 
+        coherence =np.random.choice(coherence_arr)
+        
+        self.gamma_1 = gamma + coherence
+        self.gamma_2 = gamma - coherence
+
+        delta_1 = self.union_of_uniforms_sampler()
+        delta_2 = self.union_of_uniforms_sampler()
+
+        
+        
+        self.g1_mod_1= self.gamma_1 * (1 + delta_1)
+        self.g1_mod_2= self.gamma_1*(1-delta_1)
+
+        self.g2_mod_1= self.gamma_2 * (1+delta_2)
+        self.g2_mod_2= self.gamma_2 * (1+delta_2)
+
+
+       
+
+
+
+        #duration of stimulus 1
+        self.fix = args.fix_t # fixaton duration and self.fix can also be point when self.fix ends
+    
+        #stim_t= random.choice([400, 800, 1600])
+        #used fixed stim_t
+        self.stim = self.fix + args.stim_t
+
+        
+
+        
+
+
+
+        self.L = 13
+        self.Z = 3
+
+
+    def union_of_uniforms_sampler(self):
+        sample = np.random.rand(1)  # draw from U(0,1)
+
+        #map sample to one of two intervals
+        if sample < 0.5:
+            sample = 0.1 + sample * 0.3 # map to a sample from U(0.1,0.4)
+        else:
+            sample = -0.4 + (sample - 0.5) * 0.3 #map to a sample from U(-0.4,-0.1)
+        return sample
+    
+    def get_x(self,args=None):
+        x=np.zeros((13,self.t_len))
+        
+        x[0, :self.stim]=1
+        # modality 1
+
+        #stimulus 1
+        x[1, :]=self.stimulus_1[0]
+        x[2, :] = self.stimulus_1[1]
+        x[3, :] = self.g1_mod_1
+
+        #stimulus 2
+
+        x[4, :]=self.stimulus_2[0]
+        x[5, :] =self.stimulus_2[1]
+        x[6, :] = self.g2_mod_1
+
+
+        # modality 2
+
+        #stimulus 1
+
+        x[7, :]=self.stimulus_1[0]
+        x[8, :] = self.stimulus_1[1]
+        x[9, :] =self.g1_mod_2
+
+        #stimulus 2
+        x[10, :]=self.stimulus_2[0]
+        x[11, :] =self.stimulus_2[1]
+        x[12, :] =self.g2_mod_2
+        return x 
+
+
+    def get_y(self,args=None):
+        y=np.zeros((3,self.t_len))
+        
+        y[0,:self.stim]= 1
+        #fixate until stim period ends (i.e until when go period begins)
+        
+        if self.gamma_1> self.gamma_2:
+            y[1,self.stim:] = self.stimulus_1[0]
+            y[2,self.stim:] = self.stimulus_1[1]
+        
+        elif self.gamma_1 < self.gamma_2:
+            y[1,self.stim:] = self.stimulus_2[0]
+            y[2,self.stim:] =self.stimulus_2[1]
+
+        
+        return y
+
 
 
 class DMProAnti(Task):
@@ -1107,6 +1233,9 @@ def create_dataset(args):
     elif t_type == 'rt-pro' or t_type == 'rt-anti':
         assert args.fix_t + args.stim_t < args.t_len
         TaskObj = RTProAnti
+
+    elif t_type =='multisen-dm':
+        TaskObj = MultiSenDM
     elif t_type == 'ctx-dm1' or 'ctx-dm2':
         TaskObj = CtxDM
     elif t_type == 'dm1-pro' or 'dm1-anti':
@@ -1250,6 +1379,15 @@ def get_task_args(args):
         targs.stim_t = get_tval(tarr, 'stim', 100, int)
         targs.has_fix = get_tval(tarr, 'has_fix', True, bool)
 
+
+    elif args.t_type == 'multisen-dm':
+        targs.has_fix= get_tval(tarr,'has_fix',True, bool)
+        targs.t_len = get_tval(tarr, 'l', 300, int)
+        
+        targs.fix_t = get_tval(tarr, 'fix', 50, int)
+        targs.stim_t = get_tval(tarr, 'stim', 100, int)
+        targs.has_fix = get_tval(tarr, 'has_fix', True, bool)
+
     elif args.t_type == 'delay-dm-pro' or args.t_type == 'delay-dm-anti':
         targs.has_fix= get_tval(tarr,'has_fix',True, bool)
         targs.t_len = get_tval(tarr, 'l', 300, int)
@@ -1273,7 +1411,7 @@ def get_task_args(args):
         targs.stim_t2 = get_tval(tarr, 'stimt2', 100, int)
         targs.has_fix = get_tval(tarr, 'has_fix', True, bool)
 
-
+    
     return targs
     #we get this targs dictionary
 
@@ -1694,7 +1832,35 @@ if __name__ == '__main__':
                         ax.plot(xr, trial_y[0], color='grey', lw=1.5)
                         ax.plot(xr, trial_y[1], color='salmon', lw=1.5)
                         ax.plot(xr, trial_y[2], color='dodgerblue', lw=1.5)
-                        
+
+            
+            elif t_type is MultiSenDM:
+                xr=np.arange(trial.t_len)
+                ax.plot(xr, trial_x[0], color='grey', lw=1, ls='--', alpha=.6)
+                #stimulus 1
+                
+                if trial.gamma_1> trial.gamma_2:
+                    ax.plot(xr, trial_x[7], color='salmon', lw=1*trial.gamma_1, ls='--', alpha=.6)
+                    ax.plot(xr, trial_x[8], color='dodgerblue', lw=1*trial.gamma_1, ls='--', alpha=.6)
+                    #stimulus 2
+                    ax.plot(xr, trial_x[10], color='magenta', lw=1*trial.gamma_2, ls='dotted', alpha=.6)
+                    ax.plot(xr, trial_x[11], color='lime', lw=1*trial.gamma_2, ls='dotted', alpha=.6)
+
+                    ax.plot(xr, trial_y[0], color='grey', lw=1.5)
+                    ax.plot(xr, trial_y[1], color='salmon', lw=1.5)
+                    ax.plot(xr, trial_y[2], color='dodgerblue', lw=1.5)
+
+                elif trial.gamma_1 < trial.gamma_2:
+                    ax.plot(xr, trial_x[7], color='salmon', lw=1*trial.gamma_1, ls='dotted', alpha=.6)
+                    ax.plot(xr, trial_x[8], color='dodgerblue', lw=1*trial.gamma_1, ls='dotted', alpha=.6)
+                    #stimulus 2
+                    ax.plot(xr, trial_x[10], color='magenta', lw=1*trial.gamma_2, ls='--', alpha=.6)
+                    ax.plot(xr, trial_x[11], color='lime', lw=1*trial.gamma_2, ls='--', alpha=.6)
+
+                    ax.plot(xr, trial_y[0], color='grey', lw=1.5)
+                    ax.plot(xr, trial_y[1], color='magenta', lw=1.5)
+                    ax.plot(xr, trial_y[2], color='lime', lw=1.5)
+                    
 
 
 
