@@ -53,5 +53,34 @@ creates an RSG dataset at `datasets/rsg_2.pkl` with 2000 trials, with intervals 
 `python tasks.py load datasets/rsg_1.pkl` loads some examples from the dataset
 
 
+## task library 
+### Cognitive task battery from Yang et al
+The following task arguments (like '`rsg`' above) can be used to create datasets of continuous-direction versions of the tasks described by Yang:
+- Go task family:
+    - `delay-pro`: Go 
+    - `memory-pro`: DlyGo 
+    - `rt-pro`: RT Go (reaction time task)
+- Anti task family:
+    - `delay-anti`: the Anti task
+    - `memory-anti`: DlyAnti
+    - `rt-pro`: RT Go (reaction time task)
+- DM family:
+    - `dm1-pro`: DM1 (simplified RDM task with two directions,and their respective coherences,shown through modality 1; objective: respond in direction with greater coherence )
+    - `dm2-pro`: DM2 (same but through modality 2)
+    - `ctx-dm1`: Ctx DM 1 (two modalities, each receives a distinct RDM task -  direction pairs are the same in each RDM task, but coherences differ ; objective: ignore modality 2, respond in the direction with strongest coherence in stimulus 1 )
+    - `ctx-dm2`: Ctx DM 2 
+    - `multisen-dm`: MultSen DM 
+- Dly DM family;
+    - `delay-dm1`: Dly DM 1 (same as DM1 but the stimuli are shown separately with a delay between them and a delay after the second stimulus is shown before the response period)
+    - `delay-dm2`: Dly DM 2 
+    - `ctx-delay-dm1`: Ctx Dly DM 1 
+    - `ctx-delay-dm2`: Ctx Dly DM 2
+- Matching family:
+    - `dmc-pro` : DMC (delay-match-to-category; two directional stimuli shown one at a time with a delay period betwen them - respond in same direction as second stimulus if stimuli point towards the same hemicircle; fixate otherwise)
+    - `dmc-anti`: DNMC (respond in direction same direction of second stimulus, if stimuli don't fall in same category; fixate otherwise)
+
+
+
+
 ## contact
 Email <liang.zhou.18@ucl.ac.uk> with any questions.
