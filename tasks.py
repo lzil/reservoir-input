@@ -1292,7 +1292,7 @@ class CtxDelayDM(Task):
 
 
 
-
+# can generate a DNMC by using dmc-anti
 class DMCProAnti(Task):
     def __init__(self, args, dset_id=None, n=None):
         super().__init__(args.t_len, dset_id, n)
@@ -1394,6 +1394,66 @@ class DMCProAnti(Task):
         return y
     
 
+# Mod Cog tasks
+# default task args will be an anti-clockwise shift but we'll include a displacement direction argument --displ_direction clockwise 
+class DelayGo_IntL(Task):
+    def __init__(self, args, dset_id=None, n=None):
+        super().__init__(args.t_len, dset_id, n)
+        self.has_fix= True 
+        if args.angles is None:
+            theta = np.random.random() * 2 * np.pi
+        else:
+            theta = np.random.choice(args.angles) * np.pi / 180
+        stimulus = [np.cos(theta), np.sin(theta)]
+
+
+        # new arg for endpoints of uniform distribution of memory period lengths
+
+        memory_t = np.random.uniform(args.min_mem_t,args.max_mem_t)
+        
+        self.t_type = args.t_type
+        assert self.t_type in ['memory-pro', 'memory-anti']
+        self.stimulus = stimulus
+        self.fix = args.fix_t
+        self.stim = self.fix + args.stim_t
+        self.memory = self.stim + memory_t
+
+        assert args.displacement_direction in ['anti-clockwise', 'clockwise']
+        # now shift theta based on length of delay
+        delta_theta = args.delay_scalar * memory_t
+        
+        
+        
+        if args.displacement_direction == 'anti-clockwise':
+            theta_out = theta + delta_theta
+        else: #clockwise
+            theta_out = theta - delta_theta
+        
+        theta_out = theta_out % (2 * np.pi) 
+        self.response = [np.cos(theta_out), np.sin(theta_out)]
+
+        self.L = 3
+        self.Z = 3
+
+    def get_x(self, args=None):
+        x = np.zeros((3, self.t_len))
+        x[0,:self.memory] = 1
+        x[1,self.fix:self.stim] = self.stimulus[0]
+        x[2,self.fix:self.stim] = self.stimulus[1]
+        return x
+
+    def get_y(self, args=None):
+        y = np.zeros((3, self.t_len))
+        y[0,:self.memory] = 1
+        y[1,self.memory:] = self.response[0]
+        y[2,self.memory:] = self.response[1]
+        # reversing output stimulus for anti condition
+        if self.t_type.endswith('anti'):
+            y[1:,] = -y[1:,]
+        return y
+
+
+
 
 
 
@@ -1459,7 +1519,8 @@ def create_dataset(args):
     elif t_type == 'dm2-pro' or 'dm2-anti':
         TaskObj =DM2ProAnti
     
-    
+    elif t_type == 'delay-go-interval':
+        TaskObj = DelayGo_IntL
     
     elif t_type == 'dur-disc':
         assert args.tau + args.max_d <= args.sep_t
@@ -1618,7 +1679,7 @@ def get_task_args(args):
         targs.has_fix = get_tval(tarr, 'has_fix', True, bool)
 
 
-
+    #use dmc anti for DNMC 
     elif args.t_type == 'dmc-pro' or args.t_type == 'dmc-anti':
         targs.has_fix= get_tval(tarr,'has_fix',True, bool)
         targs.t_len = get_tval(tarr, 'l', 300, int)
@@ -1630,6 +1691,17 @@ def get_task_args(args):
         targs.stim_t2 = get_tval(tarr, 'stimt2', 100, int)
         targs.has_fix = get_tval(tarr, 'has_fix', True, bool)
 
+
+
+    elif args.t_type == 'delay-go-interval':
+        targs.has_fix= get_tval(tarr,'has_fix',True, bool)
+        targs.t_len = get_tval(tarr, 'l', 300, int)
+        targs.fix_t = get_tval(tarr, 'fix', 50, int)
+        targs.stim_t = get_tval(tarr, 'stim', 100, int)
+        
+        targs.min__mem_t = get_tval(tarr, 'min__mem_t', 0, int)
+        targs.max__mem_t = get_tval(tarr, 'max__mem_t', 50, int)
+        targs.displacement_direction = get_tval(tarr,'displacement_direction','anti-clockwise', str)
     
     return targs
     #we get this targs dictionary
@@ -1831,7 +1903,7 @@ if __name__ == '__main__':
                     ax.plot(xr, trial_x[j], color=cols[j], lw=.5, ls='--', alpha=.9)
                     ax.plot(xr, trial_y[j], color=cols[j], lw=1)
 
-            elif t_type in [DelayProAnti, MemoryProAnti, RTProAnti]:
+            elif t_type in [DelayProAnti, MemoryProAnti, RTProAnti,DelayGo_IntL]:
                 ax.plot(xr, trial_x[0], color='grey', lw=1, ls='--', alpha=.6)
                 ax.plot(xr, trial_x[1], color='salmon', lw=1, ls='--', alpha=.6)
                 ax.plot(xr, trial_x[2], color='dodgerblue', lw=1, ls='--', alpha=.6)
