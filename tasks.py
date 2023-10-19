@@ -1408,19 +1408,20 @@ class DelayGo_IntL(Task):
 
 
         # new arg for endpoints of uniform distribution of memory period lengths
-
-        memory_t = np.random.uniform(args.min_mem_t,args.max_mem_t)
+        
+        # memory/delay period length
+        self.memory_t = np.random.randint(args.min_mem_t+1,args.max_mem_t+1) # so that it's (min_mem_t, max_mem_t) as randint() is inclusive, exclusive
         
         self.t_type = args.t_type
-        assert self.t_type in ['memory-pro', 'memory-anti']
+        
         self.stimulus = stimulus
         self.fix = args.fix_t
         self.stim = self.fix + args.stim_t
-        self.memory = self.stim + memory_t
+        self.memory = self.stim + self.memory_t
 
         assert args.displacement_direction in ['anti-clockwise', 'clockwise']
         # now shift theta based on length of delay
-        delta_theta = args.delay_scalar * memory_t
+        delta_theta = args.delay_scalar * (self.memory_t /180 *np.pi)
         
         
         
@@ -1429,7 +1430,7 @@ class DelayGo_IntL(Task):
         else: #clockwise
             theta_out = theta - delta_theta
         
-        theta_out = theta_out % (2 * np.pi) 
+        theta_out = theta_out #% (2 * np.pi) 
         self.response = [np.cos(theta_out), np.sin(theta_out)]
 
         self.L = 3
@@ -1437,6 +1438,7 @@ class DelayGo_IntL(Task):
 
     def get_x(self, args=None):
         x = np.zeros((3, self.t_len))
+        
         x[0,:self.memory] = 1
         x[1,self.fix:self.stim] = self.stimulus[0]
         x[2,self.fix:self.stim] = self.stimulus[1]
@@ -1492,6 +1494,8 @@ def create_dataset(args):
     elif t_type == 'delay-pro' or t_type == 'delay-anti':
         assert args.fix_t + args.stim_t < args.t_len
         TaskObj = DelayProAnti
+    elif t_type == 'delay-go-interval':
+        TaskObj = DelayGo_IntL
     elif t_type == 'memory-pro' or t_type == 'memory-anti':
         assert args.fix_t + args.stim_t + args.memory_t < args.t_len
         TaskObj = MemoryProAnti
@@ -1519,8 +1523,7 @@ def create_dataset(args):
     elif t_type == 'dm2-pro' or 'dm2-anti':
         TaskObj =DM2ProAnti
     
-    elif t_type == 'delay-go-interval':
-        TaskObj = DelayGo_IntL
+    
     
     elif t_type == 'dur-disc':
         assert args.tau + args.max_d <= args.sep_t
@@ -1699,9 +1702,10 @@ def get_task_args(args):
         targs.fix_t = get_tval(tarr, 'fix', 50, int)
         targs.stim_t = get_tval(tarr, 'stim', 100, int)
         
-        targs.min__mem_t = get_tval(tarr, 'min__mem_t', 0, int)
-        targs.max__mem_t = get_tval(tarr, 'max__mem_t', 50, int)
+        targs.min_mem_t = get_tval(tarr, 'min_mem_t', 0, int)
+        targs.max_mem_t = get_tval(tarr, 'max_mem_t', 50, int)
         targs.displacement_direction = get_tval(tarr,'displacement_direction','anti-clockwise', str)
+        targs.delay_scalar = get_tval(tarr, 'delay_scalar', 0.5, float)
     
     return targs
     #we get this targs dictionary
@@ -1821,7 +1825,7 @@ if __name__ == '__main__':
         task_args = get_task_args(args)
 
         args = update_args(args, task_args)
-
+       
     args.argv = ' '.join(sys.argv)
 
     if args.mode == 'create':
