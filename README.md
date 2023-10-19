@@ -61,9 +61,9 @@ The following task arguments (like '`rsg`' above) can be used to create datasets
     - `memory-pro`: DlyGo 
     - `rt-pro`: RT Go (reaction time task)
 - Anti task family:
-    - `delay-anti`: the Anti task
+    - `delay-anti`: same as the 'delay-pro' except the expected response is a saccade in the opposite direction of that of the stimulus.
     - `memory-anti`: DlyAnti
-    - `rt-pro`: RT Go (reaction time task)
+    - `rt-anti`: RT Go (reaction time task)
 - DM family:
     - `dm1-pro`: DM1 (simplified RDM task with two directions,and their respective coherences,shown through modality 1; objective: respond in direction with greater coherence )
     - `dm2-pro`: DM2 (same but through modality 2)
@@ -78,11 +78,18 @@ The following task arguments (like '`rsg`' above) can be used to create datasets
 - Matching family:
     - `dmc-pro` : DMC (delay-match-to-category; two directional stimuli shown one at a time with a delay period betwen them - respond in same direction as second stimulus if stimuli point towards the same hemicircle; fixate otherwise)
     - `dmc-anti`: DNMC (respond in direction same direction of second stimulus, if stimuli don't fall in same category; fixate otherwise)
-    (DMS has been omitted as an exact match for continuous random directions is highly improbable.)
+    (DMS has been omitted as an exact match for continuous random directions is highly improbable - in this setting a network could achieve near perfect performance by always choosing to respond in the direcion of the second stimulus).
 
 
 
-
+### `Mod cog` task battery from Khona et al 
+- Integration tasks
+    - `delay-go-interval`: extension of `DlyGo`(`memory-pro` in our code) where the expected output is displaced by an amount proportional to the length of the delay period; 
+        - by default, `displacement-direction` is anti-clockwise; the pass argument `clockwise` for a clockwise displacement
+        - the constant of proportionality can be accessed via the argument `delay-scalar`. 
+        - the delay period length is variable and randomly sampled from U(`min_mem_t`, `max_mem_t`) in each trial. 
+    -
+    
 
 
 
