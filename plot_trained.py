@@ -194,7 +194,7 @@ if not args.no_plot:
                     ax.plot(xr, z[output_loc+1], color='turquoise', lw=2, ls='-')
         
         else:
-            if type(trial) in [DelayProAnti, MemoryProAnti]:
+            if type(trial) in [DelayProAnti, MemoryProAnti,  DelayGo_IntL]:
                 ax.plot(xr, x[0], color='grey', lw=1, ls='--', alpha=.4)
                 ax.plot(xr, x[1], color='salmon', lw=1, ls='--', alpha=.4)
                 ax.plot(xr, x[2], color='dodgerblue', lw=1, ls='--', alpha=.4)
@@ -243,7 +243,7 @@ if not args.no_plot:
                 ax.plot(xr, z[1], color='magenta', lw=2, ls='-')
                 ax.plot(xr, z[2], color='lime', lw=2, ls='-')
 
-            elif type(trial) in [DMProAnti, DelayDMProAnti] :
+            elif type(trial) in [DMProAnti, DelayDMProAnti]:
                 if trial.t_type.endswith('pro'):
                         if trial.g1 > trial.g2:
                             ax.plot(xr, x[1], color='salmon', lw=1*trial.g1, ls='--', alpha=.6)
