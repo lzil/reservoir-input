@@ -69,6 +69,20 @@ class M2Net(nn.Module):
         if self.args.rflo:
             self.B = torch.randn(self.args.N, self.args.Z)
         
+        if self.args.node_pert:
+            #intialize placeholder for noise history - we'll just add zeros if doing np but not np through time - otherwise, we'll update these adding + or - eps_t based on whether or not eps_t is beneficial
+            for tp in self.args.node_pert_parts:
+            
+                
+                if tp == 'M_ro':
+                   self.m_ro_pert_hist = 0
+                elif  tp == 'M_u':
+                    self.m_u_pert_hist = 0
+                    
+                elif tp == 'W_u':
+                    self.w_u_pert_hist = 0 
+                elif tp == 'J':
+                    self.j_pert_hist = 0 
         
         self._init_vars()
         self.reset()
@@ -106,7 +120,29 @@ class M2Net(nn.Module):
     #hooks for ncl activity gradients
     def save_u_grad(self,grad):
         self.grad_u = grad.detach().clone()
-    
+
+   
+    def update_pert_hist(self,pert_effect,node_pert_noises):
+        
+        if pert_effect > 0 :
+            
+            if 'M_ro' in self.args.node_pert_parts:
+                self.m_ro_pert_hist += node_pert_noises['M_ro']
+            elif  'M_u' in self.args.node_pert_parts:
+                self.m_u_pert_hist += node_pert_noises['M_u']
+
+        elif pert_effect < 0:
+            if 'M_ro' in self.args.node_pert_parts:
+                self.m_ro_pert_hist -= node_pert_noises['M_ro']
+            elif  'M_u' in self.args.node_pert_parts:
+                self.m_u_pert_hist -= node_pert_noises['M_u']
+
+    def reset_pert_hist(self):
+        if 'M_u' in self.args.node_pert_parts:
+            self.m_u_pert_hist = 0 
+        if 'M_ro' in self.args.node_pert_parts:
+            self.m_ro_pert_hist =0
+
     
 
     def forward(self, o, extras=False, node_pert_noises=None):
@@ -127,7 +163,7 @@ class M2Net(nn.Module):
            
 
         elif node_pert_noises is not None and 'M_u' in node_pert_noises.keys() :
-            u = self.m1_act(self.M_u(o) + node_pert_noises['M_u'])
+            u = self.m1_act(self.M_u(o) + node_pert_noises['M_u'] +self.m_u_pert_hist)
         
         
         else:
@@ -147,7 +183,7 @@ class M2Net(nn.Module):
        
         
         if  node_pert_noises is not None  and ('M_ro'in node_pert_noises.keys()):
-            z = self.M_ro(self.m2_act(v)) +node_pert_noises['M_ro']
+            z = self.M_ro(self.m2_act(v)) +node_pert_noises['M_ro']+self.m_ro_pert_hist 
         else:
             z = self.M_ro(self.m2_act(v))
         
@@ -183,6 +219,14 @@ class M2Reservoir(nn.Module):
         self.dynamics_mode = 0
         # storage variable for gradient of loss wrt to hidden units before act. func applied
         self.grad_x = 0
+
+        if self.args.node_pert:
+            #intialize placeholder for noise history - we'll just add zeros if doing np but not np through time - otherwise, we'll update these adding + or - eps_t based on whether or not eps_t is beneficial
+            for tp in self.args.node_pert_parts:
+                if tp == 'W_u':
+                    self.w_u_pert_hist = 0 
+                elif tp == 'J':
+                    self.j_pert_hist = 0 
         self._init_vars()
         self.reset()
 
@@ -231,6 +275,27 @@ class M2Reservoir(nn.Module):
 
     def save_grad_x(self,grad):
         self.grad_x = grad.detach().clone()
+
+
+    def update_pert_hist(self,pert_effect,node_pert_noises):
+        if pert_effect > 0 :
+            if 'J' in self.args.node_pert_parts:
+                self.j_pert_hist += node_pert_noises['J']
+            if 'W_u' in self.args.node_pert_parts:
+                self.W_u_pert_hist += node_pert_noises['W_u']
+
+        elif pert_effect < 0:
+            if 'J' in self.args.node_pert_parts:
+                self.j_pert_hist -= node_pert_noises['J']
+            if 'W_u' in self.args.node_pert_parts:
+                self.W_u_pert_hist -= node_pert_noises['W_u']
+            
+    
+    def reset_pert_hist(self):
+        if 'J' in self.args.node_pert_parts:
+            self.j_pert_hist = 0 
+        if 'W_u' in self.args.node_pert_parts:
+            self.W_u_pert_hist =0
 
     # extras currently doesn't do anything. maybe add x val, etc.
     def forward(self, u=None, extras=False, x_mask=None, node_pert_noises = None):

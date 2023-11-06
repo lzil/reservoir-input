@@ -258,6 +258,12 @@ class Trainer:
         if self.args.node_pert:
             # sample al noises for each timestep of trial here
             node_pert_noises =self.node_pert_noise_sampler(x.shape[2])
+            if self.args.node_pert_batch_size > 1:
+                batch_count = self.args.node_pert_batch_size
+            else:
+                batch_count = self.args.batch_size
+
+
             if not self.args.node_pert_online:
                 for tp in self.args.node_pert_parts:
                     if tp == 'M_ro':
@@ -274,6 +280,13 @@ class Trainer:
                         
             
             
+        if not self.args.node_pert_online:
+            pert_effect_over_trial = 0 
+            for tp in self.args.train_parts:
+                if tp == 'M_u':
+                    collection_net_ins_transposed = []
+                if tp =='M_ro':
+                    collection_xs_transposed = []
 
 
 
@@ -310,89 +323,117 @@ class Trainer:
                 error_noiseless = torch.nn.functional.mse_loss(net_out, y[:,:,j], reduction ='none').mean(dim=1) # should be of shape [batch_size]
                 error_noise = torch.nn.functional.mse_loss(net_out_noise, y[:,:,j], reduction= 'none').mean(dim=1)
 
+                
+
 
                 pert_effect = error_noise - error_noiseless
                 
-              
-                for tp in self.args.node_pert_parts:
-                    with torch.no_grad():
+                if self.args.nptt:
+                    if 'M_u'in self.args.node_pert_parts or 'M_ro' in self.args.node_pert_parts:
+                        self.net.update_pert_hist(pert_effect,node_pert_noises_timestep_j)
+                    
+                    if 'J' in self.args.node_pert_parts or 'W_u' in self.args.node_pert_parts:
+                        self.net.reservoir.update_pert_hist(pert_effect,node_pert_noises_timestep_j)
+
+
+                if not self.args.node_pert_online:
+                    pert_effect_over_trial += pert_effect/x.shape[2]
+                    for tp in self.args.train_parts:
                         if tp == 'M_u':
-                            # let's see if we can use einstein notation here... batched outer prods (turn out to be mat vec multiplications ) then sum over batches. unsqueeze to faciliate matrix multiplication i.e. so that we have a batch of 2d arrays instead of a batch of 1D arrays 
-                            
                             net_in_transposed = torch.einsum('bij->bji',net_in.unsqueeze(2))
-                            
-                            perf_effect_M_u = pert_effect.unsqueeze(1).unsqueeze(2).expand(self.args.batch_size,self.args.D1,self.args.L+self.args.T)
-                            
-                            update_batch_M_u = - (self.args.node_pert_lr_M_u/self.args.node_pert_var_noise_u) * perf_effect_M_u * torch.einsum('bij,bkj -> bij', node_pert_noises_timestep_j[tp].unsqueeze(2), net_in_transposed)
-
-                            if not self.args.node_pert_online:
-                                time_sum_delta_M_u += update_batch_M_u
-                            else:
-                                average_update_over_batches = torch.einsum('bij->ij',update_batch_M_u) / self.args.batch_size
-                                average_update_over_batches/=x.shape[2]
-                                
-                                if self.args.manual_node_pert:
-                                    self.net.M_u.weight.data = self.net.M_u.weight.data + average_update_over_batches
-
-                                #pass the 'gradient' to the optimizer 
-                                else:
-                                    self.net.M_u.weight.grad = -1* average_update_over_batches
+                            collection_net_ins_transposed.append(net_in_transposed)
                         
-                        elif tp == 'W_u':
-                            
-                            us_transposed = torch.einsum('bij,bji',us[j].unsqueeze(2))
-                            pert_effect_W_u = pert_effect.unsqueeze(1).unsqueeze(2).expand(self.args.batch_size,self.args.N,self.args.D1)
-                            update_batch_W_u = -(self.args.node_pert_lr_W_u/self.args.node_pert_var_noise_x) * pert_effect_W_u * torch.einsum('bij,bkj -> bij', node_pert_noises_timestep_j[tp].unsqueeze(2), us_transposed)
-
-                            if not self.args.node_pert_online:
-                                time_sum_delta_W_u += update_batch_W_u
-
-                            else:
-                                average_update_over_batches = torch.einsum('bij->ij',update_batch_W_u) / self.args.batch_size
-                                average_update_over_batches/=x.shape[2]
-                                if self.args.manual_node_pert:
-                                    self.net.reservoir.W_u.weight.data = self.net.reservoir.W_u.weight.data + average_update_over_batches
-                                else:
-                                    self.reservoir.W_u.weight.grad = -1 * average_update_over_batches
                         
-                        elif tp =='J':
-                            pre_act_xs_transposed = torch.einsum('bij,bji',pre_act_xs[j].unsqueeze(2))
-                            pert_effect_J = pert_effect.unsqueeze(1).unsqueeze(2).expand(self.args.batch_size,self.args.N,self.args.N)
+                        elif tp =='M_ro':
+                           xs_transposed = torch.einsum('bij->bji',xs[j].unsqueeze(2))
+                           collection_xs_transposed.append(xs_transposed)
 
-                            update_batch_J = - (self.args.node_pert_lr_J/self.args.node_pert_var_noise_x) * pert_effect_J * torch.einsum('bij,bkj -> bij', node_pert_noises_timestep_j[tp].unsqueeze(2),pre_act_xs_transposed) 
 
-                            if not self.args.node_pert_online:
-                                time_sum_delta_J += update_batch_J
-                            else:
-                                average_update_over_batches = torch.einsum('bij->ij',update_batch_J) / self.args.batch_size
-                                average_update_over_batches/=x.shape[2]
+
+
+
+                
+                if self.args.node_pert_online:
+                    for tp in self.args.node_pert_parts:
+                        with torch.no_grad():
+                            if tp == 'M_u':
+                                # let's see if we can use einstein notation here... batched outer prods (turn out to be mat vec multiplications ) then sum over batches. unsqueeze to faciliate matrix multiplication i.e. so that we have a batch of 2d arrays instead of a batch of 1D arrays 
                                 
-                                if self.args.manual_node_pert:
-                                    self.net.reservoir.J.weight.data = self.net.reservoir.J.weight.data  + average_update_over_batches
+                                net_in_transposed = torch.einsum('bij->bji',net_in.unsqueeze(2))
+                                
+                                
+                                perf_effect_M_u = pert_effect.unsqueeze(1).unsqueeze(2).expand(batch_count,self.args.D1,self.args.L+self.args.T)
+                                
+                                update_batch_M_u = - (self.args.node_pert_lr_M_u/self.args.node_pert_var_noise_u) * perf_effect_M_u * torch.einsum('bij,bkj -> bij', node_pert_noises_timestep_j[tp].unsqueeze(2), net_in_transposed)
+
+                                if not self.args.node_pert_online:
+                                    time_sum_delta_M_u += update_batch_M_u
                                 else:
-                                    self.net.reservoir.J.grad = -1 * average_update_over_batches
+                                    average_update_over_batches = torch.einsum('bij->ij',update_batch_M_u) / batch_count
+                                    average_update_over_batches/=x.shape[2]
+                                    
+                                    if self.args.manual_node_pert:
+                                        self.net.M_u.weight.data = self.net.M_u.weight.data + average_update_over_batches
 
-                        elif tp == 'M_ro': 
+                                    #pass the 'gradient' to the optimizer 
+                                    else:
+                                        self.net.M_u.weight.grad = -1* average_update_over_batches
                             
-                            xs_transposed = torch.einsum('bij->bji',xs[j].unsqueeze(2))
-                            pert_effect_M_ro = pert_effect.unsqueeze(1).unsqueeze(2).expand(self.args.batch_size,self.args.Z,self.args.N)
-                            update_batch_M_ro = -(self.args.node_pert_lr_M_ro/self.args.node_pert_var_noise_z) *  pert_effect_M_ro * torch.einsum('bij,bkj -> bij', node_pert_noises_timestep_j[tp].unsqueeze(2),xs_transposed)
-                            
-                            if not self.args.node_pert_online:
-                                time_sum_delta_M_ro += update_batch_M_ro
-
-                            else:
-                                average_update_over_batches = torch.einsum('bij->ij',update_batch_M_ro) / self.args.batch_size
-                                average_update_over_batches/=x.shape[2]
-
+                            elif tp == 'W_u':
                                 
+                                us_transposed = torch.einsum('bij,bji',us[j].unsqueeze(2))
+                                pert_effect_W_u = pert_effect.unsqueeze(1).unsqueeze(2).expand(batch_count,self.args.N,self.args.D1)
+                                update_batch_W_u = -(self.args.node_pert_lr_W_u/self.args.node_pert_var_noise_x) * pert_effect_W_u * torch.einsum('bij,bkj -> bij', node_pert_noises_timestep_j[tp].unsqueeze(2), us_transposed)
 
-                                if self.args.manual_node_pert:
+                                if not self.args.node_pert_online:
+                                    time_sum_delta_W_u += update_batch_W_u
+
+                                else:
+                                    average_update_over_batches = torch.einsum('bij->ij',update_batch_W_u) / batch_count
+                                    average_update_over_batches/=x.shape[2]
+                                    if self.args.manual_node_pert:
+                                        self.net.reservoir.W_u.weight.data = self.net.reservoir.W_u.weight.data + average_update_over_batches
+                                    else:
+                                        self.reservoir.W_u.weight.grad = -1 * average_update_over_batches
+                            
+                            elif tp =='J':
+                                pre_act_xs_transposed = torch.einsum('bij,bji',pre_act_xs[j].unsqueeze(2))
+                                pert_effect_J = pert_effect.unsqueeze(1).unsqueeze(2).expand(batch_count,self.args.N,self.args.N)
+
+                                update_batch_J = - (self.args.node_pert_lr_J/self.args.node_pert_var_noise_x) * pert_effect_J * torch.einsum('bij,bkj -> bij', node_pert_noises_timestep_j[tp].unsqueeze(2),pre_act_xs_transposed) 
+
+                                if not self.args.node_pert_online:
+                                    time_sum_delta_J += update_batch_J
+                                else:
+                                    average_update_over_batches = torch.einsum('bij->ij',update_batch_J) / batch_count
+                                    average_update_over_batches/=x.shape[2]
+                                    
+                                    if self.args.manual_node_pert:
+                                        self.net.reservoir.J.weight.data = self.net.reservoir.J.weight.data  + average_update_over_batches
+                                    else:
+                                        self.net.reservoir.J.grad = -1 * average_update_over_batches
+
+                            elif tp == 'M_ro': 
+                                
+                                xs_transposed = torch.einsum('bij->bji',xs[j].unsqueeze(2))
+                                pert_effect_M_ro = pert_effect.unsqueeze(1).unsqueeze(2).expand(batch_count,self.args.Z,self.args.N)
+                                update_batch_M_ro = -(self.args.node_pert_lr_M_ro/self.args.node_pert_var_noise_z) *  pert_effect_M_ro * torch.einsum('bij,bkj -> bij', node_pert_noises_timestep_j[tp].unsqueeze(2),xs_transposed)
+                                
+                                if not self.args.node_pert_online:
+                                    time_sum_delta_M_ro += update_batch_M_ro
+
+                                else:
+                                    average_update_over_batches = torch.einsum('bij->ij',update_batch_M_ro) / batch_count
+                                    average_update_over_batches/=x.shape[2]
+
                                     
 
-                                    self.net.M_ro.weight.data  = self.net.M_ro.weight.data + average_update_over_batches
-                                else:
-                                    self.net.M_ro.weight.grad = -1 * average_update_over_batches
+                                    if self.args.manual_node_pert:
+                                        
+
+                                        self.net.M_ro.weight.data  = self.net.M_ro.weight.data + average_update_over_batches
+                                    else:
+                                        self.net.M_ro.weight.grad = -1 * average_update_over_batches
                     
 
                 
@@ -566,28 +607,32 @@ class Trainer:
                         
                 trial_loss += k_loss.detach().item()
                 if training and not self.args.rflo and not self.args.node_pert:
-                        
-                        k_loss.backward()
-                        
-                        #gradient clipping for softplus bce-loss
-                        if 'sp-bce' in self.args.loss:
-                            #clip gradients
-                            nn.utils.clip_grad_norm_(self.net.parameters(), max_norm=1)
+                    
+                    k_loss.backward()
+                    
+                    #gradient clipping for softplus bce-loss
+                    if 'sp-bce' in self.args.loss:
+                        #clip gradients
+                        nn.utils.clip_grad_norm_(self.net.parameters(), max_norm=1)
 
-                        
-                            #
-                if training and self.args.node_pert and not self.args.node_pert_online:
+                    
+                        #
+                if training and self.args.node_pert and self.args.nptt and not self.args.node_pert_online:
                     if not self.args.node_pert_online:
+                        
+                        
                         for tp in self.args.node_pert_parts:
                             if tp == 'M_ro':
-                                time_sum_delta_M_ro /= x.shape[2]  #time_sum_delta_M holds the sum of the NP updates that would have been made at each timestep/ sum and and divide by t
-                                average_update_over_batches = torch.einsum('bij->ij',update_batch_M_ro) / self.args.batch_size
+                               
                                 self.net.M_ro.weight.data = self.net.M_ro.weight.data + average_update_over_batches
 
 
                             elif  tp == 'M_u':
-                                time_sum_delta_M_u /= x.shape[2]
-                                average_update_over_batches = torch.einsum('bij->ij',update_batch_M_u) / self.args.batch_size
+                          
+                                perf_effect_M_u = pert_effect.unsqueeze(1).unsqueeze(2).expand(batch_count,self.args.D1,self.args.L+self.args.T)
+                                
+                                update_batch_M_u = - (self.args.node_pert_lr_M_u/self.args.node_pert_var_noise_u) * perf_effect_M_u * torch.einsum('tbij,bkj -> bij', node_pert_noises_timestep_j[tp].unsqueeze(2), net_in_transposed)
+
                                 self.net.M_u.weight.data = self.net.M_u.weight.data + average_update_over_batches
                                 
                             elif tp == 'W_u' :
@@ -601,7 +646,9 @@ class Trainer:
                                 average_update_over_batches = torch.einsum('bij->ij',update_batch_J) / self.args.batch_size
                                 self.net.reservoir.J.weight.data =self.net.reservoir.J.weight.data + average_update_over_batches
                         
-
+                        #reset perturbation histories after updates
+                        self.net.reset_pert_hist()
+                        self.net.reservoir.reset_pert_hist()
 
 
                 k_loss = 0.
@@ -659,6 +706,7 @@ class Trainer:
     def train_iteration(self, x, y, trial, ix_callback=None):
         self.optimizer.zero_grad()
         
+    
         trial_loss, etc = self.run_trial(x, y, trial, extras=True)
 
         if ix_callback is not None:
@@ -744,6 +792,10 @@ class Trainer:
         # keys are weight names, values are batches of perturbations i.e. tensors of shape [batch_size, layer_size, timesteps]
         # perturbations for each timesteps are stored in rows i.e. timestep is the row index
         node_pert_noises = {}
+        if self.args.node_pert_batch_size >1:
+            batch_size = self.args.node_pert_batch_size 
+        else:
+            batch_size = self.args.batch_size 
         
         # fixed perturbation throughout the trial
         if not self.args.dynamic_pert:
@@ -753,15 +805,15 @@ class Trainer:
             for tp in self.args.node_pert_parts:
                 if tp == 'M_u':
                     u_noise = self.u_noise_mvn.sample()
-                    u_noise = u_noise.view(1,self.args.D1,1).expand(self.args.batch_size, self.args.D1, timesteps)
+                    u_noise = u_noise.view(1,self.args.D1,1).expand(batch_size, self.args.D1, timesteps)
                     node_pert_noises[tp] = u_noise
                 elif tp == 'W_u' or tp == 'J':
                     x_noise = self.x_noise_mvn.sample()
-                    x_noise = x_noise.view(1,self.args.N,1).expand(self.args.batch_sizes, self.args.N, timesteps)
+                    x_noise = x_noise.view(1,self.args.N,1).expand(batch_size, self.args.N, timesteps)
                     node_pert_noises[tp] = x_noise
                 elif tp == 'M_ro':
                     z_noise = self.z_noise_mvn.sample()
-                    z_noise = z_noise.view(1,self.args.Z,1).expand(self.args.batch_size,self.args.Z, timesteps)
+                    z_noise = z_noise.view(1,self.args.Z,1).expand(batch_size,self.args.Z, timesteps)
                     node_pert_noises[tp] = z_noise
 
 
@@ -778,13 +830,14 @@ class Trainer:
             #         node_pert_noises[tp] = torch.stack([z_noise for t in range(timesteps)],dim=2)
        
         else:
+
             for tp in self.args.node_pert_parts:
                 if tp == 'M_u':
-                    node_pert_noises[tp] = torch.stack([self.u_noise_mvn.sample(sample_shape=(self.args.batch_size,)) for t in range(timesteps)],dim=2)
+                    node_pert_noises[tp] = torch.stack([self.u_noise_mvn.sample(sample_shape=(batch_size,)) for t in range(timesteps)],dim=2)
                 elif tp == 'W_u' or tp == 'J':
-                    node_pert_noises[tp] = torch.stack([self.x_noise_mvn.sample(sample_shape=(self.args.batch_size,)) for t in range(timesteps)],dim=2)
+                    node_pert_noises[tp] = torch.stack([self.x_noise_mvn.sample(sample_shape=(batch_size,)) for t in range(timesteps)],dim=2)
                 elif tp == 'M_ro':
-                    node_pert_noises[tp] = torch.stack([self.z_noise_mvn.sample(sample_shape=(self.args.batch_size,)) for t in range(timesteps)],dim=2)
+                    node_pert_noises[tp] = torch.stack([self.z_noise_mvn.sample(sample_shape=(batch_size,)) for t in range(timesteps)],dim=2)
     
         return node_pert_noises
             
@@ -806,9 +859,16 @@ class Trainer:
             for epoch_idx, (x, y, info) in enumerate(self.train_loader):
                 ix += 1
                 
+                
+                if self.args.node_pert and self.args.batch_size == 1.0 and self.args.node_pert_batch_size >1: 
+                    
+                    x = x.repeat(self.args.node_pert_batch_size,1,1)
+                    y = y.repeat(self.args.node_pert_batch_size,1,1)
+                    info = [info[0] for i in range(self.args.node_pert_batch_size)]
+                    
                 x, y = x.to(self.device), y.to(self.device)
                 
-                    
+                
                 
 
                 
