@@ -70,10 +70,10 @@ class M2Net(nn.Module):
             self.B = torch.randn(self.args.N, self.args.Z)
         
         if self.args.node_pert:
-            #intialize placeholder for noise history - we'll just add zeros if doing np but not np through time - otherwise, we'll update these adding + or - eps_t based on whether or not eps_t is beneficial
+            #intialize accumulator for noise history - we'll just add zeros if doing np but not np through time - 
+            # otherwise, we'll update these adding + or - eps_t based on whether or not eps_t is beneficial
+                #make sure to 
             for tp in self.args.node_pert_parts:
-            
-                
                 if tp == 'M_ro':
                    self.m_ro_pert_hist = 0
                 elif  tp == 'M_u':
@@ -124,18 +124,20 @@ class M2Net(nn.Module):
    
     def update_pert_hist(self,pert_effect,node_pert_noises):
         
-        if pert_effect > 0 :
-            
-            if 'M_ro' in self.args.node_pert_parts:
-                self.m_ro_pert_hist += node_pert_noises['M_ro']
-            elif  'M_u' in self.args.node_pert_parts:
-                self.m_u_pert_hist += node_pert_noises['M_u']
 
-        elif pert_effect < 0:
-            if 'M_ro' in self.args.node_pert_parts:
-                self.m_ro_pert_hist -= node_pert_noises['M_ro']
-            elif  'M_u' in self.args.node_pert_parts:
-                self.m_u_pert_hist -= node_pert_noises['M_u']
+        # use masks:
+        mask = torch.ones_like(pert_effect)
+        mask[pert_effect <0] = -1
+
+        mask_m_u = mask.unsqueeze(1).expand_as(node_pert_noises['M_u'])
+        mask_m_ro = mask.unsqueeze(1).expand_as(node_pert_noises['M_ro'])
+
+        if 'M_ro' in self.args.node_pert_parts:
+            self.m_ro_pert_hist += node_pert_noises['M_ro'] *mask_m_ro
+        elif  'M_u' in self.args.node_pert_parts:
+            self.m_u_pert_hist += node_pert_noises['M_u'] * mask_m_u
+
+    
 
     def reset_pert_hist(self):
         if 'M_u' in self.args.node_pert_parts:

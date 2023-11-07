@@ -267,7 +267,7 @@ class Trainer:
             if not self.args.node_pert_online:
                 for tp in self.args.node_pert_parts:
                     if tp == 'M_ro':
-                        time_sum_delta_M_ro = 0  #sum of the (batch of) node perturbation updates hat would be made at each step for the trial 
+                        time_sum_delta_M_ro = 0  #sum of the (batch of) node perturbation updates that would be made at each step for the trial 
 
                     elif  tp == 'M_u':
                         time_sum_delta_M_u = 0
@@ -331,6 +331,7 @@ class Trainer:
                 if self.args.nptt:
                     if 'M_u'in self.args.node_pert_parts or 'M_ro' in self.args.node_pert_parts:
                         self.net.update_pert_hist(pert_effect,node_pert_noises_timestep_j)
+                        
                     
                     if 'J' in self.args.node_pert_parts or 'W_u' in self.args.node_pert_parts:
                         self.net.reservoir.update_pert_hist(pert_effect,node_pert_noises_timestep_j)
@@ -353,7 +354,7 @@ class Trainer:
 
 
                 
-                if self.args.node_pert_online:
+                if self.args.node_pert:
                     for tp in self.args.node_pert_parts:
                         with torch.no_grad():
                             if tp == 'M_u':
@@ -434,7 +435,7 @@ class Trainer:
                                         self.net.M_ro.weight.data  = self.net.M_ro.weight.data + average_update_over_batches
                                     else:
                                         self.net.M_ro.weight.grad = -1 * average_update_over_batches
-                    
+                
 
                 
                 
@@ -623,15 +624,13 @@ class Trainer:
                         
                         for tp in self.args.node_pert_parts:
                             if tp == 'M_ro':
-                               
+                                average_update_over_batches = torch.einsum('bij->ij',time_sum_delta_M_ro) / batch_count
                                 self.net.M_ro.weight.data = self.net.M_ro.weight.data + average_update_over_batches
 
 
                             elif  tp == 'M_u':
                           
-                                perf_effect_M_u = pert_effect.unsqueeze(1).unsqueeze(2).expand(batch_count,self.args.D1,self.args.L+self.args.T)
-                                
-                                update_batch_M_u = - (self.args.node_pert_lr_M_u/self.args.node_pert_var_noise_u) * perf_effect_M_u * torch.einsum('tbij,bkj -> bij', node_pert_noises_timestep_j[tp].unsqueeze(2), net_in_transposed)
+                                average_update_over_batches = torch.einsum('bij->ij',time_sum_delta_M_u) / batch_count
 
                                 self.net.M_u.weight.data = self.net.M_u.weight.data + average_update_over_batches
                                 

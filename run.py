@@ -66,8 +66,13 @@ def parse_args():
     parser.add_argument('--M_ro_rflo_lr', type=float, default=1e-3)
 
     # node perturbation arguments
+    parser.add_argument('--node_pert_batch_size', type=int, default=1, help='number of trial repetitions used to estimate the NP update; --args.batch_size should be 1')
     parser.add_argument('--node_pert', action='store_true', help='use node pertubtation to train weights in node_pert_parts; not yet compatible with v layer')
     parser.add_argument('--node_pert_parts', type=str, nargs='+', default=['M_u', 'M_ro'], help = 'parts to be trained with node perturbation; specify "all" to apply to all trainable parts')
+    
+    parser.add_argument('--nptt', action='store_true',help='implement node perturbation where each update takes into account the update at previous times as in bptt')
+
+
     parser.add_argument('--manual_node_pert', action='store_true', help='use node perturbation without the an optimizer; Adam is used by default)')
     parser.add_argument('--node_pert_online', action='store_true')
     parser.add_argument('--dynamic_pert', action='store_true',help='for any layer whose nodes are to be perturbed, sample a new perturbation for each timestep; else keep perturbation fixed throughout trial')
@@ -78,9 +83,9 @@ def parse_args():
     parser.add_argument('--node_pert_lr_J', type=float, default=1e-3)
     parser.add_argument('--node_pert_lr_M_ro', type=float, default=1e-5)
     
-    parser.add_argument('--node_pert_var_noise_u', type=float, default=1e-3, help='unscaled variance, to be divided by the no. units in u layer, of entries in u input node pertubation; input as in input to the node')
+    parser.add_argument('--node_pert_var_noise_u', type=float, default=1e-5, help='unscaled variance, to be divided by the no. units in u layer, of entries in u input node pertubation; input as in input to the node')
     parser.add_argument('--node_pert_var_noise_x', type=float, default=1, help='unscaled variance of entries in x input node pertubation')
-    parser.add_argument('--node_pert_var_noise_z', type=float, default=1e-3, help='unscaled variance of entries in z(final layer) input node pertubation')
+    parser.add_argument('--node_pert_var_noise_z', type=float, default=1e-5, help='unscaled variance of entries in z(final layer) input node pertubation')
 
     #simultaneous training arguments
     parser.add_argument('--multimodal', action= 'store_true', help = 'multimodal setting: instances from different tasks interleaved and augmented so that many tasks can be learned simultaneously with fixed net architecture')
