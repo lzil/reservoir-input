@@ -122,23 +122,22 @@ class M2Net(nn.Module):
         self.grad_u = grad.detach().clone()
 
    
-    def update_pert_hist(self,pert_effect,node_pert_noises):
+    def update_pert_hist(self,pert_effect,node_pert_noises_timestep_j):
         
 
-        # use masks:
+        # we want to add the noises to the accumulated perturbation if they correspond to an improvement in performance (pert_effect > 0) and substract the noises that corrrespond to a decrease in performance
         mask = torch.ones_like(pert_effect)
         mask[pert_effect <0] = -1
 
-        mask_m_u = mask.unsqueeze(1).expand_as(node_pert_noises['M_u'])
-        mask_m_ro = mask.unsqueeze(1).expand_as(node_pert_noises['M_ro'])
+        mask_m_u = mask.unsqueeze(1).expand_as(node_pert_noises_timestep_j['M_u'])
+        mask_m_ro = mask.unsqueeze(1).expand_as(node_pert_noises_timestep_j['M_ro'])
 
         if 'M_ro' in self.args.node_pert_parts:
-            self.m_ro_pert_hist += node_pert_noises['M_ro'] *mask_m_ro
-        elif  'M_u' in self.args.node_pert_parts:
-            self.m_u_pert_hist += node_pert_noises['M_u'] * mask_m_u
+            self.m_ro_pert_hist += node_pert_noises_timestep_j['M_ro'] *mask_m_ro
+        if  'M_u' in self.args.node_pert_parts:
+            self.m_u_pert_hist += node_pert_noises_timestep_j['M_u'] * mask_m_u
 
-    
-
+      
     def reset_pert_hist(self):
         if 'M_u' in self.args.node_pert_parts:
             self.m_u_pert_hist = 0 
