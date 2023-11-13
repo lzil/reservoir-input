@@ -106,8 +106,23 @@ class M2Net(nn.Module):
             # TODO load M_params
         if self.args.model_path is not None:
             self.load_state_dict(torch.load(self.args.model_path))
+
+        if self.args.node_pert and self.args.node_pert_online:
+            for tp in self.args.node_pert_parts:
+                if 'M_u' in self.args.node_pert_parts:
+                    self.m_u_online_weights = self.M_u.weight.clone().detach().unsqueeze(0).repeat(self.args.batch_size,1,1)
+                
+                if 'M_ro' in self.args.node_pert_parts:
+                    self.m_ro_online_weights = self.M_ro.weight.clone().detach().unsqueeze(0).repeat(self.args.batch_size,1,1)
+                
         
-        
+    
+    def reset_np_online_weights(self):
+        if 'M_u' in self.args.node_pert_parts:
+                self.m_u_online_weights = self.M_u.weight.clone().detach().unsqueeze(0).repeat(self.args.batch_size,1,1)
+                
+        if 'M_ro' in self.args.node_pert_parts:
+                self.m_ro_online_weights = self.M_ro.weight.clone().detach().unsqueeze(0).repeat(self.args.batch_size,1,1)
                    
     
 
@@ -144,13 +159,16 @@ class M2Net(nn.Module):
         if 'M_ro' in self.args.node_pert_parts:
             self.m_ro_pert_hist =0
 
+
+    
     
 
-    def forward(self, o, extras=False, node_pert_noises=None):
+    def forward(self, o, extras=False, node_pert_noises=None,node_pert_online_baseline =False):
         # pass through the forward part
         # o should have shape [batch size, self.args.T + self.args.L]
         # ncl_fish_estim is going to be a list of strings containing the names of the  weights to which ncl is applied
         # it will add the derivatives of te loss w.r.t the activities (needed for the fish estims) to the extras 
+        # node_pert_online_baseline signifies that forward is being used to compute the baseline for the online np implementation (unsurprisingly)
         
         
 
@@ -163,13 +181,22 @@ class M2Net(nn.Module):
         
            
 
-        elif node_pert_noises is not None and 'M_u' in node_pert_noises.keys() :
-            u = self.m1_act(self.M_u(o) + node_pert_noises['M_u'] +self.m_u_pert_hist)
+        elif node_pert_noises is not None and 'M_u' in node_pert_noises.keys():
+            if self.args.nptt:
+                u = self.m1_act(self.M_u(o) + node_pert_noises['M_u'] +self.m_u_pert_hist)
+            elif self.args.node_pert_online: 
+               
+                u = self.m1_act(torch.bmm(self.m_u_online_weights,o.unsqueeze(-1)).squeeze(-1) + node_pert_noises['M_u'])
+            else:
+                u = self.m1_act(self.M_u(o) + node_pert_noises['M_u'])
         
         
         else:
-            
-            u = self.m1_act(self.M_u(o))
+            if node_pert_online_baseline and 'M_u' in self.args.node_pert_parts:
+                
+                u = self.m1_act(torch.bmm(self.m_u_online_weights,o.unsqueeze(-1))).squeeze(-1)
+            else:
+                u = self.m1_act(self.M_u(o))
 
         
 
@@ -184,9 +211,17 @@ class M2Net(nn.Module):
        
         
         if  node_pert_noises is not None  and ('M_ro'in node_pert_noises.keys()):
-            z = self.M_ro(self.m2_act(v)) +node_pert_noises['M_ro']+self.m_ro_pert_hist 
+            if self.args.nptt:
+                z = self.M_ro(self.m2_act(v)) +node_pert_noises['M_ro']+self.m_ro_pert_hist 
+            elif self.args.node_pert_online:
+                z = torch.bmm(self.m_ro_online_weights, self.m2_act(v).unsqueeze(-1)).squeeze(-1) + node_pert_noises['M_ro']
+            else:
+                z = self.M_ro(self.m2_act(v)) +node_pert_noises['M_ro']
         else:
-            z = self.M_ro(self.m2_act(v))
+            if node_pert_online_baseline and 'M_ro' in self.args.node_pert_parts:
+                z = torch.bmm(self.m_ro_online_weights,self.m2_act(v).unsqueeze(-1)).squeeze(-1)
+            else:
+                z = self.M_ro(self.m2_act(v))
         
         self.z = self.out_act(z)
 
