@@ -109,10 +109,22 @@ class Trainer:
                     cov = self.args.node_pert_var_noise_x* torch.eye(self.args.N)
                     self.x_noise_mvn = torch.distributions.MultivariateNormal(mean,cov)
 
-                
-                
-        
-            
+        if self.args.wp:
+            for tp in self.args.node_pert_parts:
+
+                if tp == 'M_ro':
+                    mean = torch.zeros(self.args.N)
+                    covariance = torch.diag(torch.full((self.args.N,), self.args.wp_var_M_ro))
+
+                    self.m_ro_mvn = torch.distributions.MultivariateNormal(mean, covariance)
+
+                elif  tp == 'M_u':
+                    mean = torch.zeros(self.args.L + self.args.T)
+                    covariance = torch.diag(torch.full((self.args.L+self.args.T,), self.args.wp_var_M_u))
+
+                    self.m_u_mvn = torch.distributions.MultivariateNormal(mean, covariance)
+
+                    
 
 
         if self.args.sequential:
@@ -253,6 +265,12 @@ class Trainer:
                     self.m_abqjs= torch.zeros((self.args.batch_size, self.args.D1, self.args.L+self.args.T, self.args.N, x.shape[2]))
                     m_abqj_prev = torch.zeros((self.args.batch_size,self.args.D1, self.args.L+self.args.T, self.args.N, x.shape[2]))
 
+
+
+        if self.args.wp:
+            self.weight_perturbation_sampler()
+            pert_effect_over_trial = 0 # difference in reward totals for each batch
+
         
         
         if self.args.node_pert:
@@ -287,13 +305,13 @@ class Trainer:
                         
             
             
-        if not self.args.node_pert_online:
-            pert_effect_over_trial = 0 
-            for tp in self.args.train_parts:
-                if tp == 'M_u':
-                    collection_net_ins_transposed = []
-                if tp =='M_ro':
-                    collection_xs_transposed = []
+            if not self.args.node_pert_online:
+                pert_effect_over_trial = 0 
+                for tp in self.args.train_parts:
+                    if tp == 'M_u':
+                        collection_net_ins_transposed = []
+                    if tp =='M_ro':
+                        collection_xs_transposed = []
 
 
 
@@ -316,8 +334,20 @@ class Trainer:
                 
             xs.append(etc['x'])
             vs.append(etc['v'])
+
+
+            if self.args.wp and training:
+                net_out_noise, etc = self.net(net_in, extras=True, weight_perts =self.weight_perts)
+                
+                
+                error_noiseless = torch.nn.functional.mse_loss(net_out, y[:,:,j], reduction ='none').mean(dim=1) # should be of shape [batch_size]
+                error_noise = torch.nn.functional.mse_loss(net_out_noise, y[:,:,j], reduction= 'none').mean(dim=1)
+
+                pert_effect = error_noise - error_noiseless
+                pert_effect_over_trial += pert_effect
+
             
-            if self.args.node_pert and training:
+            elif self.args.node_pert and training:
                 
                 # get the perturbations, for all batch elements,for a single timestep
                 node_pert_noises_timestep_j = {}
@@ -453,7 +483,7 @@ class Trainer:
                 #                 else:
                 #                     self.net.m_ro_online_weights += update_batch_M_ro
                 
-
+            
                 
                 
         
@@ -633,9 +663,30 @@ class Trainer:
                         #clip gradients
                         nn.utils.clip_grad_norm_(self.net.parameters(), max_norm=1)
 
-                    
+
+
+                if training and self.args.wp:
+                    for tp in self.args.wp_parts:
+                        if tp == 'M_u' :
+                            pert_effect_m_u = pert_effect_over_trial.unsqueeze(1).unsqueeze(2).expand(self.args.batch_size,self.args.D1,self.args.L+self.args.T)
+                            batch_of_updates_m_u =  - (self.args.node_pert_lr_M_u/self.args.wp_var_M_u) * pert_effect_m_u * self.weight_perts['M_u']
+                            average_update_over_batches = torch.einsum('bij->ij',batch_of_updates_m_u) / self.args.batch_size
+                            average_update_over_batches /=x.shape[2]
+                            self.net.M_u.weight.data = self.net.M_u.weight.data + average_update_over_batches
+                        
+                        if tp == 'M_ro':
+                            pert_effect_m_ro = pert_effect_over_trial.unsqueeze(1).unsqueeze(2).expand(self.args.batch_size,self.args.Z,self.args.N)
+                            batch_of_updates_m_ro =  - (self.args.node_pert_lr_M_ro/self.args.wp_var_M_ro) * pert_effect_m_ro * self.weight_perts['M_ro']
+                            average_update_over_batches = torch.einsum('bij->ij',batch_of_updates_m_ro) / self.args.batch_size
+                            average_update_over_batches /=x.shape[2]
+                            self.net.M_ro.weight.data = self.net.M_ro.weight.data + average_update_over_batches
+
+
+
+                        #reset weight perturbatons"
+                        self.net.reset_weight_perturbations()
                         #
-                if training and self.args.node_pert:
+                elif training and self.args.node_pert:
                 
                     for tp in self.args.node_pert_parts:
                         if tp == 'M_ro':
@@ -646,7 +697,8 @@ class Trainer:
                                 self.net.M_ro.weight.data = self.net.M_ro.weight.data + average_update_over_batches
                             else:
                                 pert_effect_m_ro = pert_effect_over_trial.unsqueeze(1).unsqueeze(2).expand(batch_count,self.args.Z,self.args.N)
-                                batch_of_updates_m_ro =  - (self.args.node_pert_lr_M_ro/self.args.node_pert_var_noise_z) * pert_effect_m_ro * eleg_trace_m_ro
+                                var_z = x.shape[2] * self.args.node_pert_var_noise_z
+                                batch_of_updates_m_ro =  - (self.args.node_pert_lr_M_ro/var_z) * pert_effect_m_ro * eleg_trace_m_ro
                                 
                                 average_update_over_batches = torch.einsum('bij->ij',batch_of_updates_m_ro) / batch_count
                                 self.net.M_ro.weight.data = self.net.M_ro.weight.data + average_update_over_batches
@@ -660,7 +712,8 @@ class Trainer:
                                 self.net.M_u.weight.data = self.net.M_u.weight.data + average_update_over_batches
                             else:
                                 pert_effect_m_u = pert_effect_over_trial.unsqueeze(1).unsqueeze(2).expand(batch_count,self.args.D1,self.args.L+self.args.T)
-                                batch_of_updates_m_u =  - (self.args.node_pert_lr_M_u/self.args.node_pert_var_noise_u) * pert_effect_m_u * eleg_trace_m_u
+                                var_u = x.shape[2] * self.args.node_pert_var_noise_u # variance of the sum of perturbations in the elegibilitty trace
+                                batch_of_updates_m_u =  - (self.args.node_pert_lr_M_u/var_u) * pert_effect_m_u * eleg_trace_m_u
                                 
                                 average_update_over_batches = torch.einsum('bij->ij',batch_of_updates_m_u) / batch_count
                                 self.net.M_u.weight.data = self.net.M_u.weight.data + average_update_over_batches
@@ -817,7 +870,16 @@ class Trainer:
             self.test_loader = self.test_loaders[self.train_idx]
         return losses
 
-    
+    def weight_perturbation_sampler(self):
+        self.weight_perts = {}
+
+        for tp in self.args.wp_parts:
+            if tp =='M_u':
+                self.weight_perts['M_u'] = self.m_u_mvn.sample((self.args.batch_size, self.args.D1))
+            if tp == 'M_ro':
+                self.weight_perts['M_ro'] = self.m_ro_mvn.sample((self.args.batch_size, self.args.Z))
+
+
     
     # node pertubation helper functions
     def node_pert_noise_sampler(self,timesteps):

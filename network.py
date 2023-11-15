@@ -114,6 +114,33 @@ class M2Net(nn.Module):
                 
                 if 'M_ro' in self.args.node_pert_parts:
                     self.m_ro_online_weights = self.M_ro.weight.clone().detach().unsqueeze(0).repeat(self.args.batch_size,1,1)
+
+
+        if self.args.wp:
+            for tp in self.args.wp_parts:
+                if tp in self.args.wp_parts:
+                    m_u_zeros = torch.zeros_like(self.M_u.weight)
+                    self.m_u_weight_perturbations= m_u_zeros.unsqueeze(0).repeat(self.args.batch_size,1,1)
+                
+                if tp in self.args.node_pert_parts:
+                    m_ro_zeros = torch.zeros_like(self.M_ro.weight)
+                    self.m_ro_weight_perturbations= m_ro_zeros.unsqueeze(0).repeat(self.args.batch_size,1,1)
+
+
+    
+    def reset_weight_perturbations(self):
+        for tp in self.args.wp_parts:
+                if tp in self.args.wp_parts:
+                    m_u_zeros = torch.zeros_like(self.M_u.weight)
+                    self.m_u_weight_perturbations= m_u_zeros.unsqueeze(0).repeat(self.args.batch_size,1,1)
+                
+                if tp in self.args.node_pert_parts:
+                    m_ro_zeros = torch.zeros_like(self.M_ro.weight)
+                    self.m_ro_weight_perturbations= m_ro_zeros.unsqueeze(0).repeat(self.args.batch_size,1,1)
+
+    
+
+        
                 
         
     
@@ -163,7 +190,7 @@ class M2Net(nn.Module):
     
     
 
-    def forward(self, o, extras=False, node_pert_noises=None,node_pert_online_baseline =False):
+    def forward(self, o, extras=False, node_pert_noises=None,node_pert_online_baseline =False,weight_perts=None):
         # pass through the forward part
         # o should have shape [batch size, self.args.T + self.args.L]
         # ncl_fish_estim is going to be a list of strings containing the names of the  weights to which ncl is applied
@@ -177,6 +204,12 @@ class M2Net(nn.Module):
             oz = torch.cat((o, self.z), dim=1)
             
             u = self.m1_act(self.M_u(oz))
+
+
+        elif weight_perts is not None and 'M_u' in self.args.wp_parts:
+            self.m_u_weight_perturbations += weight_perts['M_u']
+            perturbed_m_u = self.M_u.weight.clone().detach().unsqueeze(0).repeat(self.args.batch_size,1,1) + self.m_u_weight_perturbations
+            u = self.m1_act(torch.bmm(perturbed_m_u,o.unsqueeze(-1)).squeeze(-1))
 
         
            
@@ -208,9 +241,14 @@ class M2Net(nn.Module):
         else: 
             v = self.reservoir(u, extras=False)
         
-       
+        if weight_perts is not None and 'M_ro' in self.args.wp_parts:
+            self.m_ro_weight_perturbations += weight_perts['M_ro']
+            perturbed_m_ro = self.M_ro.weight.clone().detach().unsqueeze(0).repeat(self.args.batch_size,1,1) + self.m_ro_weight_perturbations
+            z = torch.bmm(perturbed_m_ro, self.m2_act(v).unsqueeze(-1)).squeeze(-1) 
+           
+
         
-        if  node_pert_noises is not None  and ('M_ro'in node_pert_noises.keys()):
+        elif  node_pert_noises is not None  and ('M_ro'in node_pert_noises.keys()):
             if self.args.nptt:
                 z = self.M_ro(self.m2_act(v)) +node_pert_noises['M_ro']+self.m_ro_pert_hist 
             elif self.args.node_pert_online:

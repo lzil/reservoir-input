@@ -65,6 +65,34 @@ def parse_args():
     parser.add_argument('--M_u_rflo_lr', type=float, default=1e-3)
     parser.add_argument('--M_ro_rflo_lr', type=float, default=1e-3)
 
+
+    # weight perturbation arguments
+    parser.add_argument('--wp', action='store_true',help='use weight perturbation to train parameters listed in wp_parts ')
+    parser.add_argument('--wp_parts', type=str, nargs='+', default=['M_u', 'M_ro'], help = 'parameters to be trained with weight perturbation; specify "all" to apply to all trainable parts')
+
+
+    ## wp variance hyperparameters
+    parser.add_argument('--wp_var_M_u',type=float,default=1e-3,help='variance of the zero-mean Gaussian distribution from which weight weight in M_u is drawn independently')
+    # add variances for J and W_u 
+    parser.add_argument('--wp_var_M_ro',type=float,default=1e-3)
+
+    #wp learning rates
+    parser.add_argument('--wp_lr_M_u', type=float, default=1e-5, help='learning rate M_u')
+    parser.add_argument('--wp_lr_W_u', type=float, default=1e-3)
+    parser.add_argument('--wp_lr_J', type=float, default=1e-3)
+    parser.add_argument('--wp_lr_M_ro', type=float, default=1e-5)
+
+
+
+
+
+
+
+
+                        
+
+    
+
     # node perturbation arguments
     parser.add_argument('--repeated_trials',action='store_true')
     parser.add_argument('--repeated_trials_count', type=int, default=1, help='number of trial repetitions used to estimate the NP update; --args.batch_size should be 1')
@@ -79,10 +107,10 @@ def parse_args():
     parser.add_argument('--dynamic_pert', action='store_true',help='for any layer whose nodes are to be perturbed, sample a new perturbation for each timestep; else keep perturbation fixed throughout trial')
 
 
-    parser.add_argument('--node_pert_lr_M_u', type=float, default=1e-7, help='learning rate M_u')
+    parser.add_argument('--node_pert_lr_M_u', type=float, default=1e-5, help='learning rate M_u')
     parser.add_argument('--node_pert_lr_W_u', type=float, default=1e-3)
     parser.add_argument('--node_pert_lr_J', type=float, default=1e-3)
-    parser.add_argument('--node_pert_lr_M_ro', type=float, default=1e-7)
+    parser.add_argument('--node_pert_lr_M_ro', type=float, default=1e-5)
     
     parser.add_argument('--node_pert_var_noise_u', type=float, default=1e-4, help='unscaled variance, to be divided by the no. units in u layer, of entries in u input node pertubation; input as in input to the node')
     parser.add_argument('--node_pert_var_noise_x', type=float, default=1, help='unscaled variance of entries in x input node pertubation')
