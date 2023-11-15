@@ -207,8 +207,8 @@ class M2Net(nn.Module):
 
 
         elif weight_perts is not None and 'M_u' in self.args.wp_parts:
-            self.m_u_weight_perturbations += weight_perts['M_u']
-            perturbed_m_u = self.M_u.weight.clone().detach().unsqueeze(0).repeat(self.args.batch_size,1,1) + self.m_u_weight_perturbations
+            
+            perturbed_m_u = self.M_u.weight.clone().detach().unsqueeze(0).repeat(self.args.batch_size,1,1) + weight_perts['M_u']
             u = self.m1_act(torch.bmm(perturbed_m_u,o.unsqueeze(-1)).squeeze(-1))
 
         
@@ -242,8 +242,8 @@ class M2Net(nn.Module):
             v = self.reservoir(u, extras=False)
         
         if weight_perts is not None and 'M_ro' in self.args.wp_parts:
-            self.m_ro_weight_perturbations += weight_perts['M_ro']
-            perturbed_m_ro = self.M_ro.weight.clone().detach().unsqueeze(0).repeat(self.args.batch_size,1,1) + self.m_ro_weight_perturbations
+            
+            perturbed_m_ro = self.M_ro.weight.clone().detach().unsqueeze(0).repeat(self.args.batch_size,1,1) + weight_perts['M_ro']
             z = torch.bmm(perturbed_m_ro, self.m2_act(v).unsqueeze(-1)).squeeze(-1) 
            
 
