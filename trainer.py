@@ -134,6 +134,8 @@ class Trainer:
         
         # self.net = BasicNetwork(self.args)
         self.net = M2Net(self.args)
+        
+
         # add hopfield net patterns
         if hasattr(self.args, 'fixed_pts') and self.args.fixed_pts > 0:
             self.net.reservoir.add_fixed_points(self.args.fixed_pts)
@@ -141,6 +143,11 @@ class Trainer:
         
         # print('resetting network')
         # self.net.reset(self.args.res_x_init, device=self.device)
+
+        if self.args.node_pert or self.args.wp:
+            # need separate nets for baseline and perturbed net, respectively
+            self.perturbed_net = M2Net(self.args)
+            self.perturbed_net.to(self.device)
         
         # getting number of elements of every parameter
         self.n_params = {}
@@ -229,6 +236,10 @@ class Trainer:
 
     def run_trial(self, x, y, trial, training=True, extras=False):
         self.net.reset(self.args.res_x_init, device=self.device)
+        if self.args.node_pert or self.args.wp and training:
+            self.perturbed_net.reset(self.args.res_x_init, device= self.device)
+        
+        
         trial_loss = 0.
         k_loss = 0.
         outs = []
@@ -337,7 +348,7 @@ class Trainer:
 
 
             if self.args.wp and training:
-                net_out_noise, etc = self.net(net_in, extras=True, weight_perts =self.weight_perts)
+                net_out_noise, etc = self.perturbed_net(net_in, extras=True, weight_perts =self.weight_perts)
                 
                 
                 error_noiseless = torch.nn.functional.mse_loss(net_out, y[:,:,j], reduction ='none').mean(dim=1) # should be of shape [batch_size]
@@ -355,7 +366,7 @@ class Trainer:
                     node_pert_noises_timestep_j[key] = node_pert_noises[key][:,:,j]
                 # noisy output for a single batch
                 with torch.no_grad(): 
-                    net_out_noise, etc = self.net(net_in, extras=True, node_pert_noises = node_pert_noises_timestep_j)
+                    net_out_noise, etc = self.perturbed_net(net_in, extras=True, node_pert_noises = node_pert_noises_timestep_j)
                     # noisy_outs.append(net_out_noise)
                 # compute the effect of the node perturbation on loss # note you don't want the average loss over batches; you want the loss for each batch
                 # so that we can calculate an average node_pert update over batches to get an average node_pert_update for this timestep
@@ -654,7 +665,7 @@ class Trainer:
 
                         
                 trial_loss += k_loss.detach().item()
-                if training and not self.args.rflo and not self.args.node_pert:
+                if training and not self.args.rflo and not self.args.node_pert and not self.args.wp:
                     
                     k_loss.backward()
                     
@@ -684,8 +695,13 @@ class Trainer:
 
 
                         #reset weight perturbatons"
-                        self.net.reset_weight_perturbations()
-                        #
+                        self.perturbed_net.reset_weight_perturbations()
+                        #we've only updated parameters of the baseline net - need to copy over these to the perturbed net:
+                        self.perturbed_net.load_state_dict(self.net.state_dict())
+                
+                
+                
+                
                 elif training and self.args.node_pert:
                 
                     for tp in self.args.node_pert_parts:
@@ -798,7 +814,8 @@ class Trainer:
         if ix_callback is not None:
             ix_callback(trial_loss, etc)
         
-        self.optimizer.step()
+
+        # self.optimizer.step()
         
         etc = {'ins': x,
                 'goals': y,
