@@ -190,7 +190,7 @@ class M2Net(nn.Module):
     
     
 
-    def forward(self, o, extras=False, node_pert_noises=None,node_pert_online_baseline =False,weight_perts=None):
+    def forward(self, o, extras=False, node_pert_noises=None,node_pert_online_baseline =False,nptt_baseline=False, weight_perts=None):
         # pass through the forward part
         # o should have shape [batch size, self.args.T + self.args.L]
         # ncl_fish_estim is going to be a list of strings containing the names of the  weights to which ncl is applied
@@ -222,14 +222,16 @@ class M2Net(nn.Module):
                 u = self.m1_act(torch.bmm(self.m_u_online_weights,o.unsqueeze(-1)).squeeze(-1) + node_pert_noises['M_u'])
             else:
                 u = self.m1_act(self.M_u(o) + node_pert_noises['M_u'])
+
+        elif  nptt_baseline and 'M_u' in self.args.node_pert_parts:
+            u = self.m1_act(self.M_u(o)  +self.m_u_pert_hist)
         
         
-        else:
-            if node_pert_online_baseline and 'M_u' in self.args.node_pert_parts:
+        elif node_pert_online_baseline and 'M_u' in self.args.node_pert_parts:
                 
-                u = self.m1_act(torch.bmm(self.m_u_online_weights,o.unsqueeze(-1))).squeeze(-1)
-            else:
-                u = self.m1_act(self.M_u(o))
+            u = self.m1_act(torch.bmm(self.m_u_online_weights,o.unsqueeze(-1))).squeeze(-1)
+        else:
+            u = self.m1_act(self.M_u(o))
 
         
 
@@ -255,10 +257,11 @@ class M2Net(nn.Module):
                 z = torch.bmm(self.m_ro_online_weights, self.m2_act(v).unsqueeze(-1)).squeeze(-1) + node_pert_noises['M_ro']
             else:
                 z = self.M_ro(self.m2_act(v)) +node_pert_noises['M_ro']
-        else:
-            if node_pert_online_baseline and 'M_ro' in self.args.node_pert_parts:
+        elif nptt_baseline and 'M_ro' in self.args.node_pert_parts:
+            z = self.M_ro(self.m2_act(v)) + self.m_ro_pert_hist 
+        elif node_pert_online_baseline and 'M_ro' in self.args.node_pert_parts:
                 z = torch.bmm(self.m_ro_online_weights,self.m2_act(v).unsqueeze(-1)).squeeze(-1)
-            else:
+        else:
                 z = self.M_ro(self.m2_act(v))
         
         self.z = self.out_act(z)
