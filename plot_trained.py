@@ -66,7 +66,7 @@ if not args.no_plot:
         ax.spines['left'].set_visible(False)
         ax.spines['bottom'].set_visible(False)
         
-        if type(trial) in [DelayProAnti, MemoryProAnti]:
+        if type(trial) in [DelayProAnti, MemoryProAnti, MemoryInt]:
             ax.plot(xr, x[0], color='grey', lw=1, ls='--', alpha=.4)
             ax.plot(xr, x[1], color='salmon', lw=1, ls='--', alpha=.4)
             ax.plot(xr, x[2], color='dodgerblue', lw=1, ls='--', alpha=.4)
@@ -99,6 +99,15 @@ if not args.no_plot:
             ax.plot(xr, y[1], color='dodgerblue', lw=1.5, ls=':')
             ax.plot(xr, z[0], color='salmon', lw=2)
             ax.plot(xr, z[1], color='dodgerblue', lw=2)
+
+        elif type(trial) is DelayCopy:
+            # pdb.set_trace()
+            ax.plot(xr, x[0], color='orange', lw=.5, ls='--', alpha=.4)
+            # ax.plot(xr, x[1], color='dodgerblue', lw=.5, ls='--', alpha=.4)
+            ax.plot(xr, y[0], color='orange', lw=1.5, ls=':')
+            # ax.plot(xr, y[1], color='dodgerblue', lw=1.5, ls=':')
+            ax.plot(xr, z[0], color='orange', lw=2)
+            # ax.plot(xr, z[1], color='dodgerblue', lw=2)
 
         ax.tick_params(axis='both', color='white', labelsize=8)
         ax.set_title(f'ctx {context}, trial {ix}, loss {np.round(float(loss), 2)}', size=8)

@@ -35,7 +35,7 @@ def main(args):
     ys_stim = [list(zip(*np.array(y))) for y in ys_stim]
 
     for i in range(net.args.T):
-        plt.scatter(ys_stim[i][0], ys_stim[i][1], marker='o', c='black', s=20, edgecolors=cols[i])
+        plt.scatter(ys_stim[i][0], ys_stim[i][1], marker='o', c='black', s=20)#, edgecolors=cols[i])
         plt.scatter(ys[i][0], ys[i][1], color=cols[i], s=15)
         
     plt.xlabel('desired t_p')

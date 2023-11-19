@@ -1,0 +1,24 @@
+{
+  "mode": "create",
+  "name": "dc-1k",
+  "config": null,
+  "t_type": "delay-copy",
+  "n_trials": 2000,
+  "task_args": [
+    "l",
+    "1000"
+  ],
+  "intervals": null,
+  "angles": null,
+  "t_len": 1000,
+  "dim": 2,
+  "n_freqs": 20,
+  "f_range": [
+    10,
+    40
+  ],
+  "amp": 1,
+  "argv": "tasks.py create dc-1k -t delay-copy -a l 1000",
+  "L": 2,
+  "Z": 2
+}

@@ -237,6 +237,47 @@ class DelayCopy(Task):
         y[:self.dim, self.s_len:] = self.pattern
         return y
 
+class MemoryInt(Task):
+    def __init__(self, args, dset_id=None, n=None):
+        super().__init__(args.t_len, dset_id, n)
+        if args.angles is None:
+            theta = np.random.random() * 2 * np.pi
+        else:
+            theta = np.random.choice(args.angles) * np.pi / 180
+        stimulus = [np.cos(theta), np.sin(theta)]
+
+        memory_t = np.random.randint(0, 90)
+        memory_ang = (memory_t) * 4 * np.pi / 180
+        response = [np.cos(theta + memory_ang), np.sin(theta + memory_ang)]
+
+        self.t_type = args.t_type
+        assert self.t_type in ['memoryint']
+        self.stimulus = stimulus
+        self.response = response
+        self.fix = args.fix_t
+        self.stim = self.fix + args.stim_t
+        self.memory = self.stim + memory_t
+
+        self.L = 3
+        self.Z = 3
+
+    def get_x(self, args=None):
+        x = np.zeros((3, self.t_len))
+        x[0,:self.memory] = 1
+        x[1,self.fix:self.stim] = self.stimulus[0]
+        x[2,self.fix:self.stim] = self.stimulus[1]
+        return x
+
+    def get_y(self, args=None):
+        y = np.zeros((3, self.t_len))
+        y[0,:self.memory] = 1
+        y[1,self.memory:] = self.response[0]
+        y[2,self.memory:] = self.response[1]
+        # reversing output stimulus for anti condition
+        if self.t_type.endswith('anti'):
+            y[1:,] = -y[1:,]
+        return y
+
 class FlipFlop(Task):
     def __init__(self, args, dset_id=None, n=None):
         super().__init__(args.t_len, dset_id, n)
@@ -381,6 +422,9 @@ def create_dataset(args):
     elif t_type == 'memory-pro' or t_type == 'memory-anti':
         assert args.fix_t + args.stim_t + args.memory_t < args.t_len
         TaskObj = MemoryProAnti
+    elif t_type == 'memoryint':
+        assert args.fix_t + args.stim_t + args.memory_t < args.t_len
+        TaskObj = MemoryInt
     elif t_type == 'dur-disc':
         assert args.tau + args.max_d <= args.sep_t
         assert args.sep_t + args.tau + args.max_d <= args.cue_t
@@ -441,7 +485,7 @@ def get_task_args(args):
         targs.fix_t = get_tval(tarr, 'fix', 50, int)
         targs.stim_t = get_tval(tarr, 'stim', 150, int)
 
-    elif args.t_type == 'memory-pro' or args.t_type == 'memory-anti':
+    elif args.t_type == 'memory-pro' or args.t_type == 'memory-anti' or args.t_type == 'memoryint':
         targs.t_len = get_tval(tarr, 'l', 300, int)
         targs.fix_t = get_tval(tarr, 'fix', 50, int)
         targs.stim_t = get_tval(tarr, 'stim', 100, int)
@@ -466,9 +510,9 @@ def get_tval(targs, name, default, dtype, n_vals=1):
         if n_vals == 1: # one value to set
             val = dtype(targs[idx + 1])
         else: # multiple values to set
-            vals = []
+            val = []
             for i in range(1, n_vals+1):
-                vals.append(dtype(targs[idx + i]))
+                val.append(dtype(targs[idx + i]))
     else:
         # if parameter is not set in command line, set it to default
         val = default
@@ -569,7 +613,7 @@ if __name__ == '__main__':
                     ax.plot(xr, trial_x[j], color=cols[j], lw=.5, ls='--', alpha=.9)
                     ax.plot(xr, trial_y[j], color=cols[j], lw=1)
 
-            elif t_type in [DelayProAnti, MemoryProAnti]:
+            elif t_type in [DelayProAnti, MemoryProAnti, MemoryInt]:
                 ax.plot(xr, trial_x[0], color='grey', lw=1, ls='--', alpha=.6)
                 ax.plot(xr, trial_x[1], color='salmon', lw=1, ls='--', alpha=.6)
                 ax.plot(xr, trial_x[2], color='dodgerblue', lw=1, ls='--', alpha=.6)

@@ -25,6 +25,8 @@ def get_optimizer(args, train_params):
         op = optim.RMSprop(train_params, lr=args.lr, weight_decay=args.l2_reg)
     elif args.optimizer == 'lbfgs-pytorch':
         op = optim.LBFGS(train_params, lr=0.75)
+    elif args.optimizer == 'wp':
+        op = None
     return op
 
 def get_scheduler(args, op):
@@ -171,72 +173,35 @@ def create_loaders(datasets, args, split_test=True, test_size=1, context_filter=
         
 
 
-def get_criteria(args):
-    criteria = []
-    if 'mse' in args.loss:
-        # do this in a roundabout way due to truncated bptt
-        fn = nn.MSELoss(reduction='sum')
-        def mse(o, t, i, t_ix, single=False):
-            # last dimension is number of timesteps
-            # divide by batch size to avoid doing so logging and in test
-            # needs all the contexts to be the same length
-            loss = 0.
+def get_loss(args):
+    def loss_fn(o, t, trial=None, single=False):
+        if args.loss == 'mse':
+            los = nn.MSELoss(reduction='sum')(o, t)
+            # pdb.set_trace()
+        elif args.loss == 'bce':
+            los = nn.BCEWithLogitsLoss(reduction='sum')(o, t)
+        elif args.loss == 'mse_rsg':
+            los = 0
             if single:
-                o = o.unsqueeze(0)
-                t = t.unsqueeze(0)
-                i = [i]
-            for j in range(len(t)):
-                length = i[j].t_len
-                if t_ix + t.shape[-1] <= length:
-                    loss += fn(t[j], o[j])# / length
-                elif t_ix < length:
-                    t_adj = t[j,:,:length-t_ix]
-                    o_adj = o[j,:,:length-t_ix]
-                    loss += fn(t_adj, o_adj)# / length
-            return args.l1 * loss / args.batch_size
-        criteria.append(mse)
-    if 'bce' in args.loss:
-        weights = args.l3 * torch.ones(1)
-        fn = nn.BCEWithLogitsLoss(reduction='sum', pos_weight=weights)
-        def bce(o, t, **kwargs):
-            return args.l1 * fn(t, o)
-        criteria.append(bce)
-    if 'mse-e' in args.loss:
-        # ONLY FOR RSG AND CSG, WITH [1D] OUTPUT
-        # exponential decaying loss from the go time on both sides
-        # loss is 1 at go time, 0.5 at set time
-        # normalized to the number of timesteps taken
-        fn = nn.MSELoss(reduction='none')
-        def mse_e(o, t, i, t_ix, single=False):
-            loss = 0.
-            if single:
-                o = o.unsqueeze(0)
-                t = t.unsqueeze(0)
-                i = [i]
-            for j in range(len(t)):
-                # last dimension is number of timesteps
-                t_len = t.shape[-1]
-                xr = torch.arange(t_len, dtype=torch.float)
-                # placement of go signal in subset of timesteps
-                t_g = i[j].rsg[2] - t_ix
-                t_p = i[j].t_p
-                # exponential loss centred at go time
-                # dropping to 0.25 at set time
-                lam = -np.log(4) / t_p
-                # left half, only use if go time is to the right
-                if t_g > 0:
-                    xr[:t_g] = torch.exp(-lam * (xr[:t_g] - t_g))
-                # right half, can use regardless because python indexing is nice
-                xr[t_g:] = torch.exp(lam * (xr[t_g:] - t_g))
-                # normalize, just numerically calculate area
-                xr = xr / torch.sum(xr) * t_len
-                # only the first dimension matters for rsg and csg output
-                loss += torch.dot(xr, fn(o[j][0], t[j][0]))
-            return args.l2 * loss / args.batch_size
-        criteria.append(mse_e)
-    if len(criteria) == 0:
-        raise NotImplementedError
-    return criteria
+                o = [o]
+                t = [t]
+                trial = [trial]
+            for i, task in enumerate(trial):
+                weights = torch.ones_like(o[i])
+                rsg = task.rsg
+                up_slope = 10 / task.t_p * torch.arange(task.t_p)
+                # down_slope = up_slope.flip(0)[:30]
+                weights[:,rsg[1]:rsg[2]] += up_slope
+                weights[:,rsg[2]:rsg[2]+40] = 10
+                # if rsg[2]+task.t_p >= weights.shape[1]:
+                #     weights[:,rsg[2]:] += down_slope[:weights.shape[1]-(rsg[2]+task.t_p)]
+                # else:
+                #     weights[:,rsg[2]:rsg[2]+task.t_p] += down_slope
+                los += torch.multiply(torch.square(o[i] - t[i]), weights).sum()
+        else:
+            raise NotImplementedError
+        return args.l1 * los
+    return loss_fn
 
 def get_activation(name):
     if name == 'exp':

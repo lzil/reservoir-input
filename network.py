@@ -68,13 +68,12 @@ class M2Net(nn.Module):
     def _init_vars(self):
         with TorchSeed(self.args.network_seed):
             D1 = self.args.D1 if self.args.D1 != 0 else self.args.N
-            D2 = self.args.D2 if self.args.D2 != 0 else self.args.N
             # net feedback into input layer
             if hasattr(self.args, 'net_fb') and self.args.net_fb:
                 self.M_u = nn.Linear(self.args.L + self.args.T + self.args.Z, D1, bias=self.args.ff_bias)
             else:
                 self.M_u = nn.Linear(self.args.L + self.args.T, D1, bias=self.args.ff_bias)
-            self.M_ro = nn.Linear(D2, self.args.Z, bias=self.args.ff_bias)
+            self.M_ro = nn.Linear(self.args.N, self.args.Z, bias=self.args.ff_bias)
         self.reservoir = M2Reservoir(self.args)
 
         # load params for reservoir if they exist
@@ -92,16 +91,31 @@ class M2Net(nn.Module):
     def forward(self, o, extras=False):
         # pass through the forward part
         # o should have shape [batch size, self.args.T + self.args.L]
-        if hasattr(self.args, 'net_fb') and self.args.net_fb:
-            self.z = self.z.expand(o.shape[0], self.z.shape[1])
-            oz = torch.cat((o, self.z), dim=1)
-            u = self.m1_act(self.M_u(oz))
+
+        if self.args.wp:
+            with torch.no_grad():
+                if hasattr(self.args, 'net_fb') and self.args.net_fb:
+                    self.z = self.z.expand(o.shape[0], self.z.shape[1])
+                    oz = torch.cat((o, self.z), dim=1)
+                    u = self.m1_act(self.M_u(oz))
+                else:
+                    u = self.m1_act(self.M_u(o))
+                if extras:
+                    v, etc = self.reservoir(u, extras=True)
+                else:
+                    v = self.reservoir(u, extras=False)
         else:
-            u = self.m1_act(self.M_u(o))
-        if extras:
-            v, etc = self.reservoir(u, extras=True)
-        else:
-            v = self.reservoir(u, extras=False)
+            if hasattr(self.args, 'net_fb') and self.args.net_fb:
+                self.z = self.z.expand(o.shape[0], self.z.shape[1])
+                oz = torch.cat((o, self.z), dim=1)
+                u = self.m1_act(self.M_u(oz))
+            else:
+                u = self.m1_act(self.M_u(o))
+            if extras:
+                v, etc = self.reservoir(u, extras=True)
+            else:
+                v = self.reservoir(u, extras=False)
+
         z = self.M_ro(self.m2_act(v))
         self.z = self.out_act(z)
 
@@ -153,13 +167,13 @@ class M2Reservoir(nn.Module):
                 self.J = nn.Linear(self.args.N, self.args.N, bias=self.args.res_bias)
                 torch.nn.init.normal_(self.J.weight.data, std=self.args.res_init_g / np.sqrt(self.args.N))
 
-                if self.args.D2 == 0:
-                    # go straight to output
-                    self.W_ro = nn.Identity()
-                else:
-                    # use low-D representation layer bw output
-                    self.W_ro = nn.Linear(self.args.N, self.args.D2, bias=self.args.res_bias)
-                    torch.nn.init.normal_(self.W_ro.weight.data, std=self.args.res_init_g / np.sqrt(self.args.D2))
+                # if self.args.D2 == 0:
+                #     # go straight to output
+                #     self.W_ro = nn.Identity()
+                # else:
+                #     # use low-D representation layer bw output
+                #     self.W_ro = nn.Linear(self.args.N, self.args.D2, bias=self.args.res_bias)
+                #     torch.nn.init.normal_(self.W_ro.weight.data, std=self.args.res_init_g / np.sqrt(self.args.D2))
 
     # add designated fixed points using hopfield network
     def add_fixed_points(self, n_patterns):
@@ -192,7 +206,9 @@ class M2Reservoir(nn.Module):
             delta_x = (-self.x + g) / self.tau_x
             self.x = self.x + delta_x
 
-            v = self.W_ro(self.x)
+            v = self.x
+
+            # v = self.W_ro(self.x)
 
         elif self.dynamics_mode == 1:
             if u is None:
@@ -207,7 +223,7 @@ class M2Reservoir(nn.Module):
             self.x = self.x + delta_x
             self.r = self.activation(self.x)
 
-            v = self.W_ro(self.r)
+            v = self.r
 
         if extras:
             etc = {'x': self.x.detach()}

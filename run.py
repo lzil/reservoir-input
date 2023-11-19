@@ -21,7 +21,7 @@ import string
 
 
 from utils import log_this, load_rb, get_config, update_args, load_args
-from helpers import get_optimizer, get_scheduler, get_criteria, create_loaders
+# from helpers import get_optimizer, get_scheduler, get_criteria, create_loaders
 
 from tasks import *
 
@@ -30,8 +30,8 @@ from trainer import Trainer
 def parse_args():
     parser = argparse.ArgumentParser(description='')
     # parser.add_argument('-L', type=int, default=5, help='latent input dimension')
-    parser.add_argument('--D1', type=int, default=50, help='u dimension')
-    parser.add_argument('--D2', type=int, default=50, help='v dimension')
+    parser.add_argument('--D1', type=int, default=30, help='u dimension')
+    parser.add_argument('--D2', type=int, default=0, help='v dimension')
     parser.add_argument('-N', type=int, default=300, help='number of neurons in reservoir')
     # parser.add_argument('-Z', type=int, default=5, help='output dimension')
 
@@ -65,13 +65,14 @@ def parse_args():
     # parser.add_argument('-a', '--add_tasks', type=str, nargs='+', help='add tasks to previously trained reservoir')
     parser.add_argument('-s', '--sequential', action='store_true', help='sequential training')
     parser.add_argument('--owm', action='store_true', help='use orthogonal weight modification')
-    # parser.add_argument('-o', '--train_order', type=int, nargs='+', default=[], help='ids of tasks to train on, in order if sequential flag is enabled. empty for all')
-    # parser.add_argument('--seq_threshold', type=float, default=5, help='threshold for having solved a task before moving on to next one')
+    parser.add_argument('-o', '--train_order', type=int, nargs='+', default=[], help='ids of tasks to train on, in order if sequential flag is enabled. empty for all')
+    parser.add_argument('--seq_threshold', type=float, default=10, help='threshold for having solved a task before moving on to next one')
     parser.add_argument('--same_test', action='store_true', help='use entire dataset for both training and testing')
     
     # training arguments
     parser.add_argument('--optimizer', choices=['adam', 'sgd', 'rmsprop', 'lbfgs'], default='adam')
     parser.add_argument('--k', type=int, default=0, help='k for t-bptt. use 0 for full bptt')
+    parser.add_argument('--wp', action='store_true')
 
     # adam parameters
     parser.add_argument('--batch_size', type=int, default=1, help='size of minibatch used')
@@ -81,11 +82,14 @@ def parse_args():
     parser.add_argument('--patience', type=int, default=4000, help='stop training if loss doesn\'t decrease. adam only')
     parser.add_argument('--l2_reg', type=float, default=0, help='amount of l2 regularization')
     parser.add_argument('--s_rate', default=None, type=float, help='scheduler rate. dont use for no scheduler')
-    parser.add_argument('--loss', type=str, nargs='+', default=['mse'])
+    parser.add_argument('--loss', type=str, default='mse')
 
     # adam lambdas
     parser.add_argument('--l1', type=float, default=1, help='weight of normal loss')
     parser.add_argument('--l2', type=float, default=1, help='weight of exponential loss')
+
+    parser.add_argument('--lr_wp', type=float, default=1e-6)
+    parser.add_argument('--wp_std', type=float, default=.02)
 
     # lbfgs parameters
     parser.add_argument('--maxiter', type=int, default=50, help='lbfgs max iterations')
@@ -213,8 +217,9 @@ if __name__ == '__main__':
 
     if args.optimizer == 'lbfgs':
         best_loss, n_iters = trainer.optimize_lbfgs()
-    elif args.optimizer in ['sgd', 'rmsprop', 'adam']:
+    elif args.optimizer in ['sgd', 'rmsprop', 'adam', 'wp']:
         best_loss, n_iters = trainer.train()
+
 
     if args.slurm_id is not None:
         # if running many jobs, then we gonna put the results into a csv

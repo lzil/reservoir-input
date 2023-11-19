@@ -14,7 +14,7 @@ import sys
 from network import M2Net, M2Reservoir
 from utils import Bunch, load_rb, get_config
 
-from helpers import get_criteria, create_loaders
+from helpers import get_loss, create_loaders
 
 
 def load_model_path(path, config=None):
@@ -38,7 +38,7 @@ def test_model(net, config, n_tests=128):
     test_set, test_loader = create_loaders(config.dataset, config, split_test=False, test_size=n_tests)
     x, y, trials = next(iter(test_loader))
 
-    criteria = get_criteria(config)
+    loss_fn = get_loss(config)
 
     t_losses = {}
     with torch.no_grad():
@@ -61,13 +61,12 @@ def test_model(net, config, n_tests=128):
         
         for k in range(len(x)):
             t = trials[k]
-            for c in criteria:
-                losses[k] += c(outs[k], targets[k], i=trials[k], t_ix=0, single=True).item()
+            # pdb.set_trace()
+            losses[k] = loss_fn(outs[k], targets[k], t, single=True).item()
             if t.dname in t_losses:
                 t_losses[t.dname].append(losses[k])
             else:
                 t_losses[t.dname] = [losses[k]]
-
 
         data = list(zip(contexts, idxs, trials, x, y, outs, losses))
         for name in t_losses.keys():

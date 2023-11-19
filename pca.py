@@ -102,7 +102,7 @@ def pca_rsg(args, A_uncut, trials, n_reps):
 
 def pca_dmpa(args, A_uncut, trials, n_reps):
 
-    setting = 'nofix'
+    setting = 'movement'
 
     As = []
     for idx in range(n_reps):

@@ -1,0 +1,17 @@
+{
+  "mode": "create",
+  "name": "memoryint-0-180",
+  "config": null,
+  "t_type": "memoryint",
+  "n_trials": 2000,
+  "task_args": [],
+  "intervals": null,
+  "angles": null,
+  "t_len": 300,
+  "fix_t": 50,
+  "stim_t": 100,
+  "memory_t": 50,
+  "argv": "tasks.py create memoryint-0-180 -t memoryint",
+  "L": 3,
+  "Z": 3
+}

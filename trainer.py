@@ -22,7 +22,7 @@ import pandas as pd
 from network import M2Net
 
 from utils import log_this, load_rb, get_config, update_args
-from helpers import get_optimizer, get_scheduler, get_criteria, create_loaders, collater
+from helpers import get_optimizer, get_scheduler, get_loss, create_loaders, collater
 
 class Trainer:
     def __init__(self, args):
@@ -49,9 +49,6 @@ class Trainer:
 
         # self.net = BasicNetwork(self.args)
         self.net = M2Net(self.args)
-        # add hopfield net patterns
-        if hasattr(self.args, 'fixed_pts') and self.args.fixed_pts > 0:
-            self.net.reservoir.add_fixed_points(self.args.fixed_pts)
         self.net.to(self.device)
         
         # print('resetting network')
@@ -79,9 +76,8 @@ class Trainer:
         for k in self.not_train_params:
             logging.info(f'  {k}')
 
-        self.criteria = get_criteria(self.args)
+        self.loss_fn = get_loss(self.args)
         self.optimizer = get_optimizer(self.args, self.train_params)
-        self.scheduler = get_scheduler(self.args, self.optimizer)
         
         self.log_interval = self.args.log_interval
         if not self.args.no_log:
@@ -124,63 +120,31 @@ class Trainer:
                 pickle.dump(self.vis_samples, f)
 
     # runs an iteration where we want to match a certain trajectory
-    def run_trial(self, x, y, trial, training=True, extras=False):
+    def run_trial(self, x, y, trial, training=True, extras=False, calc_grads=True):
         self.net.reset(self.args.res_x_init, device=self.device)
-        trial_loss = 0.
-        k_loss = 0.
         outs = []
         us = []
         vs = []
-        # setting up k for t-BPTT
-        if training and self.args.k != 0:
-            k = self.args.k
-        else:
-            # k to full n means normal BPTT
-            k = x.shape[2]
+
         for j in range(x.shape[2]):
             net_in = x[:,:,j]
             net_out, etc = self.net(net_in, extras=True)
             outs.append(net_out)
             us.append(etc['u'])
             vs.append(etc['v'])
-            # t-BPTT with parameter k
-            if (j+1) % k == 0:
-                # the first timestep with which to do BPTT
-                k_outs = torch.stack(outs[-k:], dim=2)
-                k_targets = y[:,:,j+1-k:j+1]
-                for c in self.criteria:
-                    k_loss += c(k_outs, k_targets, i=trial, t_ix=j+1-k)
-                trial_loss += k_loss.detach().item()
-                if training:
-                    k_loss.backward()
-                    # strategies for continual learning that involve modifying gradients
-                    if self.args.sequential and self.train_idx > 0:
-                        if self.args.owm:
-                            # orthogonal weight modification
-                            self.net.M_u.weight.grad = self.P_u @ self.net.M_u.weight.grad @ self.P_s
-                            self.net.M_ro.weight.grad = self.P_z @ self.net.M_ro.weight.grad @ self.P_v
-                            if self.args.ff_bias:
-                                self.net.M_u.bias.grad = self.P_u @ self.net.M_u.bias.grad
-                                self.net.M_ro.bias.grad = self.P_z @ self.net.M_ro.bias.grad
-                        elif self.args.swt:
-                            # keeping sensory and output weights constant after learning first task
-                            self.net.M_u.weight.grad[:,:self.args.L] = 0
-                            self.net.M_ro.weight.grad[:] = 0
-                            if self.args.ff_bias:
-                                self.net.M_u.bias.grad[:] = 0
-                                self.net.M_ro.bias.grad[:] = 0
-                            
-                k_loss = 0.
-                self.net.reservoir.x = self.net.reservoir.x.detach()
+
+        outs = torch.stack(outs, dim=2)
+        trial_loss = self.loss_fn(outs, y, trial)
+        if training and calc_grads:
+            trial_loss.backward()
 
         trial_loss /= x.shape[0]
 
         if extras:
             net_us = torch.stack(us, dim=2)
             net_vs = torch.stack(vs, dim=2)
-            net_outs = torch.stack(outs, dim=2)
             etc = {
-                'outs': net_outs,
+                'outs': outs,
                 'us': net_us,
                 'vs': net_vs
             }
@@ -203,6 +167,41 @@ class Trainer:
             'outs': etc['outs'].detach()
         }
         return trial_loss, etc
+
+    def train_wp_iteration(self, x, y, trial, ix_callback=False):
+        with torch.no_grad():
+            M_u_backup = self.net.M_u.weight.data
+            baseline_loss, etc = self.run_trial(x, y, trial, extras=True, calc_grads=False)
+
+            eps = torch.normal(0, self.args.wp_std, size=M_u_backup.shape)
+            eps_mask = torch.zeros_like(eps)
+            # pdb.set_trace()
+            eps_mask[:,:self.net.args.L] = 1
+            # this line makes it only work with batch size 1
+            for t in trial:
+                eps_mask[:,self.net.args.L + t.context] = 1
+            eps = torch.multiply(eps, eps_mask)
+
+            M_u_wp = M_u_backup + eps
+            self.net.M_u.weight.data = M_u_wp
+            wp_loss, _ = self.run_trial(x, y, trial, extras=True, calc_grads=False)
+
+            delta_wp = -self.args.lr_wp / (self.args.wp_std ** 2) * (wp_loss - baseline_loss) * eps
+            delta_wp_mu = delta_wp * eps
+            self.net.M_u.weight.data = M_u_backup + delta_wp_mu
+
+            delta_wp_mu
+
+        # pdb.set_trace()
+        etc = {
+            'ins': x,
+            'goals': y,
+            'us': etc['us'].detach(),
+            'vs': etc['vs'].detach(),
+            'outs': etc['outs'].detach()
+        }
+        return baseline_loss, etc
+
 
     def test(self):
         with torch.no_grad():
@@ -258,6 +257,8 @@ class Trainer:
                 ix += 1
 
                 x, y = x.to(self.device), y.to(self.device)
+                if self.args.wp:
+                    iter_loss, _ = self.train_wp_iteration(x, y, info, ix_callback=ix_callback)
                 iter_loss, etc = self.train_iteration(x, y, info, ix_callback=ix_callback)
 
                 if iter_loss == -1:
@@ -333,8 +334,8 @@ class Trainer:
                 if ending:
                     break
             logging.info(f'Finished dataset epoch {e+1}')
-            if self.scheduler is not None:
-                self.scheduler.step()
+            # if self.scheduler is not None:
+            #     self.scheduler.step()
             if ending:
                 break
 
