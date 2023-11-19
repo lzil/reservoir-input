@@ -869,10 +869,12 @@ class Trainer:
                         
         trial_loss /= x.shape[0]
         if self.args.synaptic_intel and training:
-            self.grads_list['M_u'].append(grads_m_u)
-            self.grads_list['W_u'].append(grads_w_u)
-            self.grads_list['J'].append(grads_j)
-            self.grads_list['M_ro'].append(grads_m_ro)
+
+
+            self.si_iteration_grad_m_u = grads_m_u
+            self.si_iteration_grad_w_u = grads_w_u
+            self.si_iteration_grad_j = grads_j
+            self.si_iteration_grad_m_ro = grads_m_ro
 
         if extras:
             
@@ -915,8 +917,9 @@ class Trainer:
         if self.args.synaptic_intel:
            
             m_u_before_step = self.net.M_u.weight.detach().clone()
-            w_u_before_step = self.net.reservoir.W_u.weight.detach().clone()
-            j_before_step =  self.net.reservoir.J.weight.detach().clone()
+            if self.args.train_parts == '[]':
+                w_u_before_step = self.net.reservoir.W_u.weight.detach().clone()
+                j_before_step =  self.net.reservoir.J.weight.detach().clone()
             m_ro_before_step = self.net.M_ro.weight.detach().clone()
             
             trial_loss, etc = self.run_trial(x, y, trial, extras=True)
@@ -926,15 +929,22 @@ class Trainer:
             self.optimizer.step()
 
             m_u_change= self.net.M_u.weight.detach().clone() - m_u_before_step
-            w_u_change = self.net.reservoir.W_u.weight.detach().clone() - w_u_before_step
-            j_change=  self.net.reservoir.J.weight.detach().clone() -j_before_step
+            if self.args.train_parts == '[]':
+                w_u_change = self.net.reservoir.W_u.weight.detach().clone() - w_u_before_step
+                j_change=  self.net.reservoir.J.weight.detach().clone() -j_before_step
             m_ro_change = self.net.M_ro.weight.detach().clone() -m_ro_before_step
+
+
+            self.small_omega_m_u += self.si_iteration_grad_m_u
+            #w_u and j later
+            self.small_omega_m_ro +=  self.si_iteration_grad_m_ro
             
             
-            self.weight_changes_list['M_u'].append(m_u_change)
-            self.weight_changes_list['W_u'].append(w_u_change)
-            self.weight_changes_list['J'].append(j_change)
-            self.weight_changes_list['M_ro'].append(m_ro_change)
+            self.si_delta_m_u+= m_u_change
+            if self.args.train_parts == '[]':
+                self.si_delta_m_j += j_change 
+                self.si_delta_w_u = w_u_change
+            self.si_delta_m_ro+= m_ro_change
 
             etc = {
                 'ins': x,
@@ -1107,8 +1117,16 @@ class Trainer:
         ending = False
 
         if self.args.synaptic_intel:
-            self.grads_list = {'M_u':[],'W_u':[], 'J':[], 'M_ro':[]}
-            self.weight_changes_list = {'M_u':[],'W_u':[],'J':[], 'M_ro':[]}
+
+            self.small_omega_m_u = 0
+            self.small_omega_m_ro = 0
+            self.si_delta_m_u = 0
+            self.si_delta_m_j = 0
+            self.si_delta_w_u = 0
+            self.si_delta_m_ro =0
+
+            # self.grads_list = {'M_u':[],'W_u':[], 'J':[], 'M_ro':[]}
+            # self.weight_changes_list = {'M_u':[],'W_u':[],'J':[], 'M_ro':[]}
             self.omega_m_u =0
             self.omega_w_u = 0
             self.omega_j =0
@@ -1214,23 +1232,23 @@ class Trainer:
                             mini_omega_j = torch.zeros_like(self.net.reservoir.J.weight).detach()
                             mini_omega_m_ro = torch.zeros_like(self.net.M_ro.weight).detach()
 
-                            for i in range(len(self.grads_list['M_u'])):
-                                mini_omega_m_u += self.weight_changes_list['M_u'][i] * self.grads_list['M_u'][i] * -1
-                                total_change_m_u += self.weight_changes_list['M_u'][i]
+                            # for i in range(len(self.grads_list['M_u'])):
+                            #     mini_omega_m_u += self.weight_changes_list['M_u'][i] * self.grads_list['M_u'][i] * -1
+                            #     total_change_m_u += self.weight_changes_list['M_u'][i]
                                 
-                                mini_omega_m_ro += self.weight_changes_list['M_ro'][i] * self.grads_list['M_ro'][i] * -1
-                                total_change_m_ro += self.weight_changes_list['M_ro'][i]
+                            #     mini_omega_m_ro += self.weight_changes_list['M_ro'][i] * self.grads_list['M_ro'][i] * -1
+                            #     total_change_m_ro += self.weight_changes_list['M_ro'][i]
                             
-                                if self.args.train_parts == ['']:
-                                    mini_omega_w_u += self.weight_changes_list['W_u'][i] * self.grads_list['W_u'][i] * -1
-                                    total_change_w_u += self.weight_changes_list['W_u'][i]
-                                    mini_omega_j += self.weight_changes_list['J'][i] * self.grads_list['J'][i] * -1
-                                    total_change_j += self.weight_changes_list['J'][i]
+                            #     if self.args.train_parts == ['']:
+                            #         mini_omega_w_u += self.weight_changes_list['W_u'][i] * self.grads_list['W_u'][i] * -1
+                            #         total_change_w_u += self.weight_changes_list['W_u'][i]
+                            #         mini_omega_j += self.weight_changes_list['J'][i] * self.grads_list['J'][i] * -1
+                            #         total_change_j += self.weight_changes_list['J'][i]
                     
                             
 
-                            max_input_m_u = mini_omega_m_u/(total_change_m_u**2 +self.args.damp_term)
-                            max_input_m_ro = mini_omega_m_ro/(total_change_m_ro**2 +self.args.damp_term)
+                            max_input_m_u = self.small_omega_m_u/(self.si_delta_m_u**2 +self.args.damp_term)
+                            max_input_m_ro = self.small_omega_m_ro/(self.si_delta_m_ro**2 +self.args.damp_term)
                             if self.args.train_parts == ['']:
                                 max_input_w_u = mini_omega_w_u/(total_change_w_u**2 + self.args.damp_term)
                                 max_input_j = mini_omega_j/(total_change_j**2 +self.args.damp_term)
@@ -1253,15 +1271,29 @@ class Trainer:
                             self.j_prev =  self.net.reservoir.J.weight.detach().clone()
                             self.m_ro_prev = self.net.M_ro.weight.detach().clone()
                             
-                            #reset objects used to calculate omegas
-                            self.grads_list = {'M_u':[],'W_u':[],'J':[], 'M_ro':[]}
-                            self.weight_changes_list = {'M_u':[],'W_u':[],'J':[], 'M_ro':[]}
+                           
                             
                             self.omega_m_u += task_omega_m_u
                             self.omega_m_ro += task_omega_m_ro
                             if self.args.train_parts == ['']:
                                 self.omega_w_u +=task_omega_w_u
                                 self.omega_j += task_omega_j
+
+                            #reset objects used to calculate omegas
+                            # get rid of lists self.grads_list = {'M_u':[],'W_u':[],'J':[], 'M_ro':[]}
+                            # self.weight_changes_list = {'M_u':[],'W_u':[],'J':[], 'M_ro':[]}
+                            # self.grads_list = {'M_u':[],'W_u':[],'J':[], 'M_ro':[]}
+                            # self.weight_changes_list = {'M_u':[],'W_u':[],'J':[], 'M_ro':[]}
+                            self.small_omega_m_u = 0
+                            self.small_omega_m_ro = 0
+
+                            self.si_delta_m_u = 0
+                            self.si_delta_m_j = 0
+                            self.si_delta_w_u = 0
+                            self.si_delta_m_ro = 0
+
+
+                            
                         
                         self.train_idx += 1
 
