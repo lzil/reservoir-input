@@ -750,7 +750,7 @@ class Trainer:
                                 
                                 
                                 
-                                self.net.M_u.weight.data = self.net.M_u.weight.data + average_update_over_batches - 2* self.args.wp_lr_M_u * self.omega_m_u * (self.net.M_u.weight - self.m_u_prev)
+                                self.net.M_u.weight.data = self.net.M_u.weight.data + average_update_over_batches - 2* 1e-3 * self.omega_m_u * (self.net.M_u.weight - self.m_u_prev)
 
                             
                             else:
