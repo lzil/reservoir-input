@@ -216,7 +216,7 @@ if __name__ == '__main__':
 
     if args.optimizer == 'lbfgs':
         best_loss, n_iters = trainer.optimize_lbfgs()
-    elif args.optimizer in ['sgd', 'rmsprop', 'adam', 'wp']:
+    elif args.optimizer in ['sgd', 'rmsprop', 'adam']:
         best_loss, n_iters = trainer.train()
 
 

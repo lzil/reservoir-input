@@ -187,10 +187,8 @@ class Trainer:
             wp_loss, _ = self.run_trial(x, y, trial, extras=True, calc_grads=False)
 
             delta_wp = -self.args.lr_wp / (self.args.wp_std ** 2) * (wp_loss - baseline_loss) * eps
-            delta_wp_mu = delta_wp * eps
-            self.net.M_u.weight.data = M_u_backup + delta_wp_mu
-
-            delta_wp_mu
+            # delta_wp_mu = delta_wp * eps
+            self.net.M_u.weight.data = M_u_backup + delta_wp
 
         # pdb.set_trace()
         etc = {
@@ -347,7 +345,7 @@ class Trainer:
             self.csv_path.close()
 
         logging.info(f'END | iterations: {(ix // self.log_interval) * self.log_interval} | best loss: {running_min_error}')
-        return running_min_error, ix
+        return running_min_error.detach().numpy(), ix
 
 
     def optimize_lbfgs(self):
