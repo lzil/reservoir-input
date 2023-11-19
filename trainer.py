@@ -261,23 +261,31 @@ class Trainer:
             k = x.shape[2]
 
 
+        if self.args.synaptic_intel and training:
+            grads_m_u = 0
+            grads_w_u =0
+            grads_j = 0
+            grads_m_ro = 0
+
+
+
         
-        if self.args.rflo:
-            tau_reciprocal = torch.tensor(1/self.net.reservoir.tau_x)
-            phi_prime = deriv_tanh
-            if self.args.train_parts != ['']:
-                W_u = self.net.reservoir.W_u.weight.detach()
+        # if self.args.rflo:
+        #     tau_reciprocal = torch.tensor(1/self.net.reservoir.tau_x)
+        #     phi_prime = deriv_tanh
+        #     if self.args.train_parts != ['']:
+        #         W_u = self.net.reservoir.W_u.weight.detach()
                 
-                delta_M_u_time_series = [] # note they've already been scaled by the learning rate
-                delta_M_ro_time_series = []
-                if self.args.batch_size ==1:
+        #         delta_M_u_time_series = [] # note they've already been scaled by the learning rate
+        #         delta_M_ro_time_series = []
+        #         if self.args.batch_size ==1:
 
-                    self.m_abqjs= torch.zeros((self.args.D1, self.args.L+self.args.T, self.args.N, x.shape[2]))
-                    m_abqj_prev = torch.zeros((self.args.D1, self.args.L+self.args.T, self.args.N, x.shape[2]))
+        #             self.m_abqjs= torch.zeros((self.args.D1, self.args.L+self.args.T, self.args.N, x.shape[2]))
+        #             m_abqj_prev = torch.zeros((self.args.D1, self.args.L+self.args.T, self.args.N, x.shape[2]))
 
-                else:
-                    self.m_abqjs= torch.zeros((self.args.batch_size, self.args.D1, self.args.L+self.args.T, self.args.N, x.shape[2]))
-                    m_abqj_prev = torch.zeros((self.args.batch_size,self.args.D1, self.args.L+self.args.T, self.args.N, x.shape[2]))
+        #         else:
+        #             self.m_abqjs= torch.zeros((self.args.batch_size, self.args.D1, self.args.L+self.args.T, self.args.N, x.shape[2]))
+        #             m_abqj_prev = torch.zeros((self.args.batch_size,self.args.D1, self.args.L+self.args.T, self.args.N, x.shape[2]))
 
 
 
@@ -674,7 +682,52 @@ class Trainer:
 
                         
                 trial_loss += k_loss.detach().item()
-                if training and not self.args.rflo and not self.args.node_pert and not self.args.wp:
+
+                if self.args.synaptic_intel and training:
+                    #this code should run even when training first task as it collects gradient info needed to compute the omegas for the penalties(i.e. don't use additional condition self.train_idx>0)
+                        #calculate gradients for loss on current task without SI penalty; save them
+
+
+                        k_loss.backward()
+                        
+                        #to do: have code work with biases
+                        if  not self.args.wp and 'M_u' in self.args.train_parts:
+                            grads_m_u += self.net.M_u.weight.grad.detach().clone()
+                        
+                        
+                        grads_w_u += self.net.reservoir.W_u.weight.grad.detach().clone()
+                        grads_j += self.net.reservoir.J.weight.grad.detach().clone()
+                        grads_m_ro += self.net.M_ro.weight.grad.detach().clone()
+                        
+                        
+                        
+                        
+                        penalty_m_u = torch.sum(self.omega_m_u*(self.net.M_u.weight - self.m_u_prev)**2)
+                        # if W_u exists and is trainable then need to stabilize it 
+                        penalty_w_u = torch.sum(self.omega_w_u*(self.net.reservoir.W_u.weight - self.w_u_prev)**2)
+                        penalty_j= torch.sum(self.omega_j*(self.net.reservoir.J.weight - self.j_prev)**2)
+                        
+                        penalty_m_ro = torch.sum(self.omega_m_ro * (self.net.M_ro.weight - self.m_ro_prev)**2)
+                        # i think we need to times by k so as to add SI for loss at each timestep 
+
+                        # if W_u exists and is trainable then need to stabilize it 
+                        if self.args.D1 != 0 and self.args.train_parts == ['']:
+                            synaptic_intel_penalty = self.args.stab_strength * (penalty_m_u + penalty_w_u+ penalty_j + penalty_m_ro)
+
+                        elif self.args.wp and 'M_u' in self.args.wp_parts:
+                            synaptic_intel_penalty = self.args.stab_strength * ( penalty_w_u+ penalty_j + penalty_m_ro)
+
+                        else:
+                             synaptic_intel_penalty = self.args.stab_strength * (penalty_m_u + penalty_j + penalty_m_ro)
+                        
+                        
+                        self.net.M_ro.weight.grad += -2 * self.omega_m_ro * (self.net.M_ro.weight - self.m_ro_prev) 
+
+
+
+
+
+                elif training and not self.args.rflo and not self.args.node_pert:
                     
                     k_loss.backward()
                     
@@ -692,7 +745,19 @@ class Trainer:
                             batch_of_updates_m_u =  - (self.args.node_pert_lr_M_u/self.args.wp_var_M_u) * pert_effect_m_u * self.weight_perts['M_u']
                             average_update_over_batches = torch.einsum('bij->ij',batch_of_updates_m_u) / self.args.batch_size
                             average_update_over_batches /=x.shape[2]
-                            self.net.M_u.weight.data = self.net.M_u.weight.data + average_update_over_batches
+                            if self.args.synaptic_intel:
+                                grads_m_u += average_update_over_batches
+                                
+                                
+                                
+                                self.net.M_u.weight.data = self.net.M_u.weight.data + average_update_over_batches - 2* self.args.wp_lr_M_u * self.omega_m_u * (self.net.M_u.weight - self.m_u_prev)
+
+                            
+                            else:
+                                self.net.M_u.weight.data = self.net.M_u.weight.data + average_update_over_batches
+                            
+                            
+                          
                         
                         if tp == 'M_ro':
                             pert_effect_m_ro = pert_effect_over_trial.unsqueeze(1).unsqueeze(2).expand(self.args.batch_size,self.args.Z,self.args.N)
@@ -803,6 +868,11 @@ class Trainer:
                 
                         
         trial_loss /= x.shape[0]
+        if self.args.synaptic_intel and training:
+            self.grads_list['M_u'].append(grads_m_u)
+            self.grads_list['W_u'].append(grads_w_u)
+            self.grads_list['J'].append(grads_j)
+            self.grads_list['M_ro'].append(grads_m_ro)
 
         if extras:
             
@@ -842,23 +912,62 @@ class Trainer:
     def train_iteration(self, x, y, trial, ix_callback=None):
         self.optimizer.zero_grad()
         
-    
-        trial_loss, etc = self.run_trial(x, y, trial, extras=True)
+        if self.args.synaptic_intel:
+           
+            m_u_before_step = self.net.M_u.weight.detach().clone()
+            w_u_before_step = self.net.reservoir.W_u.weight.detach().clone()
+            j_before_step =  self.net.reservoir.J.weight.detach().clone()
+            m_ro_before_step = self.net.M_ro.weight.detach().clone()
+            
+            trial_loss, etc = self.run_trial(x, y, trial, extras=True)
+            
+            if ix_callback is not None:
+                ix_callback(trial_loss, etc)
+            self.optimizer.step()
 
-        if ix_callback is not None:
-            ix_callback(trial_loss, etc)
-        
-        # if not self.args.node_pert and not self.args.rflo and not self.args.wp:
-        #     self.optimizer.step()
-        
-        etc = {'ins': x,
+            m_u_change= self.net.M_u.weight.detach().clone() - m_u_before_step
+            w_u_change = self.net.reservoir.W_u.weight.detach().clone() - w_u_before_step
+            j_change=  self.net.reservoir.J.weight.detach().clone() -j_before_step
+            m_ro_change = self.net.M_ro.weight.detach().clone() -m_ro_before_step
+            
+            
+            self.weight_changes_list['M_u'].append(m_u_change)
+            self.weight_changes_list['W_u'].append(w_u_change)
+            self.weight_changes_list['J'].append(j_change)
+            self.weight_changes_list['M_ro'].append(m_ro_change)
+
+            etc = {
+                'ins': x,
                 'goals': y,
                 'us': etc['us'].detach(),
                 'vs': etc['vs'].detach(),
                 'outs': etc['outs'].detach()
             }
+            return trial_loss, etc
+        
+        
+        
+        
+        else:
+            self.optimizer.zero_grad()
+            
+        
+            trial_loss, etc = self.run_trial(x, y, trial, extras=True)
 
-        return trial_loss, etc
+            if ix_callback is not None:
+                ix_callback(trial_loss, etc)
+            
+            if not self.args.node_pert and not self.args.rflo:
+                self.optimizer.step()
+            
+            etc = {'ins': x,
+                    'goals': y,
+                    'us': etc['us'].detach(),
+                    'vs': etc['vs'].detach(),
+                    'outs': etc['outs'].detach()
+                }
+
+            return trial_loss, etc
 
     def test(self, current_xdg = False, multimodal_rsg=False,task_idx=None):
         with torch.no_grad():
@@ -997,6 +1106,19 @@ class Trainer:
         running_loss = 0.0
         ending = False
 
+        if self.args.synaptic_intel:
+            self.grads_list = {'M_u':[],'W_u':[], 'J':[], 'M_ro':[]}
+            self.weight_changes_list = {'M_u':[],'W_u':[],'J':[], 'M_ro':[]}
+            self.omega_m_u =0
+            self.omega_w_u = 0
+            self.omega_j =0
+            self.omega_m_ro =0
+            
+            self.m_u_prev=0
+            self.w_u_prev = 0
+            self.j_prev = 0
+            self.m_ro_prev=0
+
        
 
         for e in range(self.args.n_epochs):
@@ -1075,8 +1197,78 @@ class Trainer:
 
                         for i, loss in losses:
                             logging.info(f'...loss on task {i}: {loss:.3f}')
+                        if self.args.synaptic_intel:
+                            #current synaptic intel 
+                            #update Omegas
+                            
+                            
+                            total_change_m_u = 0
+                            total_change_w_u = 0 
+                            total_change_j = 0
+                            total_change_m_ro  = 0
+
+
+
+                            mini_omega_m_u = torch.zeros_like(self.net.M_u.weight).detach()
+                            mini_omega_w_u = torch.zeros_like(self.net.reservoir.W_u.weight).detach()
+                            mini_omega_j = torch.zeros_like(self.net.reservoir.J.weight).detach()
+                            mini_omega_m_ro = torch.zeros_like(self.net.M_ro.weight).detach()
+
+                            for i in range(len(self.grads_list['M_u'])):
+                                mini_omega_m_u += self.weight_changes_list['M_u'][i] * self.grads_list['M_u'][i] * -1
+                                total_change_m_u += self.weight_changes_list['M_u'][i]
+                                
+                                mini_omega_m_ro += self.weight_changes_list['M_ro'][i] * self.grads_list['M_ro'][i] * -1
+                                total_change_m_ro += self.weight_changes_list['M_ro'][i]
+                            
+                                if self.args.train_parts == ['']:
+                                    mini_omega_w_u += self.weight_changes_list['W_u'][i] * self.grads_list['W_u'][i] * -1
+                                    total_change_w_u += self.weight_changes_list['W_u'][i]
+                                    mini_omega_j += self.weight_changes_list['J'][i] * self.grads_list['J'][i] * -1
+                                    total_change_j += self.weight_changes_list['J'][i]
+                    
+                            
+
+                            max_input_m_u = mini_omega_m_u/(total_change_m_u**2 +self.args.damp_term)
+                            max_input_m_ro = mini_omega_m_ro/(total_change_m_ro**2 +self.args.damp_term)
+                            if self.args.train_parts == ['']:
+                                max_input_w_u = mini_omega_w_u/(total_change_w_u**2 + self.args.damp_term)
+                                max_input_j = mini_omega_j/(total_change_j**2 +self.args.damp_term)
+                            
+                            
+                            
+                            
+
+
+                            task_omega_m_u= torch.maximum(torch.zeros_like(mini_omega_m_u),max_input_m_u)
+                            task_omega_m_ro= torch.maximum(torch.zeros_like(mini_omega_m_ro),max_input_m_ro)
+                            if self.args.train_parts == ['']:
+                                task_omega_w_u = torch.maximum(torch.zeros_like(mini_omega_w_u), max_input_w_u)
+                                task_omega_j= torch.maximum(torch.zeros_like(mini_omega_j),max_input_j )
+                            
+
+                            #save weights at the end of training this task - right now this is onlu works with weights, when we use biasses we'll go m_u_weight_prev
+                            self.m_u_prev =  self.net.M_u.weight.detach().clone()
+                            self.w_u_prev = self.net.reservoir.W_u.weight.detach().clone()
+                            self.j_prev =  self.net.reservoir.J.weight.detach().clone()
+                            self.m_ro_prev = self.net.M_ro.weight.detach().clone()
+                            
+                            #reset objects used to calculate omegas
+                            self.grads_list = {'M_u':[],'W_u':[],'J':[], 'M_ro':[]}
+                            self.weight_changes_list = {'M_u':[],'W_u':[],'J':[], 'M_ro':[]}
+                            
+                            self.omega_m_u += task_omega_m_u
+                            self.omega_m_ro += task_omega_m_ro
+                            if self.args.train_parts == ['']:
+                                self.omega_w_u +=task_omega_w_u
+                                self.omega_j += task_omega_j
                         
-                        
+                        self.train_idx += 1
+
+                        if self.args.xdg or self.args.synaptic_intel or self.args.owm:
+                            #reset optimizer and scheduler between tasks as Masse et al do.
+                            self.optimizer = get_optimizer(self.args, self.train_params)
+                            self.scheduler = get_scheduler(self.args, self.optimizer)
 
                         if self.train_idx == len(self.args.train_order):
                             ending = True

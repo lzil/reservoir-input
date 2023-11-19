@@ -72,15 +72,15 @@ def parse_args():
 
 
     ## wp variance hyperparameters
-    parser.add_argument('--wp_var_M_u',type=float,default=1e-3,help='variance of the zero-mean Gaussian distribution from which weight weight in M_u is drawn independently')
+    parser.add_argument('--wp_var_M_u',type=float,default=1e-4,help='variance of the zero-mean Gaussian distribution from which weight weight in M_u is drawn independently')
     # add variances for J and W_u 
-    parser.add_argument('--wp_var_M_ro',type=float,default=1e-3)
+    parser.add_argument('--wp_var_M_ro',type=float,default=1e-4)
 
     #wp learning rates
     parser.add_argument('--wp_lr_M_u', type=float, default=1e-5, help='learning rate M_u')
     parser.add_argument('--wp_lr_W_u', type=float, default=1e-3)
     parser.add_argument('--wp_lr_J', type=float, default=1e-3)
-    parser.add_argument('--wp_lr_M_ro', type=float, default=1e-5)
+    parser.add_argument('--wp_lr_M_ro', type=float, default=1e-3)
 
 
 
@@ -102,7 +102,7 @@ def parse_args():
     parser.add_argument('--nptt', action='store_true',help='implement node perturbation where each update takes into account the update at previous times as in bptt')
 
 
-    parser.add_argument('--manual_node_pert', action='store_true', help='use node perturbation without the an optimizer; Adam is used by default)')
+    parser.add_argument('--manual_node_pert', action='store_true', help='use node perturbation without the an optimizer; Adam is used by default)') 
     parser.add_argument('--node_pert_online', action='store_true')
     parser.add_argument('--dynamic_pert', action='store_true',help='for any layer whose nodes are to be perturbed, sample a new perturbation for each timestep; else keep perturbation fixed throughout trial')
 
@@ -134,6 +134,19 @@ def parse_args():
     parser.add_argument('--same_test', action='store_true', help='use entire dataset for both training and testing')
     parser.add_argument('--seq_iters', type = int, default=0, help="alternative to seq_threshold; train each task for fixed no. of iterations. If 0, then sequential threshold is used")
 
+
+    # synaptic stabilization arguments
+    parser.add_argument('--synaptic_intel', action='store_true', help='use synaptic_intelligence loss to stabilize weights to those of previous task')
+    parser.add_argument('--ewc', action='store_true', help='use elastic weight consolidation loss to stabilize weights to those of previous task')
+    parser.add_argument('--stab_strength', type=float, default=20, help = 'stabilization strength hyperparameter for synaptic stablization (c in paper)')
+    parser.add_argument('--damp_term', type=float, default=0.01, help = 'damping hyperparameter for synaptic intelligence ')
+# xdg arguments
+    parser.add_argument('--xdg', action = 'store_true', help = 'use context-dependent gating')
+    parser.add_argument('-X',type=int, default= 80, help= 'percentage of units to gate in each gated layer')
+    parser.add_argument('--gate_layers',choices=['u','v','x', 'uv', 'ux','vx','uvx'], default='uvx')
+
+
+    
     #stopping criteria
     parser.add_argument('--test_loss_stop', action = 'store_true', help= 'end training based off test performance - namely test loss being less than a threshold value')
     parser.add_argument('--test_threshold', type=float, default=1, help='threshold for having solved a task')
