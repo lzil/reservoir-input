@@ -246,7 +246,10 @@ class MemoryInt(Task):
             theta = np.random.choice(args.angles) * np.pi / 180
         stimulus = [np.cos(theta), np.sin(theta)]
 
-        memory_t = np.random.randint(0, 90)
+        if args.angle_offsets is None:
+            memory_t = np.random.randint(0, 90)
+        else:
+            memory_t = int(np.random.choice(args.angle_offsets))
         memory_ang = (memory_t) * 4 * np.pi / 180
         response = [np.cos(theta + memory_ang), np.sin(theta + memory_ang)]
 
@@ -545,6 +548,7 @@ if __name__ == '__main__':
     parser.add_argument('-i', '--intervals', nargs='*', type=int, default=None, help='select from rsg intervals')
     # delay memory pro anti preset angles
     parser.add_argument('--angles', nargs='*', type=float, default=None, help='angles in degrees for dmpa tasks')
+    parser.add_argument('--angle_offsets', nargs='*', type=float, default=None, help='timesteps to use for memoryint task')
     
 
     args = parser.parse_args()

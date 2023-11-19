@@ -72,6 +72,7 @@ def parse_args():
     # training arguments
     parser.add_argument('--optimizer', choices=['adam', 'sgd', 'rmsprop', 'lbfgs'], default='adam')
     parser.add_argument('--wp', action='store_true')
+    parser.add_argument('--no_wp', action='store_false', dest='wp')
 
     # adam parameters
     parser.add_argument('--batch_size', type=int, default=1, help='size of minibatch used')

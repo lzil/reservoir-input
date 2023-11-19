@@ -1,0 +1,36 @@
+{
+  "mode": "create",
+  "name": "memoryint-15-85-30",
+  "config": null,
+  "t_type": "memoryint",
+  "n_trials": 2000,
+  "task_args": [],
+  "intervals": null,
+  "angles": [
+    0.0,
+    30.0,
+    60.0,
+    90.0,
+    120.0,
+    150.0,
+    180.0,
+    210.0,
+    240.0,
+    270.0,
+    300.0,
+    330.0
+  ],
+  "angle_offsets": [
+    0.0,
+    30.0,
+    60.0,
+    90.0
+  ],
+  "t_len": 300,
+  "fix_t": 50,
+  "stim_t": 100,
+  "memory_t": 50,
+  "argv": "tasks.py create memoryint-15-85-30 -t memoryint --angles 0 30 60 90 120 150 180 210 240 270 300 330 --angle_offsets 0 30 60 90",
+  "L": 3,
+  "Z": 3
+}

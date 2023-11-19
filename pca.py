@@ -36,8 +36,11 @@ def main(args):
     t_type = type(trials[0])
     if t_type == RSG:
         pca_rsg(args, A, trials, n_reps)
-    elif t_type in [DelayProAnti, MemoryProAnti]:
-        pca_dmpa(args, A, trials, n_reps)
+    elif t_type in [DelayProAnti, MemoryProAnti, MemoryInt]:
+        if t_type is MemoryInt:
+            pca_dmpa(args, A, trials, n_reps, use_groups=False)
+        else:
+            pca_dmpa(args, A, trials, n_reps)
 
 
 def pca_rsg(args, A_uncut, trials, n_reps):
@@ -100,7 +103,7 @@ def pca_rsg(args, A_uncut, trials, n_reps):
 
     plt.show()
 
-def pca_dmpa(args, A_uncut, trials, n_reps):
+def pca_dmpa(args, A_uncut, trials, n_reps, use_groups=True):
 
     setting = 'movement'
 
@@ -110,6 +113,8 @@ def pca_dmpa(args, A_uncut, trials, n_reps):
         fix = trials[idx].fix
         stim = trials[idx].stim    
         if t_type is MemoryProAnti:
+            memory = trials[idx].memory
+        elif t_type is MemoryInt:
             memory = trials[idx].memory
         if setting == 'all':
             As.append(A_uncut[idx])
@@ -130,10 +135,14 @@ def pca_dmpa(args, A_uncut, trials, n_reps):
 
     n_contexts = len(args.dataset)
     stimuli_groups = [{} for i in range(n_contexts)]
+    # response_groups = [{} for i in range(n_contexts)]
     for idx in range(n_reps):
-        stimulus = tuple(trials[idx].stimulus)
+        stimulus = tuple(trials[idx].response)
         context = trials[idx].context
-        if stimulus in stimuli_groups[context]:
+        if not use_groups:
+            response = tuple(trials[idx].stimulus)
+            stimuli_groups[context][(stimulus, response)] = [A_proj[idx]]
+        elif stimulus in stimuli_groups[context]:
             stimuli_groups[context][stimulus].append(A_proj[idx])
         else:
             stimuli_groups[context][stimulus] = [A_proj[idx]]
@@ -151,6 +160,7 @@ def pca_dmpa(args, A_uncut, trials, n_reps):
         sorted_stimuli = sorted(groups.keys())
         for stimulus in sorted_stimuli:
             v = groups[stimulus]
+            # pdb.set_trace()
             proj = sum(v) / len(v)
             c = next(context_colors[context])
 

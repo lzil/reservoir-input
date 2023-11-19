@@ -189,10 +189,10 @@ def get_loss(args):
             for i, task in enumerate(trial):
                 weights = torch.ones_like(o[i])
                 rsg = task.rsg
-                up_slope = 10 / task.t_p * torch.arange(task.t_p)
+                up_slope = 4 / task.t_p * torch.arange(task.t_p)
                 # down_slope = up_slope.flip(0)[:30]
                 weights[:,rsg[1]:rsg[2]] += up_slope
-                weights[:,rsg[2]:rsg[2]+40] = 10
+                weights[:,rsg[2]:rsg[2]+40] = 4
                 # if rsg[2]+task.t_p >= weights.shape[1]:
                 #     weights[:,rsg[2]:] += down_slope[:weights.shape[1]-(rsg[2]+task.t_p)]
                 # else:
