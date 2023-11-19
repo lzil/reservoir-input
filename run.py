@@ -71,7 +71,6 @@ def parse_args():
     
     # training arguments
     parser.add_argument('--optimizer', choices=['adam', 'sgd', 'rmsprop', 'lbfgs'], default='adam')
-    parser.add_argument('--k', type=int, default=0, help='k for t-bptt. use 0 for full bptt')
     parser.add_argument('--wp', action='store_true')
 
     # adam parameters
@@ -227,15 +226,15 @@ if __name__ == '__main__':
         csv_exists = os.path.exists(csv_path)
         with open(csv_path, 'a') as f:
             writer = csv.writer(f, delimiter=',', quotechar='|', quoting=csv.QUOTE_MINIMAL)
-            labels_csv = ['slurm_id', 'N', 'D1', 'D2', 'seed', 'rseed', 'fp', 'fb', 'mnoise', 'rnoise', 'dset', 'niter', 'tparts', 'loss']
+            labels_csv = ['slurm_id', 'N', 'D1', 'seed', 'rseed', 'dset', 'niter', 'optim', 'loss']
             vals_csv = [
-                args.slurm_id, args.N, args.D1, args.D2, args.seed,
-                args.res_seed, args.fixed_pts, args.fixed_beta, args.m_noise, args.res_noise,
-                args.dataset, n_iters, '-'.join(args.train_parts), best_loss
+                args.slurm_id, args.N, args.D1, args.seed,
+                args.res_seed,
+                args.dataset, n_iters, args.optimizer, best_loss
             ]
             if args.optimizer != 'lbfgs':
-                labels_csv.extend(['lr', 'epochs'])
-                vals_csv.extend([args.lr, args.n_epochs])
+                labels_csv.extend(['lr', 'epochs', 'lr_wp'])
+                vals_csv.extend([args.lr, args.n_epochs, args.lr_wp])
 
             if not csv_exists:
                 writer.writerow(labels_csv)
