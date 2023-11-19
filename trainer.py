@@ -721,7 +721,7 @@ class Trainer:
                              synaptic_intel_penalty = self.args.stab_strength * (penalty_m_u + penalty_j + penalty_m_ro)
                         
                         
-                        self.net.M_ro.weight.grad += -2 * self.omega_m_ro * (self.net.M_ro.weight - self.m_ro_prev) 
+                        self.net.M_ro.weight.grad += 2 * self.omega_m_ro * (self.net.M_ro.weight.data - self.m_ro_prev) 
 
 
 
