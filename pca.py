@@ -105,7 +105,7 @@ def pca_rsg(args, A_uncut, trials, n_reps):
 
 def pca_dmpa(args, A_uncut, trials, n_reps, use_groups=True):
 
-    setting = 'movement'
+    setting = 'preparation'
 
     As = []
     for idx in range(n_reps):
@@ -137,10 +137,10 @@ def pca_dmpa(args, A_uncut, trials, n_reps, use_groups=True):
     stimuli_groups = [{} for i in range(n_contexts)]
     # response_groups = [{} for i in range(n_contexts)]
     for idx in range(n_reps):
-        stimulus = tuple(trials[idx].response)
+        stimulus = tuple(trials[idx].stimulus)
         context = trials[idx].context
         if not use_groups:
-            response = tuple(trials[idx].stimulus)
+            response = tuple(trials[idx].response)
             stimuli_groups[context][(stimulus, response)] = [A_proj[idx]]
         elif stimulus in stimuli_groups[context]:
             stimuli_groups[context][stimulus].append(A_proj[idx])
