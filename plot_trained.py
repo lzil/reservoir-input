@@ -73,9 +73,9 @@ if not args.no_plot:
             ax.plot(xr, y[0], color='grey', lw=1.5, ls=':')
             ax.plot(xr, y[1], color='salmon', lw=1.5, ls=':')
             ax.plot(xr, y[2], color='dodgerblue', lw=1.5, ls=':')
-            ax.plot(xr, z[0], color='grey', lw=2)
-            ax.plot(xr, z[1], color='salmon', lw=2)
-            ax.plot(xr, z[2], color='dodgerblue', lw=2)
+            ax.plot(xr, z[0], color='grey', lw=2, label='fixation')
+            ax.plot(xr, z[1], color='salmon', lw=2, label='cos')
+            ax.plot(xr, z[2], color='dodgerblue', lw=2, label='sin')
 
         elif type(trial) in [RSG, CSG]:
             ax.plot(xr, y[0], color='coral', alpha=1, lw=1, label='target')

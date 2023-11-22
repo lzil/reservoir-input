@@ -16,32 +16,51 @@ from utils import get_config, load_rb
 from testers import load_model_path, test_model
 
 
-run_id = '4203227'
-csv_path = f'{run_id}.csv'
-csv_data = pd.read_csv(csv_path)
+# run_id = '4203227'
+run_id = '4203794'
+# run_id = '4203461'
+csv_path = f'logs/{run_id}.csv'
+csv_data1 = pd.read_csv(csv_path)
+
+run_id = '4203461'
+csv_path = f'logs/{run_id}.csv'
+csv_data2 = pd.read_csv(csv_path)
 
 
 # csv_data['tparts'].fillna('all', inplace=True)
 
 cols_to_keep = ['slurm_id', 'N', 'D1', 'seed', 'rseed', 'loss', 'lr_wp']
-dt = csv_data[cols_to_keep]
+dt1 = csv_data1[cols_to_keep]
 
 
-dt = dt[dt['lr_wp'] != 1e-8]
+dt1 = dt1[dt1['lr_wp'] != 1e-8]
 # mapping Ds so we can plot it as factor later
-dt = dt.sort_values(by=['N', 'D1', 'lr_wp'])
-Ds = dt['D1'].unique()
+dt1 = dt1.sort_values(by=['N', 'D1', 'lr_wp'])
+Ds = dt1['D1'].unique()
 D_map = dict(zip(Ds, range(len(Ds))))
-dt['D_map'] = dt['D1'].map(D_map)
+dt1['D_map'] = dt1['D1'].map(D_map)
 
-dt['D_map'] += np.random.normal(0, .05, len(dt['D_map']))
+dt1['D_map'] += np.random.normal(0, .05, len(dt1['D_map']))
 
-# rnoises = dt['rnoise'].unique()
-# mnoises = dt['mnoise'].unique()
+dt1_aggs = dt1.groupby(['N', 'D1'])['loss'].agg(['mean', 'std']).reset_index()
 
-dt_aggs = dt.groupby(['N', 'D1'])['loss'].agg(['mean', 'std']).reset_index()
 
-print(dt_aggs)
+
+dt2 = csv_data2[cols_to_keep]
+
+dt2 = dt2[dt2['lr_wp'] != 1e-8]
+# mapping Ds so we can plot it as factor later
+dt2 = dt2.sort_values(by=['N', 'D1', 'lr_wp'])
+Ds = dt2['D1'].unique()
+D_map = dict(zip(Ds, range(len(Ds))))
+dt2['D_map'] = dt2['D1'].map(D_map)
+
+dt2['D_map'] += np.random.normal(0, .05, len(dt2['D_map']))
+
+
+dt2_aggs = dt2.groupby(['N', 'D1'])['loss'].agg(['mean', 'std']).reset_index()
+
+# print(dt_aggs)
 
 plt.figure(figsize=(5,4))
 ax = plt.gca()
@@ -49,16 +68,26 @@ ax.set_xticklabels([0] + list(Ds), fontsize=13)
 plt.yticks(fontsize=13)
 ax.xaxis.set_major_locator(ticker.MultipleLocator(1))
 
-color_scale = ['coral', 'cornflowerblue', 'skyblue', 'salmon', 'cyan', 'magenta']
+color_scale = ['salmon', 'coral', 'skyblue', 'salmon', 'cyan', 'magenta']
 labels=['N=200', 'N=500']
 i = 0
-for j, N in enumerate(dt['N'].unique()):
+for j, N in enumerate(dt1['N'].unique()):
     # for k, lr in enumerate(dt['lr_wp'].unique()):
-        condition = (dt['N'] == N)
-        plt.scatter(dt[condition]['D_map'], dt[condition]['loss'], s=8, alpha=.3, c=color_scale[i])
+        condition = (dt1['N'] == N)
+        plt.scatter(dt1[condition]['D_map'], dt1[condition]['loss'], s=8, alpha=.3, c=color_scale[i])
         # pdb.set_trace()
-        condition = (dt_aggs['N'] == N)
-        plt.errorbar(range(len(Ds)), dt_aggs[condition ]['mean'], yerr=[dt_aggs[condition ]['std'], dt_aggs[condition ]['std']],c=color_scale[i], lw=3, label=labels[j])
+        condition = (dt1_aggs['N'] == N)
+        plt.errorbar(range(len(Ds)), dt1_aggs[condition ]['mean'], yerr=[dt1_aggs[condition ]['std'], dt1_aggs[condition ]['std']],c=color_scale[i], lw=3, label=labels[j])
+        # plt.errorbar(dt_aggs[condition]['D1'], dt_aggs[condition]['mean'], yerr=[])
+        i += 1
+
+for j, N in enumerate(dt2['N'].unique()):
+    # for k, lr in enumerate(dt['lr_wp'].unique()):
+        condition = (dt2['N'] == N)
+        plt.scatter(dt2[condition]['D_map'], dt2[condition]['loss'], s=8, alpha=.3, c=color_scale[i])
+        # pdb.set_trace()
+        condition = (dt2_aggs['N'] == N)
+        plt.errorbar(range(len(Ds)), dt2_aggs[condition ]['mean'], yerr=[dt2_aggs[condition ]['std'], dt2_aggs[condition ]['std']],c=color_scale[i], lw=3, label=labels[j])
         # plt.errorbar(dt_aggs[condition]['D1'], dt_aggs[condition]['mean'], yerr=[])
         i += 1
 

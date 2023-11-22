@@ -251,6 +251,7 @@ class MemoryInt(Task):
         else:
             memory_t = int(np.random.choice(args.angle_offsets))
         # memory_t = np.random.randint(0, 90)
+        # print('howdy')
         memory_ang = (memory_t) * 4 * np.pi / 180
         response = [np.cos(theta + memory_ang), np.sin(theta + memory_ang)]
 
