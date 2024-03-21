@@ -27,7 +27,8 @@ Once the code above works, try `python run.py -d datasets/rsg-100-150.pkl --name
 - In a stimulus-response task of length T time-steps, we assume the agent has an action $a_T$ to select at the final time-step T in state $s_T$ and so the terminal state is $s_{T+1}$ . This has several consequences:
     - By definition the value of the terminal state is 0 and thus so is it's TD residual for an episodic task.
     - In turn when calculating the generalized advantage estimate of action $a_T$ we have
-      $\hat{A}_{T}=\sum^{\infty}_{l=0}(\gamma\lambda)^l \delta^V_{T+l}=\delta^V_{T}=r_{T}+\gamma \hat{V}(s_{T+1})-\hat{V}(s_{T})=r_{T} -\hat{V}(s_{T})$
+      $\hat{A}_{T}=\sum^{\infty}_{l=0}(\gamma\lambda)^l \delta^V_{T+l}=\delta^V_{T}=r_{T}+\gamma \hat{V}(s_{T+1})-\hat{V(s_{T})=r_{T} -\hat{V}(s_{T})$
+
     - As there is an action to be taken at time T, $V(s_T)=\mathbb{E}[R_{T}|s_{T}]$; so that the target for a value function approximator's output for state $s_T$ is simply $r_T$.
 
 ### to train using node perturbation
