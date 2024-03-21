@@ -757,7 +757,7 @@ class Trainer:
         value_targs = torch.zeros(self.args.batch_size,1, rewards.shape[2])
         # the empirical return of the last state is just rewards received at the final timestep
         value_targs[:,:-1] = rewards[:,:-1]
-        # can now calculate the empirical returns iteratively as G_t = r_t + gamma * G_t+1
+        # can now calculate the empirical returns recursively as G_t = r_t + gamma * G_t+1
         # so looping from the last timestep
 
         for t in range (rewards.shape[2]):
@@ -767,10 +767,68 @@ class Trainer:
         return value_targs
 
 
-    
+    def td_errors(self,rewards,states,gamma=0.9):
+        
+        """
+        computes the temporal differences (errors) delta_t = r_t + V(s_{t+1}) - V(s_{t}) for a batch of episodes
+       
+        Parameters:
+            rewards: all the rewards receievd for a batch of trials. Shape should be [args.batch_size,1,task_length]
+            states: all the states encountered for a batch of trials. Shape should be [args.batch_size,state_representation_size,task_length]
+            gamma : the discount factor for future rewards
 
+        Returns:
+            temporal differences for each timestep (state) in the batch of trajectories. 
+                shape: [args.batch_size, 1, task_length]
 
+        
 
+        """
+        td_error = torch.zeros(self.args.batch_size,1,rewards.shape[2])
+        for i in range(rewards.shape[2]):
+            if i != rewards.shape[2]:
+                with torch.no_grad():
+                    td_error[:,:,i]= rewards[:,:,i] + gamma*self.net.critic(states[:,:,i+1]) - self.net.critic(states[:,:,i])
+
+            else: #td error for last timestep has different form (see README)
+                with torch.no_grad():
+                    td_error[:,:,i]= rewards[:,:,i] - self.net.critic(states[:,:,i])
+
+        return td_error
+
+    def gen_adv_estim(self,td_errors,gamma=0.95,lmbda=0.9):
+        """
+        computes the generalized advantage estimates the advantages A_t for a batch of trials given a batch of td errors
+        note: lmbda = 0 will estimate A_t as delta_t, the td residual, which is often used.
+              lmdba = 1 recover A_t = empirical return from t - estimated_value baseline another commonly used estimate for the advantage
+
+        Parameters:
+            td_errors for each timestep (state) in the batch of trajectories. 
+                shape: [args.batch_size, 1, task_length]
+            
+            
+            states: all the states encountered for a batch of trials. Shape should be [args.batch_size,state_representation_size,task_length]
+            gamma : the discount factor for future rewards
+            lmbda: lambda parameter for GAE - controls the bias/variance tradeoff (see GAE paper)
+
+        Returns:
+            advantages for each timestep (state) in the batch of trajectories. 
+                shape: [args.batch_size, 1, task_length]
+        """
+
+        advantages = torch.zeros(self.args.batch_size,1, td_errors.shape[2])
+        #advantage for last timestep of the trial is simply the last td error
+        advantages[:,:-1] = td_errors[:,:-1]
+        # can now calculate the GAE's recursively as GAE_t = delta_t + gamma*lambda*A_{t+1}
+        # so looping from the last timestep
+
+        for t in range (td_errors.shape[2]):
+            time_idx = -(t+2)
+            advantages[:,:, time_idx] = td_errors[:,:,time_idx] + (gamma*lmbda)*advantages[:,:,time_idx+1]
+
+        return advantages
+
+        
 
     def train(self, ix_callback=None):
         ix = 0
