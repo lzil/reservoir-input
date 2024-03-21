@@ -20,6 +20,15 @@ Without the `--no_log` option, logs will be generated in a custom manner in the 
 
 Once the code above works, try `python run.py -d datasets/rsg-100-150.pkl --name test_run --n_epochs 2 --batch_size 5 -N 100`.
 
+
+### notes for reinforcement learning implementations
+
+- Our code conforms with the  'immediate-evaluative' convention where $r_t$ denotes the reward received for taking action $a_{t}$ in state $s_t$ as in our implementation For the tasks we consider, the immediate consequence of an action is assumed to be determined instantly and does not depend on the state to which the agent transitions after the action. This convention is fairly standard ([Proximal Policy Optimization Algorithms](https://arxiv.org/pdf/1707.06347.pdf), [Generalized Advantage Estimation](https://arxiv.org/pdf/1506.02438.pdf)). 
+- In a stimulus-response task of length T time-steps, we assume the agent has an action $a_T$ to select at the final time-step T in state $s_T$ and so the terminal state is $s_{T+1}$ . This has several consequences:
+    - By definition the value of the terminal state is 0 and thus so is it's TD residual for an episodic task.
+    - In turn when calculating the generalized advantage estimate of action $a_T$ we have $$\hat{A}_{T}={\sum^{\infty}_{l=0}{(\gamma\lambda})^l}\delta^V_{T+l}=\delta^V_{T}=r_{T}+\gamma \hat{V}(s_{T+1})-\hat{V}(s_{T})=r_{T} -\hat{V}(s_{T})$$
+    - As there is an action to be taken at time T, $V(s_T)=\mathbb{E}[R_{T}|s_{T}]$; so that the target for a value function approximator's output for state $s_T$ is simply $r_T$.
+
 ### to train using node perturbation
 Start with `python run.py -d datasets/rsg-100-150.pkl --node_pert --D2 0 --node_pert_manual`
 By default, this will train the feedforward weight matrices M_u, and M_ro while leaving the rest of the weight matrices fixed throughout training.
