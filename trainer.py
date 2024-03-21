@@ -32,7 +32,7 @@ class Trainer:
     def __init__(self, args):
         self.args = args
         self.device = torch.device('cuda' if torch.cuda.is_available() and args.use_cuda else 'cpu')
-
+    
         trains, tests = create_loaders(self.args.dataset, self.args, split_test=True, test_size=50)
 
         if self.args.sequential:
@@ -707,9 +707,70 @@ class Trainer:
     def pre_inv_stabilize(self,square_matrix, coeff):
         return square_matrix + coeff * torch.eye(square_matrix.shape[0])
     
-    #
+    #RL functions - consider moving these to a separate rl_trainer.py file ......
+
+    def reward_t(self,outs,targets):
+        
+        """
+        compute the reward for each of the outs.shape[0] == targets.shape[0] actors for their actions taken at current timestep
+        for now, if it's the test time of the trial we want output fixation and decision to match that of target.
+        if fixation period, we only care about the fixation.
+        Masse (rapid learning) and yang both use discrete action spaces
+        both use early stopping which we haven't implemented but likely help training. 
+
+        Note: for now it's easy to see if we're in the response period for a task: check to see if target[0][0] is 0.
+        """
+
+        response_period =  targets[0][0] ==0 
+        squared_diff = targets -outs.detach()
+        if response_period:
+            reward_t = torch.mean(squared_diff, dim=1)
+        
+        else: #only reward based on fixation
+            fixation_squared_diff = squared_diff[:,0] 
+            reward_t = fixation_squared_diff
+
+        return reward_t
     
+
+
+    def value_targets(self,rewards,gamma=0.9):
+        
+        """
+
+
+        computes target values corresponding to estimating a value function using the Monte Carlo or TD(1) approach.
+        That is, the target for a value-function approximator (critic)'s output for state s_t is the empirical return G_t 
+        (note our convention of r_t being the reward for a_t taken in s_t - see README)
+        
+        Parameters:
+            rewards: all the rewards receievd for a batch of trials. Shape should be [args.batch_size,1,task_length]
+            gamma : the discount factor for future rewards
+
+        Returns:
+            the empirical returns for the each state in the batch of trajectories. 
+                shape [args.batch_size, 1, task_length]
+
+        
+
+        """
+        value_targs = torch.zeros(self.args.batch_size,1, rewards.shape[2])
+        # the empirical return of the last state is just rewards received at the final timestep
+        value_targs[:,:-1] = rewards[:,:-1]
+        # can now calculate the empirical returns iteratively as G_t = r_t + gamma * G_t+1
+        # so looping from the last timestep
+
+        for t in range (rewards.shape[2]):
+            time_idx = -(t+2)
+            value_targs[:,:, time_idx] = rewards[:,:,time_idx] + gamma* value_targs[:,:,time_idx+1]
+
+        return value_targs
+
+
     
+
+
+
 
     def train(self, ix_callback=None):
         ix = 0
@@ -861,7 +922,7 @@ class Trainer:
         for e in range(self.args.n_epochs):
             for epoch_idx, (x, y, info) in enumerate(self.train_loader):
                 ix += 1
-                
+                pdb.set_trace()
                 x, y = x.to(self.device), y.to(self.device)
                 
                     
